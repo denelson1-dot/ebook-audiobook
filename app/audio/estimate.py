@@ -21,6 +21,19 @@ def estimate_size_bytes(audio_seconds: float, bitrate_kbps: int) -> int:
     return int(audio_seconds * (bitrate_kbps * 1000 / 8))
 
 
+def estimate_working_bytes(audio_seconds: float) -> int:
+    """Rough peak temporary disk the render pipeline holds before packaging.
+
+    Every segment is stored as an uncompressed 24 kHz mono 16-bit WAV
+    (``SAMPLE_RATE * 2`` bytes/sec), and near the end the per-chapter assembled
+    WAVs coexist with them — so peak working set is roughly twice the raw audio.
+    This is intentionally on the generous side: it's a "make sure you have room"
+    figure, not a promise. The final .m4b is a small fraction of this.
+    """
+    wav_bytes_per_sec = config.SAMPLE_RATE * 2  # mono, 16-bit PCM
+    return int(audio_seconds * wav_bytes_per_sec * 2)
+
+
 def estimate_render_seconds(total_chars: int, chars_per_render_second: float | None) -> float | None:
     """Wall-clock render estimate. Returns None until a real rate is known."""
     if not chars_per_render_second or chars_per_render_second <= 0:

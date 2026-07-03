@@ -214,6 +214,12 @@ def create_app() -> Flask:
             busy=runner.is_busy(job_id),
             disk_bytes=store.disk_bytes(),
             intermediate_bytes=store.intermediate_bytes(),
+            # Constants the client uses to recompute the render estimate live as
+            # sections are toggled or the bitrate changes.
+            chars_per_audio_second=config.CHARS_PER_AUDIO_SECOND,
+            sample_rate=config.SAMPLE_RATE,
+            size_warn_bytes=config.SIZE_WARN_BYTES,
+            render_rate=state.chars_per_render_second,
         )
 
     # ----- filesystem browser ----------------------------------------------
@@ -383,6 +389,24 @@ def create_app() -> Flask:
             ],
         }
 
+    @app.get("/job/<job_id>/chapter/<chapter_id>/text")
+    def job_chapter_text(job_id, chapter_id):
+        """A leading excerpt of one chapter's normalized text, so the user can
+        eyeball whether a section is real book content or front/back matter
+        without rendering an audio preview. Capped so a huge chapter can't send
+        megabytes to the browser."""
+        store = _job_or_404(job_id)
+        limit = 4000
+        for c in store.load_chapters():
+            if c.chapter_id == chapter_id:
+                text = c.text or ""
+                excerpt = text[:limit]
+                return {"chapter_id": c.chapter_id, "sequence": c.sequence,
+                        "title": c.title, "char_count": c.char_count,
+                        "include": c.include, "excerpt": excerpt,
+                        "truncated": len(text) > limit}
+        abort(404)
+
     @app.post("/job/<job_id>/chapters/include")
     def set_chapter_includes(job_id):
         """Persist which sections render. Body: {"includes": {chapter_id: bool}}.
@@ -407,6 +431,20 @@ def create_app() -> Flask:
         store = _job_or_404(job_id)
         return {"disk_bytes": store.disk_bytes(),
                 "intermediate_bytes": store.intermediate_bytes()}
+
+    @app.get("/api/space")
+    def api_space():
+        """Free/total bytes on the filesystem that holds the working data. All
+        jobs share one data root, so this is a global figure the render-plan
+        dialog uses to warn before a large render fills the disk."""
+        import shutil as _shutil
+
+        root = paths().root
+        try:
+            usage = _shutil.disk_usage(str(root))
+            return {"free_bytes": usage.free, "total_bytes": usage.total}
+        except OSError:
+            return {"free_bytes": None, "total_bytes": None}
 
     @app.get("/job/<job_id>/preview.wav")
     def preview_audio(job_id):

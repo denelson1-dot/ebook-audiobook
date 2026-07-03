@@ -530,6 +530,9 @@ def render_job(
         state.rendered_segments = 0
         state.preview_progress = 0.0
         state.error = None
+        # Stamp the wall-clock start of a full render so the UI can show an
+        # honest "time remaining" that survives a reload. Previews don't need it.
+        state.render_started_at = None if is_preview else _now_iso()
         state.stage = (Stage.PREVIEWING if is_preview else Stage.RENDERING).value
         state.messages.append(f"preview: {chosen.title}" if is_preview else "full render")
         store.save_state(state)

@@ -116,6 +116,10 @@ class JobState:
     chars_per_render_second: float | None = None
     # history/audit: ISO-8601 UTC timestamps and final output size.
     created_at: str | None = None
+    # When the current full render's segment loop began. Used to show an honest
+    # "time remaining" estimate that survives a page reload, and cleared once the
+    # render leaves the rendering stage.
+    render_started_at: str | None = None
     finished_at: str | None = None
     output_bytes: int | None = None
     # Preview is tracked separately from the render lifecycle so it never
