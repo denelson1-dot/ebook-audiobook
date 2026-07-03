@@ -1,0 +1,505 @@
+{% extends "base.html" %}
+{% set nav = 'library' %}
+{% block title %}{{ book.title }} · ebook·audiobook{% endblock %}
+{% block body %}
+
+<h1 class="page-title" id="pageTitle">{{ book.title }}</h1>
+<p class="page-sub"><span id="pageAuthor">{{ book.author }}</span> · <code>{{ job_id }}</code></p>
+
+<!-- Progress -->
+<div class="card">
+  <div class="btn-row" style="justify-content:space-between">
+    <span class="badge {{ state.stage }}" id="stageBadge"><span class="dot"></span><span id="stageText">{{ state.stage }}</span></span>
+    <span class="meta mono" id="countText">{{ state.rendered_segments }}/{{ state.total_segments }}</span>
+  </div>
+  <div class="progress" style="margin-top:12px"><span id="bar"></span></div>
+  <div class="meta" id="etaText" style="margin-top:8px">{% if est %}{{ est.human() }}{% endif %}</div>
+  <div class="meta" id="finishedText" style="margin-top:6px">{% if state.finished_at %}Exported {{ state.finished_at|dt }} · {{ state.output_bytes|humanbytes }}{% endif %}</div>
+  <div id="errorText" class="meta" style="color:var(--danger);margin-top:8px">{% if state.error %}{{ state.error }}{% endif %}</div>
+  <div id="resultLinks" style="margin-top:12px"></div>
+</div>
+
+<!-- Voice & settings -->
+<div class="card">
+  <h3>Voice &amp; settings</h3>
+  <form id="settingsForm">
+    <div class="field" style="max-width:340px">
+      <label>Voice</label>
+      <select name="voice_id" id="voiceSelect">
+        {% for v in voices %}
+          <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="hint"><a href="{{ url_for('voices_page') }}">Manage voices →</a></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Expressiveness (exaggeration)</label>
+        <div class="range"><input type="range" name="exaggeration" min="0" max="1" step="0.05" value="{{ voice.exaggeration }}"><span class="val"></span></div>
+        <div class="hint">How animated and emotional the delivery is. Higher = more dramatic; lower = calmer, flatter. ~0.5 is natural.</div>
+      </div>
+      <div class="field">
+        <label>Pacing (CFG weight)</label>
+        <div class="range"><input type="range" name="cfg_weight" min="0" max="1" step="0.05" value="{{ voice.cfg_weight }}"><span class="val"></span></div>
+        <div class="hint">How tightly it follows the reference voice's rhythm. Lower = more natural, flowing narration; higher = tighter but can sound clipped.</div>
+      </div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced generation settings</summary>
+      <p class="hint" style="margin:2px 0 14px">Defaults are good for most books. Nudge these only if a preview has a specific problem.</p>
+      <div class="field-row">
+        <div class="field">
+          <label>Temperature</label>
+          <div class="range"><input type="range" name="temperature" min="0.05" max="1.5" step="0.05" value="{{ voice.temperature }}"><span class="val"></span></div>
+          <div class="hint">Variation from take to take. Higher = more expressive but less predictable; lower = steadier and more consistent. Default 0.8.</div>
+        </div>
+        <div class="field">
+          <label>Repetition penalty</label>
+          <div class="range"><input type="range" name="repetition_penalty" min="1" max="2" step="0.05" value="{{ voice.repetition_penalty }}"><span class="val"></span></div>
+          <div class="hint">Discourages stutters and repeated sounds. Raise slightly if you hear the voice repeat or stumble. Default 1.2.</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>min_p</label>
+          <div class="range"><input type="range" name="min_p" min="0" max="0.5" step="0.01" value="{{ voice.min_p }}"><span class="val"></span></div>
+          <div class="hint">Filters out unlikely sounds. Higher = cleaner and safer but less variety. Default 0.05.</div>
+        </div>
+        <div class="field">
+          <label>top_p</label>
+          <div class="range"><input type="range" name="top_p" min="0.1" max="1" step="0.05" value="{{ voice.top_p }}"><span class="val"></span></div>
+          <div class="hint">How much of the voice's range it draws from. Lower = more focused and consistent; 1.0 = full range. Default 1.0.</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Seed</label>
+          <input type="number" name="seed" value="{{ voice.seed }}">
+          <div class="hint">0 = a fresh random take each render. Set a fixed number to reproduce the exact same take.</div>
+        </div>
+        <div class="field">
+          <label>Output bitrate (kbps)</label>
+          <input type="number" name="bitrate" value="{{ bitrate }}">
+          <div class="hint">Audio quality of the final .m4b. 64 is plenty for narration; higher = larger file. Doesn't require re-rendering.</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Pronunciation fixes</label>
+        <textarea name="pron" rows="3" placeholder="LOG=log&#10;JPL=J P L&#10;Dr=Doctor">{{ pron_text }}</textarea>
+        <div class="hint">One per line, <code>WORD=how to say it</code>. Case-sensitive, whole-word — use this when the voice mis-reads a term (e.g. spells out an all-caps word like <code>LOG</code>). Changing a fix re-renders only the affected parts.</div>
+      </div>
+    </details>
+
+    <div class="btn-row" style="margin-top:8px">
+      <button type="button" class="btn" id="saveBtn">Save settings</button>
+      <button type="button" class="btn ghost" id="resetBtn">Reset to defaults</button>
+    </div>
+  </form>
+</div>
+
+<!-- Preview -->
+<div class="card">
+  <h3>Preview</h3>
+  <p class="meta">Hear a short excerpt rendered with the <strong>exact</strong> engine and settings above.</p>
+  <div class="field-row" style="max-width:640px">
+    <div class="field">
+      <label>Chapter</label>
+      <select id="previewChapter">
+        {% for c in chapters %}
+          <option value="{{ c.chapter_id }}" {{ 'selected' if c.chapter_id == default_chapter_id }}>{{ c.sequence }} · {{ c.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Length (seconds)</label>
+      <input type="number" id="previewSeconds" value="30" min="5" max="120">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button type="button" class="btn primary" id="previewBtn">Generate preview</button>
+    <button type="button" class="btn danger" id="previewStop" style="display:none">■ Stop preview</button>
+  </div>
+  <audio id="previewAudio" controls style="display:none"></audio>
+</div>
+
+<!-- Render -->
+<div class="card">
+  <h3>Render</h3>
+  <div class="field" style="max-width:680px">
+    <label>Save audiobook to</label>
+    <div class="seg" id="modeToggle" role="tablist">
+      <button type="button" class="seg-btn {{ 'on' if output_mode != 'folder' }}" data-mode="library">Plex library</button>
+      <button type="button" class="seg-btn {{ 'on' if output_mode == 'folder' }}" data-mode="folder">Specific folder</button>
+    </div>
+
+    <div id="libraryPane" style="{{ 'display:none' if output_mode == 'folder' }};margin-top:10px">
+      {% if library_target %}
+        <div class="meta">Filed into your Plex library as:</div>
+        <div class="meta mono" id="libraryTarget">{{ library_target }}</div>
+      {% else %}
+        <div class="meta">No library folder set yet — <a href="{{ url_for('settings_page') }}">choose one in Settings</a>, or switch to a specific folder.</div>
+      {% endif %}
+      <div class="hint">A Plex-ready <code>Author / Title (Year) / Title.m4b</code> tree, with a <code>cover.jpg</code> beside the book.</div>
+    </div>
+
+    <div id="folderPane" style="{{ '' if output_mode == 'folder' else 'display:none' }};margin-top:10px">
+      <div class="btn-row">
+        <button type="button" class="btn" id="outDirBtn">📂 Choose folder…</button>
+        <span class="meta mono" id="outDirText">{{ folder_dir }}</span>
+      </div>
+      <input type="hidden" id="outputDir" value="{{ folder_dir }}">
+      <div class="hint">One flat folder. The finished file <code id="outFilename">{{ output_filename }}</code> is written here.</div>
+    </div>
+    <div class="hint" style="margin-top:8px">The destination is checked for write access before the render starts.</div>
+  </div>
+  <div class="btn-row">
+    <button type="button" class="btn primary" id="renderBtn">Render full audiobook</button>
+    <button type="button" class="btn danger" id="renderStop" style="display:none">■ Stop</button>
+  </div>
+</div>
+
+<!-- Storage -->
+<div class="card">
+  <h3>Storage</h3>
+  <div class="meta">This conversion uses <strong id="diskBytes">{{ disk_bytes|humanbytes }}</strong><span id="interWrap" style="{{ '' if intermediate_bytes else 'display:none' }}"> · <span id="interBytes">{{ intermediate_bytes|humanbytes }}</span> reclaimable</span>.</div>
+  <div class="btn-row" style="margin-top:12px">
+    <button type="button" class="btn" id="cleanupBtn" {{ 'disabled' if not intermediate_bytes }}>🧹 Free up space</button>
+    <form method="post" action="{{ url_for('delete_job', job_id=job_id) }}" style="margin-left:auto"
+          onsubmit="return confirm('Delete this conversion and all its files?')">
+      <button class="btn danger" type="submit">Delete conversion</button>
+    </form>
+  </div>
+  <div class="hint">“Free up space” removes intermediate render files (segments, chapters, preview) but keeps the finished <code>.m4b</code>. Previews are also cleared automatically once a full render finishes.</div>
+</div>
+
+<!-- Chapters -->
+<div class="card">
+  <h3>Chapters (<span id="chapterCount">{{ chapters|length }}</span>)</h3>
+  <p class="meta">Uncheck any section you don't want narrated. Front matter — copyright, contents,
+    dedication, acknowledgements — is skipped by default. <span id="includeSummary" class="mono"></span></p>
+  <table>
+    <thead><tr>
+      <th class="pick"><input type="checkbox" id="selectAllCh" title="Select / deselect all"></th>
+      <th>#</th><th>Title</th><th style="text-align:right">Characters</th>
+    </tr></thead>
+    <tbody id="chaptersBody">
+    {% for c in chapters %}
+      <tr class="{{ '' if c.include else 'excluded' }}">
+        <td class="pick"><input type="checkbox" class="ch-include" data-ch="{{ c.chapter_id }}" {{ 'checked' if c.include }}></td>
+        <td class="mono">{{ c.sequence }}</td>
+        <td class="title">{{ c.title }}{% if c.chapter_id == 'intro' %} <span class="meta">— title &amp; author intro</span>{% elif c.chapter_id == 'outro' %} <span class="meta">— closing outro</span>{% endif %}</td>
+        <td class="mono" style="text-align:right">{{ '{:,}'.format(c.char_count) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="meta" id="chaptersPending" style="{{ 'display:none' if chapters else '' }}">Waiting for extraction to finish…</div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const jobId = {{ job_id|tojson }};
+const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
+                   repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
+const form = document.getElementById("settingsForm");
+
+// Live slider value labels
+function syncRanges() {
+  form.querySelectorAll('input[type=range]').forEach(r => {
+    const v = r.parentElement.querySelector('.val');
+    if (v) v.textContent = (+r.value).toFixed(r.step.includes('.') ? 2 : 0);
+  });
+}
+form.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', syncRanges));
+syncRanges();
+
+function formData() { return new URLSearchParams(new FormData(form)); }
+async function saveSettings() {
+  await fetch(`/job/${jobId}/settings`, { method: "POST", body: formData() });
+}
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  await saveSettings(); toast("Settings saved");
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  for (const [k, v] of Object.entries(DEFAULTS)) {
+    const el = form.querySelector(`[name=${k}]`); if (el) el.value = v;
+  }
+  syncRanges(); toast("Reset to defaults (remember to Save)");
+});
+
+// Fast-poll for a few cycles right after an action so the UI feels responsive.
+let fast = 0;
+function bump() { fast = 8; }
+
+document.getElementById("previewBtn").addEventListener("click", async () => {
+  await saveSettings();
+  await postForm(`/job/${jobId}/preview`, {
+    seconds: document.getElementById("previewSeconds").value,
+    chapter_id: document.getElementById("previewChapter").value,
+  });
+  toast("Generating preview…"); bump();
+});
+const outDirInput = document.getElementById("outputDir");
+let outputMode = {{ output_mode|tojson }} === "folder" ? "folder" : "library";
+const libraryPane = document.getElementById("libraryPane");
+const folderPane = document.getElementById("folderPane");
+document.querySelectorAll("#modeToggle .seg-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    outputMode = btn.dataset.mode;
+    document.querySelectorAll("#modeToggle .seg-btn").forEach(b => b.classList.toggle("on", b === btn));
+    libraryPane.style.display = outputMode === "library" ? "" : "none";
+    folderPane.style.display = outputMode === "folder" ? "" : "none";
+  });
+});
+document.getElementById("outDirBtn").addEventListener("click", () => {
+  openFsBrowser({
+    start: outDirInput.value, accept: "dir",
+    onPick: (path) => {
+      outDirInput.value = path;
+      document.getElementById("outDirText").textContent = path;
+    }
+  });
+});
+document.getElementById("renderBtn").addEventListener("click", async () => {
+  await saveSettings();
+  const body = { output_mode: outputMode };
+  if (outputMode === "folder") body.output_dir = outDirInput.value;
+  const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
+  if (!r.ok) {
+    // Most likely a rejected destination (unset library root, or a folder we
+    // can't write to).
+    let msg = "Couldn't start render";
+    try { msg = (await r.json()).error || msg; } catch {}
+    toast(msg);
+    return;
+  }
+  toast("Rendering full audiobook…"); bump();
+});
+async function stop() { await postForm(`/job/${jobId}/cancel`, {}); toast("Stopping…"); bump(); }
+document.getElementById("previewStop").addEventListener("click", stop);
+document.getElementById("renderStop").addEventListener("click", stop);
+// Free up space (remove intermediates)
+const cleanupBtn = document.getElementById("cleanupBtn");
+if (cleanupBtn) cleanupBtn.addEventListener("click", async () => {
+  cleanupBtn.disabled = true;
+  try {
+    const r = await fetch(`/job/${jobId}/cleanup`, { method: "POST" });
+    if (!r.ok) { toast("Can't clean up while working"); cleanupBtn.disabled = false; return; }
+    const d = await r.json();
+    toast("Freed " + humanBytes(d.freed_bytes));
+    setTimeout(() => location.reload(), 700);
+  } catch { toast("Cleanup failed"); cleanupBtn.disabled = false; }
+});
+function humanBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B","KB","MB","GB","TB"]; let i = 0, f = n;
+  while (f >= 1024 && i < u.length - 1) { f /= 1024; i++; }
+  return (i === 0 ? f.toFixed(0) : f.toFixed(1)) + " " + u[i];
+}
+
+// Chapters are extracted in the background after import, so the page may load
+// before they exist. Fetch and populate the dropdown + table once available.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+async function ensureChapters() {
+  const sel = document.getElementById("previewChapter");
+  if (sel.options.length > 0) return;  // already populated (server-rendered or earlier)
+  let data;
+  try { data = await getJSON(`/job/${jobId}/chapters`); } catch { return; }
+  // Title/author are only known after extraction, so refresh them here too —
+  // the page may have loaded while the book still said "Unknown Title".
+  if (data.title) {
+    document.getElementById("pageTitle").textContent = data.title;
+    document.title = data.title + " · ebook·audiobook";
+  }
+  if (data.author) document.getElementById("pageAuthor").textContent = data.author;
+  if (data.output_filename) document.getElementById("outFilename").textContent = data.output_filename;
+  // Refresh the Plex library path once the real title/author are known.
+  const libTarget = document.getElementById("libraryTarget");
+  if (libTarget && data.library_target) libTarget.textContent = data.library_target;
+  if (!data.chapters.length) return;
+  sel.innerHTML = data.chapters.map(c =>
+    `<option value="${c.chapter_id}"${c.chapter_id === data.default_chapter_id ? " selected" : ""}>${c.sequence} · ${escapeHtml(c.title)}</option>`).join("");
+  document.getElementById("chapterCount").textContent = data.chapters.length;
+  document.getElementById("chaptersBody").innerHTML = data.chapters.map(chapterRowHtml).join("");
+  document.getElementById("chaptersPending").style.display = "none";
+  syncChapterUI();
+}
+
+function chapterRowHtml(c) {
+  const label = c.chapter_id === "intro" ? ` <span class="meta">— title &amp; author intro</span>`
+    : c.chapter_id === "outro" ? ` <span class="meta">— closing outro</span>` : "";
+  return `<tr class="${c.include ? "" : "excluded"}">
+    <td class="pick"><input type="checkbox" class="ch-include" data-ch="${c.chapter_id}"${c.include ? " checked" : ""}></td>
+    <td class="mono">${c.sequence}</td>
+    <td class="title">${escapeHtml(c.title)}${label}</td>
+    <td class="mono" style="text-align:right">${c.char_count.toLocaleString()}</td>
+  </tr>`;
+}
+
+// Reflect the current checkbox state into the "N of M selected" summary and
+// the tri-state select-all box. Works for both server- and JS-rendered rows.
+function syncChapterUI() {
+  const boxes = [...document.querySelectorAll(".ch-include")];
+  const inc = boxes.filter(b => b.checked).length;
+  const all = document.getElementById("selectAllCh");
+  all.checked = boxes.length > 0 && inc === boxes.length;
+  all.indeterminate = inc > 0 && inc < boxes.length;
+  document.getElementById("includeSummary").textContent =
+    boxes.length ? `${inc} of ${boxes.length} selected` : "";
+}
+
+async function persistIncludes(map) {
+  try { await postJSON(`/job/${jobId}/chapters/include`, { includes: map }); }
+  catch { toast("Couldn't save selection"); }
+}
+
+async function onChapterToggle(e) {
+  const box = e.target.closest(".ch-include");
+  if (!box) return;
+  box.closest("tr").classList.toggle("excluded", !box.checked);
+  syncChapterUI();
+  await persistIncludes({ [box.dataset.ch]: box.checked });
+}
+
+async function onSelectAll(e) {
+  const on = e.target.checked;
+  const map = {};
+  document.querySelectorAll(".ch-include").forEach(b => {
+    b.checked = on;
+    b.closest("tr").classList.toggle("excluded", !on);
+    map[b.dataset.ch] = on;
+  });
+  syncChapterUI();
+  await persistIncludes(map);
+}
+
+document.getElementById("chaptersBody").addEventListener("change", onChapterToggle);
+document.getElementById("selectAllCh").addEventListener("change", onSelectAll);
+syncChapterUI();
+
+async function refreshStorage() {
+  try {
+    const d = await getJSON(`/job/${jobId}/storage`);
+    document.getElementById("diskBytes").textContent = humanBytes(d.disk_bytes);
+    const btn = document.getElementById("cleanupBtn");
+    if (d.intermediate_bytes > 0) {
+      document.getElementById("interWrap").style.display = "";
+      document.getElementById("interBytes").textContent = humanBytes(d.intermediate_bytes);
+      if (btn) btn.disabled = false;
+    } else {
+      document.getElementById("interWrap").style.display = "none";
+      if (btn) btn.disabled = true;
+    }
+  } catch {}
+}
+
+// A clear, human-readable status for every stage.
+function statusLabel(s) {
+  const n = s.rendered_segments, m = s.total_segments;
+  switch (s.stage) {
+    case "imported":   return "Imported";
+    case "extracting": return "Extracting book…";
+    case "extracted":  return "Ready to render";
+    case "preparing":  return "Preparing — loading voice model…";
+    case "previewing": return m ? `Generating preview… ${Math.round(100 * (s.preview_progress || 0))}%` : "Preparing preview — loading model…";
+    case "rendering":  return `Rendering… ${n}/${m}`;
+    case "assembling": return "Assembling chapters…";
+    case "packaging":  return "Packaging audiobook…";
+    case "done":       return "Done";
+    case "cancelled":  return "Stopped";
+    case "error":      return "Error";
+    default:           return s.stage;
+  }
+}
+const SHOW_PROGRESS = new Set(["previewing", "rendering"]);
+const RENDER_STOPPABLE = new Set(["preparing", "rendering"]);
+const WORKING = new Set(["extracting", "preparing", "previewing", "rendering", "assembling", "packaging"]);
+
+let lastStage = null;
+let lastPreviewAt = "";
+
+async function poll() {
+  await ensureChapters();
+  let s;
+  try { s = await getJSON(`/job/${jobId}/status`); } catch { return schedule(4000); }
+
+  document.getElementById("stageText").textContent = statusLabel(s);
+  document.getElementById("stageBadge").className = "badge " + s.stage;
+  // Previews fill the bar by audio produced toward the requested excerpt;
+  // a full render fills it by segments completed.
+  const working = s.busy || WORKING.has(s.stage);
+  const isPreview = s.stage === "previewing";
+  const frac = isPreview
+    ? (s.preview_progress || 0)
+    : (s.total_segments ? s.rendered_segments / s.total_segments : 0);
+  const showBar = SHOW_PROGRESS.has(s.stage) && (isPreview || s.total_segments);
+  const determinate = showBar && frac > 0;
+  document.getElementById("countText").textContent =
+    !showBar ? "" : isPreview ? `${Math.round(100 * frac)}%` : `${s.rendered_segments}/${s.total_segments}`;
+  // While working with no measurable progress yet — loading the model, the slow
+  // first segment, extracting/assembling/packaging — animate an indeterminate
+  // bar so a running job never looks frozen at a dead 0%.
+  const bar = document.getElementById("bar");
+  const indeterminate = working && !determinate;
+  bar.parentElement.classList.toggle("indeterminate", indeterminate);
+  bar.style.width = determinate ? (100 * frac) + "%" : indeterminate ? "" : "0%";
+  document.getElementById("errorText").textContent = s.error || "";
+
+  // Stop shows next to whichever control started the work.
+  document.getElementById("previewStop").style.display = (s.stage === "previewing") ? "" : "none";
+  document.getElementById("renderStop").style.display = RENDER_STOPPABLE.has(s.stage) ? "" : "none";
+  document.getElementById("renderBtn").disabled = working;
+  document.getElementById("previewBtn").disabled = working;
+  // Section selection can't change mid-render (segments are already chosen).
+  document.getElementById("selectAllCh").disabled = working;
+  document.querySelectorAll(".ch-include").forEach(el => el.disabled = working);
+
+  if (s.output_path && s.output_path.endsWith(".m4b")) {
+    document.getElementById("resultLinks").innerHTML =
+      `<a class="btn primary" href="/job/${jobId}/download">⬇ Download .m4b</a>`;
+  }
+  if (s.finished_at) {
+    document.getElementById("finishedText").textContent =
+      "Exported " + new Date(s.finished_at).toLocaleString() +
+      (s.output_bytes ? " · " + humanBytes(s.output_bytes) : "");
+  }
+
+  // Preview player: (re)load whenever a newer preview has finished, and hide
+  // it if the preview was cleared (e.g. cleanup freed the file).
+  const a = document.getElementById("previewAudio");
+  if (isPreview) {
+    // A new preview is rendering — hide/pause the old one so it can't be
+    // played by mistake (it would be the stale, superseded excerpt).
+    a.pause();
+    a.style.display = "none";
+  } else if (!s.preview_at) {
+    if (lastPreviewAt) { a.removeAttribute("src"); a.load(); }
+    a.style.display = "none";
+    lastPreviewAt = "";
+  } else {
+    if (s.preview_at !== lastPreviewAt) {
+      lastPreviewAt = s.preview_at;
+      a.src = `/job/${jobId}/preview.wav?t=${encodeURIComponent(s.preview_at)}`;
+    }
+    a.style.display = "block";
+  }
+
+  // When a full render just completed, refresh storage (size + reclaimable).
+  if (s.stage === "done" && lastStage && lastStage !== "done") refreshStorage();
+  lastStage = s.stage;
+
+  let ms = working ? 1000 : 5000;
+  if (fast > 0) { fast--; ms = 1000; }
+  schedule(ms);
+}
+function schedule(ms) { setTimeout(poll, ms); }
+poll();
+</script>
+{% endblock %}

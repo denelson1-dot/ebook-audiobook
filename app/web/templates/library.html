@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set nav = 'library' %}
+{% block body %}
+<h1 class="page-title">Library</h1>
+<p class="page-sub">Your conversions — in progress, finished, and exported.</p>
+
+<div class="btn-row" style="justify-content:space-between; margin-bottom:22px">
+  <a class="btn primary" href="{{ url_for('new_page') }}">＋ New conversion</a>
+  {% if jobs %}<span class="meta">Storage used: <strong>{{ total_bytes|humanbytes }}</strong> across {{ jobs|length }} book{{ 's' if jobs|length != 1 }}</span>{% endif %}
+</div>
+
+{% if not jobs %}
+  <div class="card"><div class="empty">
+    No books yet. <a href="{{ url_for('new_page') }}">Start a conversion →</a>
+  </div></div>
+{% else %}
+  <div class="grid">
+    {% for j in jobs %}
+      <div class="card job-card">
+        <a class="title" href="{{ url_for('job_page', job_id=j.id) }}">{{ j.book.title }}</a>
+        <div class="author">{{ j.book.author }}</div>
+        <div style="margin:10px 0">
+          <span class="badge {{ j.state.stage }}"><span class="dot"></span>{{ j.state.stage }}</span>
+          {% if j.state.stage not in ('done','cancelled','error') and j.state.total_segments %}
+            <span class="meta mono"> · {{ j.state.rendered_segments }}/{{ j.state.total_segments }}</span>
+          {% endif %}
+        </div>
+        <div class="meta" style="font-size:12px">
+          {% if j.state.finished_at %}exported {{ j.state.finished_at|dt }}{% elif j.state.created_at %}started {{ j.state.created_at|dt }}{% endif %}
+          · {{ j.bytes|humanbytes }}
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <a class="btn sm" href="{{ url_for('job_page', job_id=j.id) }}">Open</a>
+          {% if j.state.output_path and j.state.output_path.endswith('.m4b') %}
+            <a class="btn sm" href="{{ url_for('download', job_id=j.id) }}">⬇ .m4b</a>
+          {% endif %}
+          <form method="post" action="{{ url_for('delete_job', job_id=j.id) }}" style="margin-left:auto"
+                onsubmit="return confirm('Delete “{{ j.book.title }}” and all its files?')">
+            <button class="btn sm danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

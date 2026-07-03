@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# One command to launch the ebook-audiobook web UI.
+# Uses the project's virtualenv directly, so you don't have to activate it.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+PY=".venv/bin/python"
+if [ ! -x "$PY" ]; then
+  echo "No virtualenv found at .venv/. Set it up first:" >&2
+  echo "  python3 -m venv .venv && .venv/bin/pip install -e '.[tts]'" >&2
+  echo "(see README.md)" >&2
+  exit 1
+fi
+
+exec "$PY" -m app.web "$@"

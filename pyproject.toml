@@ -1,0 +1,62 @@
+[project]
+name = "ebook-audiobook"
+version = "0.1.0"
+description = "Offline, local ebook-to-audiobook converter with a single high-quality narrator voice."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+
+# Core deps keep the whole pipeline (extract -> normalize -> chunk -> assemble ->
+# package) runnable and testable WITHOUT a GPU or the heavy TTS engine. The real
+# TTS engine lives behind the optional [tts] extra and is imported lazily.
+dependencies = [
+    "flask>=3.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "inflect>=7.0",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "mutagen>=1.47",
+]
+
+[project.optional-dependencies]
+# The GPU TTS engine. Installed separately because torch is large and its wheel
+# depends on your CUDA setup. See README for the exact install command.
+tts = [
+    "torch",
+    "torchaudio",
+    "chatterbox-tts",
+    # Chatterbox's watermarker dep (resemble-perth) still imports pkg_resources,
+    # which setuptools removed in 81. Pin below that until perth is updated.
+    "setuptools<81",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+ebook-audiobook = "app.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "calibre: integration test that shells out to Calibre's ebook-convert",
+    "ffmpeg: integration test that shells out to ffmpeg",
+]
+filterwarnings = [
+    # We deliberately parse XHTML with the HTML parser for text extraction.
+    "ignore::bs4.XMLParsedAsHTMLWarning",
+]

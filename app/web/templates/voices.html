@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set nav = 'voices' %}
+{% block body %}
+<h1 class="page-title">Voices</h1>
+<p class="page-sub">A voice is one short reference clip (~10s is used). Add your own rights-cleared
+clips and switch between them per book. The built-in narrator is always available.</p>
+
+<div class="card">
+  <h3>Add a voice</h3>
+  <form method="post" action="{{ url_for('voices_add') }}" id="addForm">
+    <div class="field-row">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" name="name" placeholder="e.g. Warm baritone" required>
+      </div>
+      <div class="field">
+        <label>Reference clip</label>
+        <div class="btn-row">
+          <button type="button" class="btn" id="clipBrowse">📂 Browse…</button>
+          <span class="meta" id="clipChosen">No clip selected</span>
+        </div>
+        <input type="hidden" name="path" id="clipPath">
+      </div>
+    </div>
+    <div class="hint" style="margin-bottom:12px">WAV, MP3, FLAC, M4A, MP4, OGG, Opus, AAC, WebM (auto-converted to WAV). Use only voices you have the rights and consent to use.</div>
+    <button type="submit" class="btn primary" id="addBtn" disabled>Add voice</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Your voices</h3>
+  <table>
+    <tr><th>Name</th><th>Clip</th><th style="text-align:right">Actions</th></tr>
+    {% for v in voices %}
+      <tr data-vid="{{ v.id }}">
+        <td>{{ v.name }}{% if v.is_default %} <span class="badge">built-in</span>{% endif %}</td>
+        <td class="meta mono">{{ v.clip_filename or "— default —" }}</td>
+        <td style="text-align:right">
+          <div class="btn-row" style="justify-content:flex-end">
+            <button class="btn sm test-btn" data-vid="{{ v.id }}">▶ Test</button>
+            {% if not v.is_default %}
+            <form method="post" action="{{ url_for('voices_delete', voice_id=v.id) }}" style="display:inline"
+                  onsubmit="return confirm('Delete this voice?')">
+              <button class="btn sm danger" type="submit">Delete</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      <tr class="sample-row" data-for="{{ v.id }}" style="display:none">
+        <td colspan="3"><audio controls data-audio="{{ v.id }}"></audio></td>
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+// Add-voice: browse for a clip
+document.getElementById("clipBrowse").addEventListener("click", () => {
+  openFsBrowser({ start: {{ start|tojson }}, accept: "audio",
+    onPick: (path) => {
+      document.getElementById("clipPath").value = path;
+      document.getElementById("clipChosen").textContent = path;
+      document.getElementById("addBtn").disabled = false;
+    }});
+});
+
+// Audition a voice: kick off a render, poll global status, then play the sample.
+document.querySelectorAll(".test-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const vid = btn.dataset.vid;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Rendering…';
+    try {
+      await postForm(`/voices/${vid}/test`, {});
+      // poll until the worker is idle
+      for (let i = 0; i < 240; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const s = await getJSON("/api/status");
+        if (!s.busy) break;
+      }
+      const row = document.querySelector(`.sample-row[data-for="${vid}"]`);
+      const audio = row.querySelector("audio");
+      audio.src = `/voices/${vid}/sample.wav?t=` + Date.now();
+      row.style.display = "";
+      audio.play().catch(() => {});
+    } catch (e) { toast("Test failed"); }
+    btn.disabled = false; btn.innerHTML = "▶ Test";
+  });
+});
+</script>
+{% endblock %}

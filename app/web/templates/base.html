@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ebook · audiobook{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="logo">🎧</span> ebook·audiobook</div>
+      <nav class="nav">
+        <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}"><span class="ic">📚</span> Library</a>
+        <a href="{{ url_for('new_page') }}" class="{{ 'active' if nav=='new' }}"><span class="ic">＋</span> New conversion</a>
+        <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}"><span class="ic">🗣</span> Voices</a>
+        <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}"><span class="ic">⚙</span> Settings</a>
+      </nav>
+    </aside>
+    <main class="main">
+      {% if setup_needed %}
+      <div class="card setup-banner">
+        <h3>📁 Where should finished audiobooks go?</h3>
+        <p class="meta">Pick your <strong>audiobooks library folder</strong> (the one Plex watches). New conversions are filed into it as a Plex-ready
+          <code>Author / Title (Year) / Title.m4b</code> tree. You can change this any time in Settings.</p>
+        <div class="btn-row">
+          <button type="button" class="btn primary" id="setupChooseBtn">📂 Choose library folder…</button>
+          <button type="button" class="btn ghost" id="setupSkipBtn">Skip for now</button>
+        </div>
+      </div>
+      {% endif %}
+      {% block body %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  {% if setup_needed %}
+  <script>
+  const homeDir = {{ home_dir|tojson }};
+  document.getElementById("setupChooseBtn").addEventListener("click", () => {
+    openFsBrowser({
+      start: homeDir, accept: "dir",
+      onPick: async (path) => {
+        await postForm("/settings", { audiobooks_root: path });
+        location.reload();
+      }
+    });
+  });
+  document.getElementById("setupSkipBtn").addEventListener("click", async () => {
+    await postForm("/settings/dismiss-setup", {});
+    location.reload();
+  });
+  </script>
+  {% endif %}
+  {% block script %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h2>Import an ebook</h2>
+  <form method="post" action="{{ url_for('import_ebook') }}" enctype="multipart/form-data">
+    <label>Upload a DRM-free file (.epub / .mobi / .azw3 / .pdf)</label>
+    <input type="file" name="file" accept=".epub,.mobi,.azw3,.azw,.fb2,.pdf">
+    <label>…or a local path on this machine</label>
+    <input type="text" name="path" size="50" placeholder="/home/dave/books/mybook.epub">
+    <label>Engine</label>
+    <select name="engine">
+      <option value="chatterbox">chatterbox (real, GPU)</option>
+      <option value="fake">fake (silent test)</option>
+    </select>
+    <p><button type="submit">Import &amp; extract</button></p>
+  </form>
+</div>
+
+<h2>Jobs</h2>
+{% if not jobs %}<p class="muted">No jobs yet.</p>{% endif %}
+{% for j in jobs %}
+  <div class="card">
+    <strong><a href="{{ url_for('job_page', job_id=j.id) }}">{{ j.book.title }}</a></strong>
+    <span class="muted">— {{ j.book.author }}</span><br>
+    <span class="muted">{{ j.state.stage }}
+      {% if j.state.total_segments %}· {{ j.state.rendered_segments }}/{{ j.state.total_segments }} segments{% endif %}
+      · <code>{{ j.id }}</code></span>
+  </div>
+{% endfor %}
+{% endblock %}

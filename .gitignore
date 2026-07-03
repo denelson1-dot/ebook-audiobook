@@ -1,0 +1,16 @@
+# Local, private data: source ebooks, extracted text, model files, voice clips,
+# generated audio. NONE of this belongs in Git.
+local-data/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# OS / editor
+.DS_Store
