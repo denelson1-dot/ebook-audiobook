@@ -39,6 +39,11 @@ audibly.
   written out in six places and the ROCm one in five. CI now fails the build if
   either installer names an index more than once, and resolves all four builds
   on every run to assert each one is what it claims.
+- **The advertised download sizes were all wrong**, and are now measured rather
+  than estimated. ROCm was the worst — "about 2 GB" for a 4.65 GB download — and
+  the CPU build has claimed "about 250 MB" for a 400 MB download since 1.0.0. CI
+  re-measures every build on each run and fails if a figure drifts from reality,
+  so nobody on a metered connection is misled again.
 - **In-progress books re-render once.** The torch version is now part of
   `engine_version`, which is folded into every segment's content hash — without
   it, a book half-rendered on one PyTorch would resume on another and splice two

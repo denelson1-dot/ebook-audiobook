@@ -185,6 +185,84 @@ jobs:
           grep -qE "[1-9][0-9]* passed" out.txt || {
             echo "no Calibre tests ran — they must have skipped"; exit 1; }
 
+  # Resolving proves the *indexes* are right. It cannot prove the curated
+  # dependency list is COMPLETE, because a missing package only shows up when
+  # something imports it. Chatterbox declares einops nowhere yet imports it
+  # unguarded in three modules — exactly the kind of gap --no-deps exposes and a
+  # dry run does not. So install it for real, on the CPU build, and import the
+  # engine. Gated to main/release: it downloads a few hundred MB.
+  engine:
+    name: the curated dependency list is complete
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the app
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Install the engine exactly as the installer does
+        run: |
+          set -eu
+          PIN="$(python -c 'from ebook_audiobook.torchbuild import TORCH_PIN; print(TORCH_PIN)')"
+          CB="$(python -c 'from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)')"
+          DEPS="$(python -c 'from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(" ".join(CHATTERBOX_DEPS))')"
+          IDX="$(python -c "from ebook_audiobook.torchbuild import BUILDS; print(BUILDS['cpu'].index_url)")"
+          python -m pip install --index-url "$IDX" --extra-index-url https://pypi.org/simple \
+            "torch==$PIN" "torchaudio==$PIN"
+          python -m pip install --no-deps "$CB"
+          python -m pip install --index-url "$IDX" --extra-index-url https://pypi.org/simple \
+            "torch==$PIN" "torchaudio==$PIN" $DEPS
+
+      # The real test: every module Chatterbox imports at load time must be
+      # present. An ImportError here means the curated list has a hole.
+      - name: The engine imports
+        run: |
+          python - <<'PY'
+          import chatterbox.tts                      # noqa: F401
+          from chatterbox.tts import ChatterboxTTS   # noqa: F401
+          import einops, librosa, transformers, diffusers, perth, s3tokenizer  # noqa: F401
+          import torch
+          print("chatterbox and every load-time dependency imported")
+          print("torch", torch.__version__)
+          PY
+
+      - name: The build is the one we asked for, and the drops stayed dropped
+        run: |
+          set -eu
+          python - <<'PY'
+          import importlib.metadata as md
+          from ebook_audiobook.torchbuild import FORBIDDEN_PACKAGES, TORCH_PIN
+          import torch
+          assert torch.__version__.startswith(TORCH_PIN), \
+              f"expected torch {TORCH_PIN}, got {torch.__version__}"
+          assert torch.__version__.endswith("+cpu"), \
+              f"expected a CPU build, got {torch.__version__}"
+          for pkg in FORBIDDEN_PACKAGES:
+              try:
+                  md.version(pkg)
+              except md.PackageNotFoundError:
+                  continue
+              raise SystemExit(f"{pkg} was installed; --no-deps was bypassed")
+          print(f"torch {torch.__version__}; none of {FORBIDDEN_PACKAGES} installed")
+          PY
+
+      - name: check reports a working engine
+        run: |
+          python -m ebook_audiobook.cli check --engine chatterbox | tee check.txt
+          grep -q "chatterbox=yes" check.txt
+          grep -q "torch 2.9" check.txt
+          # The stale-torch warning must NOT appear on a correct install.
+          if grep -q "predates 2.9" check.txt; then
+            echo "check wrongly reported the torch it just installed as stale"; exit 1
+          fi
+
   # The installers are the front door. A syntax error or a bad path in them is
   # just as user-visible as a bug in the app.
   installer:

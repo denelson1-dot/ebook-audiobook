@@ -189,10 +189,11 @@ def _rocm_present_but_unusable() -> Device | None:
     """
     if not amd_gpu_in_sysfs():
         return None
-    hint = (f"ROCm is installed but can't use this Radeon. Most often the card's "
-            f"architecture isn't on ROCm's supported list; try setting "
+    hint = (f"ROCm is installed but can't use this Radeon. Two usual causes: the "
+            f"card's architecture isn't on ROCm's supported list — try setting "
             f"{HSA_OVERRIDE_ENV} (10.3.0 for RX 6000, 11.0.0 for RX 7000) before "
-            f"starting. Running on the CPU meanwhile")
+            f"starting — or the amdgpu kernel driver is older than ROCm 6.4 "
+            f"needs, which a system update fixes. Running on the CPU meanwhile")
     cpu = _cpu_device()
     return Device("cpu", cpu.name, hint, backend="cpu")
 

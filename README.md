@@ -47,7 +47,7 @@ Menu entry; on Linux, an application-menu entry.
 
 | Option | Effect |
 |---|---|
-| `--cpu` / `-Cpu` | Force the CPU-only PyTorch build (~250 MB instead of ~2.5 GB) |
+| `--cpu` / `-Cpu` | Force the CPU-only PyTorch build (~400 MB instead of ~4 GB) |
 | `--gpu` / `-Gpu` | Force the CUDA build when the GPU probe comes up empty (e.g. a broken `nvidia-smi`) |
 | `--rocm` / `--amd` | Force the AMD ROCm build (Linux + Radeon) |
 | `--cuda128` / `-Cuda128` | Force the CUDA 12.8 build (RTX 20-series and newer) |

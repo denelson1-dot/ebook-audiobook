@@ -48,6 +48,59 @@ MIN_TORCH = (2, 9)
 FORBIDDEN_PACKAGES = ("gradio", "spacy-pkuseg")
 
 
+def _download_bytes(report: dict) -> int:
+    """Total bytes this resolution would actually download.
+
+    pip's report carries URLs and hashes but no sizes, so the wheels have to be
+    asked directly. A ranged GET rather than HEAD, because the R2 mirror pip
+    records URLs for answers 403 to HEAD on exactly the largest wheels — which
+    silently under-counted ROCm by 4 GB when this was first written. Falls back
+    to the canonical host, and returns 0 if anything is unknown so a partial
+    measurement is never mistaken for a real one.
+    """
+    import concurrent.futures
+    import urllib.request
+
+    def size_of(url: str) -> int:
+        for candidate in (url, url.replace("download-r2.pytorch.org",
+                                           "download.pytorch.org")):
+            try:
+                req = urllib.request.Request(candidate,
+                                             headers={"Range": "bytes=0-0"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    rng = resp.headers.get("Content-Range")
+                    if rng and "/" in rng:
+                        return int(rng.rsplit("/", 1)[1])
+            except Exception:  # noqa: BLE001 - try the next host, then give up
+                continue
+        return 0
+
+    urls = [i["download_info"]["url"] for i in report.get("install", [])
+            if i.get("download_info", {}).get("url")]
+    if not urls:
+        return 0
+    with concurrent.futures.ThreadPoolExecutor(16) as pool:
+        sizes = list(pool.map(size_of, urls))
+    return 0 if 0 in sizes else sum(sizes)
+
+
+def _advertised_bytes(flavour: str) -> int:
+    """The size string this build advertises, in bytes, or 0 if unreadable."""
+    try:
+        from ebook_audiobook.torchbuild import BUILDS
+
+        text = BUILDS[flavour].size.lower()
+    except Exception:  # noqa: BLE001 - the size check is a nicety
+        return 0
+    import re
+
+    m = re.search(r"([\d.]+)\s*(gb|mb)", text)
+    if not m:
+        return 0
+    value = float(m.group(1))
+    return int(value * (1024**3 if m.group(2) == "gb" else 1024**2))
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 3 or argv[2] not in FLAVOURS:
         print(f"usage: {argv[0]} <pip-report.json> <{'|'.join(FLAVOURS)}>",
@@ -104,6 +157,20 @@ def main(argv: list[str]) -> int:
                 f"{len(stowaways)} {prefix}* package(s) pulled into a {flavour} "
                 f"install: {', '.join(stowaways[:6])}"
             )
+
+    # Compare the advertised download size against what pip says it will fetch.
+    # These strings are shown to the user before a multi-gigabyte download, and
+    # they were duplicated across both installers and the README as prose.
+    advertised = _advertised_bytes(flavour)
+    actual = _download_bytes(report)
+    if advertised and actual:
+        ratio = actual / advertised
+        print(f"  download: {actual / 1024**3:.2f} GB actual vs "
+              f"{advertised / 1024**3:.2f} GB advertised ({ratio:.2f}x)")
+        if not 0.6 <= ratio <= 1.6:
+            problems.append(
+                f"advertised size for {flavour} is {advertised / 1024**3:.1f} GB "
+                f"but the resolution downloads {actual / 1024**3:.1f} GB")
 
     if problems:
         print(f"{flavour} resolution is wrong:", file=sys.stderr)

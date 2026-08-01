@@ -104,6 +104,11 @@ class Build:
         return self.id != "cpu"
 
 
+# Sizes are MEASURED, by summing the wheels each resolution actually downloads —
+# not estimated. Every previous figure here was understated, ROCm by 86% ("about
+# 2 GB" for a 4.65 GB download), and someone on a metered connection deserves
+# better than that. CI re-measures and fails if reality drifts from the claim.
+#
 # Every index here must carry TORCH_PIN for the Python versions we support.
 # CI resolves against each one and asserts the local version tag, so a bump that
 # breaks this fails the build rather than shipping.
@@ -112,7 +117,7 @@ BUILDS = {
         id="cpu",
         index_url="https://download.pytorch.org/whl/cpu",
         label="CPU only",
-        size="about 250 MB",
+        size="about 400 MB",
     ),
     # The default NVIDIA build. Covers Turing through Blackwell — crucially
     # sm_120, which is the RTX 50-series and which no CUDA 12.4 build has.
@@ -120,7 +125,7 @@ BUILDS = {
         id="cu128",
         index_url="https://download.pytorch.org/whl/cu128",
         label="NVIDIA CUDA 12.8",
-        size="about 3 GB",
+        size="about 4 GB",
     ),
     # For cards older than Turing. cu128 has no kernels below sm_70, so a GTX
     # 10-series would install cleanly and then fail on the first render.
@@ -128,7 +133,7 @@ BUILDS = {
         id="cu126",
         index_url="https://download.pytorch.org/whl/cu126",
         label="NVIDIA CUDA 12.6",
-        size="about 3 GB",
+        size="about 3.5 GB",
         note="chosen because this GPU predates the newer CUDA build",
     ),
     # ROCm 6.4 is the oldest index carrying TORCH_PIN that also supports RDNA4
@@ -137,7 +142,7 @@ BUILDS = {
         id="rocm",
         index_url="https://download.pytorch.org/whl/rocm6.4",
         label="AMD ROCm 6.4",
-        size="about 2.5 GB",
+        size="about 4.7 GB",
     ),
     # macOS has exactly one wheel, from PyPI, and it already contains Metal.
     # Neither --cpu nor --gpu can change what gets downloaded here.
