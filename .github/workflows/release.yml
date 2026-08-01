@@ -67,7 +67,8 @@ jobs:
           python -m venv verify
           verify/bin/python -m pip install --quiet --upgrade pip
           verify/bin/python -m pip install --quiet dist/*.whl
-          verify/bin/ebook-audiobook check --engine fake
+          verify/bin/ebook-audiobook check --engine fake || true
+          verify/bin/python ci/assert_prereqs.py
           verify/bin/python ci/smoke_render.py
           verify/bin/python ci/smoke_web.py
 
@@ -120,12 +121,20 @@ jobs:
       - name: Verify
         if: runner.os != 'Windows'
         run: |
-          "$HOME/.local/bin/ebook-audiobook" check --engine fake
+          "$HOME/.local/bin/ebook-audiobook" check --engine fake || true
+          "$HOME/.local/share/ebook-audiobook/venv/bin/python" ci/assert_prereqs.py
       - name: Verify (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & (Join-Path $env:LOCALAPPDATA "ebook-audiobook\bin\ebook-audiobook.cmd") check --engine fake
+          $cmd = Join-Path $env:LOCALAPPDATA "ebook-audiobook\bin\ebook-audiobook.cmd"
+          # Calibre is absent on the runner, so a non-zero exit is expected and
+          # deliberately ignored here; assert_prereqs.py makes the real judgement.
+          & $cmd check --engine fake
+          $global:LASTEXITCODE = 0
+          $py = Join-Path $env:LOCALAPPDATA "ebook-audiobook\venv\Scripts\python.exe"
+          & $py ci/assert_prereqs.py
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
   publish:
     name: Publish the release

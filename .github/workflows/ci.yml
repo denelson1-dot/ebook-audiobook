@@ -35,8 +35,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      # Informational. Calibre isn't on the runners, so `check` exits non-zero by
+      # design here — that's the correct behaviour being reported, not a failure
+      # of this build. The assertion lives in the next step.
       - name: Show what was detected
-        run: python -m ebook_audiobook.cli check --engine fake
+        run: python -m ebook_audiobook.cli check --engine fake || true
 
       - name: Test
         run: python -m pytest -v --tb=short
@@ -95,7 +98,15 @@ jobs:
         run: |
           "$BIN/ebook-audiobook" --help
           "$BIN/ebook-audiobook" paths
-          "$BIN/ebook-audiobook" check --engine fake
+          "$BIN/ebook-audiobook" check --engine fake || true
+
+      # `check` exits non-zero above purely because Calibre isn't on the runners,
+      # which is correct behaviour. Assert the precise thing instead: Calibre may
+      # be the only complaint, and ffmpeg must resolve from the bundled wheel.
+      - name: Calibre must be the only missing prerequisite
+        shell: bash
+        run: |
+          "$BIN/python" ci/assert_prereqs.py
 
       - name: A fresh install stores data in the per-user OS location
         shell: bash
@@ -123,6 +134,46 @@ jobs:
         with:
           name: wheel
           path: dist/*.whl
+
+  # Calibre is a hard requirement for real use — every import goes through
+  # ebook-convert — so the tests that exercise it must actually run somewhere.
+  # Installing it is slow, so this is one Linux job rather than part of the
+  # matrix; the platform-specific risk there is finding the binary, which the
+  # unit tests cover by simulating each OS.
+  integration:
+    name: integration (with Calibre)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Calibre
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends calibre
+          ebook-convert --version
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Every prerequisite must now be satisfied
+        run: |
+          python -m ebook_audiobook.cli check --engine fake
+          python ci/assert_prereqs.py --require-calibre
+
+      - name: Full suite, including the Calibre-dependent tests
+        run: python -m pytest -v --tb=short
+
+      - name: The Calibre-marked tests really ran (not silently skipped)
+        run: |
+          python -m pytest -m calibre -v --tb=short | tee out.txt
+          grep -qE "[1-9][0-9]* passed" out.txt || {
+            echo "no Calibre tests ran — they must have skipped"; exit 1; }
 
   # The installers are the front door. A syntax error or a bad path in them is
   # just as user-visible as a bug in the app.
