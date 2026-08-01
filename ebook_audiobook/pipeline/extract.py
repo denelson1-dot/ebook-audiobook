@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import posixpath
 import re
-import shutil
 import subprocess
 import urllib.parse
 import warnings
@@ -21,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bs4 import BeautifulSoup
+
+from .. import tools
 
 try:  # XHTML is valid XML but we intentionally parse it with the HTML parser.
     from bs4 import XMLParsedAsHTMLWarning
@@ -57,17 +58,14 @@ class RawBook:
 
 
 def run_ebook_convert(src: Path, out_epub: Path, timeout: int = 1800) -> Path:
-    if not shutil.which("ebook-convert"):
-        raise ExtractionError(
-            "Calibre isn't installed — its 'ebook-convert' command is missing. "
-            "Install Calibre (e.g. 'sudo apt install calibre'), then try again."
-        )
+    try:
+        exe = tools.require_ebook_convert()
+    except tools.MissingToolError as e:
+        raise ExtractionError(str(e)) from e
     out_epub.parent.mkdir(parents=True, exist_ok=True)
     try:
-        proc = subprocess.run(
-            ["ebook-convert", str(src), str(out_epub), "--enable-heuristics"],
-            capture_output=True,
-            text=True,
+        proc = tools.run(
+            [exe, src, out_epub, "--enable-heuristics"],
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:

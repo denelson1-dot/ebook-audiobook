@@ -7,12 +7,13 @@ browser polls ``/job/<id>/status`` and ``/api/status``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 
-from .. import config, settings as app_settings, worker
+from .. import checks, config, settings as app_settings, worker
 from ..audio import estimate
 from ..config import VoiceSettings, paths
 from ..jobs.models import Stage
@@ -42,6 +43,27 @@ def _parse_pron(text: str) -> dict:
         if src:
             out[src] = dst.strip()
     return out
+
+
+def _safe_upload_name(filename: str) -> str:
+    """A filesystem-safe name for an uploaded ebook that keeps its extension.
+
+    ``secure_filename`` strips non-ASCII entirely, so a book named
+    ``Война и мир.epub`` or ``日本語.epub`` collapses to the empty string — and the
+    old fallback of ``"upload"`` lost the extension too, making the import fail
+    with the confusing "files with no extension aren't supported". The extension
+    decides which importer runs, so it is preserved separately from the stem.
+    """
+    src = Path(filename)
+    ext = src.suffix.lower()
+    if re.fullmatch(r"\.[A-Za-z0-9]{1,6}", ext or ""):
+        stem = secure_filename(src.stem)
+    else:
+        # Not a plausible extension (".something-long", or none at all). Keep the
+        # whole name rather than silently amputating part of it; import will then
+        # report the unsupported format clearly.
+        stem, ext = secure_filename(src.name), ""
+    return f"{stem or 'upload'}{ext}"
 
 
 def human_bytes(n) -> str:
@@ -272,8 +294,7 @@ def create_app() -> Flask:
         src_path = None
         upload = request.files.get("file")
         if upload and upload.filename:
-            filename = secure_filename(upload.filename) or "upload"
-            dest = p.imports / filename
+            dest = p.imports / _safe_upload_name(upload.filename)
             upload.save(dest)
             src_path = str(dest)
         elif request.form.get("path"):
@@ -527,5 +548,19 @@ def create_app() -> Flask:
     @app.get("/api/status")
     def api_status():
         return {"busy": runner.is_busy(), "current": runner.current}
+
+    @app.get("/api/prereqs")
+    def api_prereqs():
+        """What's installed and what isn't.
+
+        Surfaced as a banner so a missing prerequisite is visible the moment the
+        UI opens, rather than as a failed import ten minutes later.
+        """
+        results = checks.run_all()
+        return {
+            "checks": [r.to_dict() for r in results],
+            "blocking": [r.to_dict() for r in checks.blocking_problems(results)],
+            "ok": not checks.blocking_problems(results),
+        }
 
     return app

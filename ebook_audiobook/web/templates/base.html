@@ -18,6 +18,14 @@
       </nav>
     </aside>
     <main class="main">
+      {# Missing prerequisites are shown before anything else: without Calibre
+         every import fails, and finding that out at import time is a worse
+         first experience than being told up front. Filled in by app.js from
+         /api/prereqs so a page load is never blocked on probing subprocesses. #}
+      <div id="prereqBanner" class="card alert-error" hidden>
+        <h3>⚠ Something needed is missing</h3>
+        <div id="prereqBody"></div>
+      </div>
       {% if setup_needed %}
       <div class="card setup-banner">
         <h3>📁 Where should finished audiobooks go?</h3>
@@ -33,6 +41,28 @@
     </main>
   </div>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script>
+  // Check prerequisites in the background on every page, so a tool that gets
+  // uninstalled later is noticed too, not just at first run.
+  (async () => {
+    try {
+      const r = await fetch("/api/prereqs");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.ok) return;
+      const body = d.blocking.map(c => `
+        <p><strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.detail)}</p>
+        ${c.fix ? `<pre class="fix">${escapeHtml(c.fix)}</pre>` : ""}`).join("");
+      document.getElementById("prereqBody").innerHTML =
+        body + `<p class="meta">After installing, restart ebook-audiobook.</p>`;
+      document.getElementById("prereqBanner").hidden = false;
+    } catch (e) { /* offline or shutting down: not worth surfacing */ }
+  })();
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c => (
+      {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  </script>
   {% if setup_needed %}
   <script>
   const homeDir = {{ home_dir|tojson }};

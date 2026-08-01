@@ -1,0 +1,171 @@
+"""Startup checks.
+
+Fail early with actionable guidance rather than deep inside a multi-hour render.
+The same results drive ``ebook-audiobook check`` on the command line and the
+prerequisite banner in the web UI, so a user is told about a missing tool in
+whichever place they happen to be looking.
+"""
+
+from __future__ import annotations
+
+import platform
+import sys
+from dataclasses import dataclass
+
+from . import tools
+from .config import data_root, paths
+
+
+@dataclass
+class CheckResult:
+    name: str
+    ok: bool
+    detail: str
+    # Copy-pasteable fix for a failing check, when one exists. Shown by the CLI
+    # and rendered as guidance in the web UI.
+    fix: str | None = None
+    # False for checks whose failure only removes capability rather than
+    # stopping the app from working at all (e.g. the GPU engine).
+    required: bool = True
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "ok": self.ok, "detail": self.detail,
+                "fix": self.fix, "required": self.required}
+
+
+def _version_line(exe, args: list[str]) -> str:
+    """First line of a tool's ``--version`` output, or its path if it won't talk."""
+    try:
+        out = tools.run([exe, *args], timeout=30)
+        lines = (out.stdout or out.stderr or "").splitlines()
+        return lines[0].strip() if lines else str(exe)
+    except Exception:  # noqa: BLE001 - any failure: fall back to reporting the path
+        return str(exe)
+
+
+def check_python() -> CheckResult:
+    v = sys.version_info
+    ok = v >= (3, 11)
+    return CheckResult(
+        "python",
+        ok,
+        f"{v.major}.{v.minor}.{v.micro} on {platform.system()} {platform.machine()}"
+        + ("" if ok else " (need >= 3.11)"),
+        fix=None if ok else "Install Python 3.11 or newer from https://python.org/downloads",
+    )
+
+
+def check_ffmpeg() -> CheckResult:
+    exe = tools.ffmpeg_path()
+    if exe is None:
+        return CheckResult(
+            "ffmpeg", False,
+            "MISSING — normally installed automatically with this app",
+            fix=tools.install_hint("ffmpeg"),
+        )
+    origin = "bundled" if tools.ffmpeg_is_bundled() else "system"
+    return CheckResult("ffmpeg", True, f"{_version_line(exe, ['-version'])}  [{origin}]")
+
+
+def check_ffprobe() -> CheckResult:
+    """Optional: only sharpens post-render validation, never required."""
+    exe = tools.ffprobe_path()
+    if exe is None:
+        return CheckResult(
+            "ffprobe (optional)", True,
+            "not installed — output is verified with ffmpeg instead",
+            required=False,
+        )
+    return CheckResult("ffprobe (optional)", True,
+                       _version_line(exe, ["-version"]), required=False)
+
+
+def check_calibre() -> CheckResult:
+    exe = tools.ebook_convert_path()
+    if exe is None:
+        return CheckResult(
+            "calibre (ebook-convert)", False,
+            "MISSING — required to read ebooks",
+            fix=tools.install_hint("calibre"),
+        )
+    return CheckResult("calibre (ebook-convert)", True,
+                       f"{_version_line(exe, ['--version'])}  [{exe}]")
+
+
+def check_data_root() -> CheckResult:
+    p = paths()
+    try:
+        p.ensure()
+        probe = p.tmp / ".write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return CheckResult("data folder (writable)", True, str(p.root))
+    except OSError as e:
+        return CheckResult(
+            "data folder (writable)", False, f"{p.root}: {e}",
+            fix="Set EBAB_DATA_ROOT to a folder you can write to.",
+        )
+
+
+def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
+    """Non-fatal: the pipeline runs with the fake engine without this."""
+    if engine == "fake":
+        return CheckResult("tts engine (fake)", True, "no dependencies", required=False)
+    try:
+        import torch  # noqa: F401
+    except Exception:
+        return CheckResult(
+            "tts engine (chatterbox)", False,
+            "not installed — you can import books, but not render audio",
+            fix="pip install 'ebook-audiobook[tts]'  (see the README for GPU builds)",
+            required=False,
+        )
+
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    try:
+        import chatterbox  # noqa: F401
+
+        cb = True
+    except Exception:
+        cb = False
+    detail = f"torch {torch.__version__}, device={device}, chatterbox={'yes' if cb else 'no'}"
+    if device == "cpu":
+        detail += " (CPU works but is slow — an NVIDIA GPU or Apple Silicon is much faster)"
+    # Any device can render; CPU is just slow, so it's not a failure.
+    return CheckResult(
+        "tts engine (chatterbox)", cb, detail,
+        fix=None if cb else "pip install 'ebook-audiobook[tts]'",
+        required=False,
+    )
+
+
+def run_all(engine: str = "chatterbox") -> list[CheckResult]:
+    return [
+        check_python(),
+        check_ffmpeg(),
+        check_ffprobe(),
+        check_calibre(),
+        check_data_root(),
+        check_tts_engine(engine),
+    ]
+
+
+def blocking_problems(results: list[CheckResult]) -> list[CheckResult]:
+    """Failures that actually stop the app being usable."""
+    return [r for r in results if r.required and not r.ok]
+
+
+def format_results(results: list[CheckResult]) -> str:
+    lines = [f"data folder: {data_root()}", ""]
+    for r in results:
+        mark = "ok" if r.ok else "!!"
+        lines.append(f"[{mark}] {r.name}: {r.detail}")
+        if r.fix and not r.ok:
+            for fix_line in r.fix.splitlines():
+                lines.append(f"       {fix_line}")
+    return "\n".join(lines)

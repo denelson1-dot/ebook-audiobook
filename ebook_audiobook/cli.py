@@ -1,12 +1,14 @@
 """Command-line entry point — the headless path through the whole pipeline.
 
-The web UI is a thin wrapper over these same functions.
+The web UI is a thin wrapper over these same functions, and is launched from
+here too (``ebook-audiobook web``) so there is exactly one command to remember.
 
 Examples:
-    python -m app.cli check
-    python -m app.cli convert book.epub --engine fake
-    python -m app.cli convert book.epub --voice-ref voices/narrator.wav
-    python -m app.cli preview <job_id> --seconds 30
+    ebook-audiobook web                             # start the UI (default)
+    ebook-audiobook check
+    ebook-audiobook convert book.epub --engine fake
+    ebook-audiobook convert book.epub --voice-ref voices/narrator.wav
+    ebook-audiobook preview <job_id> --seconds 30
 """
 
 from __future__ import annotations
@@ -20,6 +22,22 @@ from .config import VoiceSettings
 from .jobs.models import JobState
 from .jobs.store import JobStore
 from . import worker
+
+
+def _use_utf8_console() -> None:
+    """Make sure printing a book title can't crash the program on Windows.
+
+    Windows consoles still default to a legacy code page (cp1252 in the US/EU),
+    and Python encodes stdout with it. One curly quote or accented author name —
+    both extremely common in ebook metadata — would then raise
+    ``UnicodeEncodeError`` from an innocent ``print``. Re-encoding as UTF-8 with
+    replacement means the worst case is a mangled character, not a crash.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass  # redirected to something that can't be reconfigured; fine
 
 
 def _progress(state: JobState) -> None:
@@ -47,9 +65,39 @@ def _apply_voice(job_id: str, args) -> None:
 def cmd_check(args) -> int:
     results = checks.run_all(engine=args.engine)
     print(checks.format_results(results))
-    # Only the fake engine is required to be functional for the pipeline itself.
-    essential = [r for r in results if not r.name.startswith("tts engine")]
-    return 0 if all(r.ok for r in essential) else 1
+    problems = checks.blocking_problems(results)
+    if problems:
+        print(f"\n{len(problems)} problem(s) must be fixed before converting a book.")
+        return 1
+    print("\nEverything needed is installed.")
+    return 0
+
+
+def cmd_web(args) -> int:
+    """Start the local web UI (the way almost everyone uses this)."""
+    from .web.server import serve
+
+    serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
+def cmd_paths(args) -> int:
+    """Show where the app keeps things — the first question every support
+    conversation starts with."""
+    from .config import data_root
+    from . import settings as app_settings
+
+    p = config.paths()
+    print(f"data folder:      {data_root()}")
+    print(f"  imported books: {p.imports}")
+    print(f"  job workspace:  {p.jobs}")
+    print(f"  voice clips:    {p.voices}")
+    print(f"  outputs:        {p.outputs}")
+    print(f"  settings file:  {data_root() / 'settings.json'}")
+    root = app_settings.audiobooks_root()
+    print(f"audiobooks library: {root or '(not set — choose one in Settings)'}")
+    print("\nOverride the data folder by setting EBAB_DATA_ROOT.")
+    return 0
 
 
 def cmd_convert(args) -> int:
@@ -153,8 +201,23 @@ def _bitrate(job_id: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="ebook-audiobook", description=__doc__)
-    sub = p.add_subparsers(dest="command", required=True)
+    p = argparse.ArgumentParser(
+        prog="ebook-audiobook",
+        description="Turn a DRM-free ebook you own into a narrated .m4b audiobook, "
+                    "entirely on this machine.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Run with no arguments to open the web interface.",
+    )
+    sub = p.add_subparsers(dest="command")
+
+    c = sub.add_parser("web", help="open the web interface (default)")
+    c.add_argument("--host", default=None, help="bind address (default 127.0.0.1)")
+    c.add_argument("--port", type=int, default=None, help="port (default: first free from 5005)")
+    c.add_argument("--no-browser", action="store_true", help="don't open a browser window")
+    c.set_defaults(func=cmd_web)
+
+    c = sub.add_parser("paths", help="show where books, jobs, and settings are stored")
+    c.set_defaults(func=cmd_paths)
 
     def voice_flags(sp):
         sp.add_argument("--engine", choices=["chatterbox", "fake"], default="chatterbox")
@@ -196,12 +259,48 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    _use_utf8_console()
+    parser = build_parser()
+    # Bare `ebook-audiobook` (a desktop shortcut, or someone who just installed
+    # it) opens the UI rather than printing usage and exiting non-zero.
+    args = parser.parse_args(argv if argv is not None else (sys.argv[1:] or ["web"]))
+    if not getattr(args, "func", None):
+        parser.print_help()
+        return 2
     try:
         return args.func(args)
     except KeyboardInterrupt:
         print("\ninterrupted (progress saved; rerun to resume)")
         return 130
+
+
+def main_gui() -> int:
+    """Entry point for desktop/Start-menu shortcuts.
+
+    Registered as a ``gui_script`` so Windows launches it with ``pythonw.exe``
+    and no console window appears behind the browser. There is no console to
+    print to in that case, so failures have to be surfaced in a dialog rather
+    than on a stream nobody will ever see.
+    """
+    try:
+        return main(["web"])
+    except Exception as e:  # noqa: BLE001 - last resort: tell the user *something*
+        _report_gui_error(e)
+        return 1
+
+
+def _report_gui_error(exc: BaseException) -> None:
+    message = f"ebook-audiobook could not start:\n\n{exc}"
+    try:
+        import tkinter
+        from tkinter import messagebox
+
+        root = tkinter.Tk()
+        root.withdraw()
+        messagebox.showerror("ebook-audiobook", message)
+        root.destroy()
+    except Exception:  # noqa: BLE001 - no display / no tkinter
+        print(message, file=sys.stderr)
 
 
 if __name__ == "__main__":

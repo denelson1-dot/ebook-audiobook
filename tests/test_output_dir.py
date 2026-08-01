@@ -10,13 +10,15 @@ import shutil
 
 import pytest
 
-from app import config, worker
-from app.config import VoiceSettings
-from app.jobs.models import Book, Chapter
-from app.jobs.store import JobStore
-from app.web import create_app
+from ebook_audiobook import config, worker
+from ebook_audiobook.config import VoiceSettings
+from ebook_audiobook.jobs.models import Book, Chapter
+from ebook_audiobook.jobs.store import JobStore
+from ebook_audiobook.web import create_app
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+from ebook_audiobook import tools
+
+HAVE_FFMPEG = tools.ffmpeg_path() is not None
 
 
 def test_resolve_default_is_outputs_folder():
@@ -72,7 +74,7 @@ def _seed_job(job_id="outdirjob"):
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_render_writes_to_chosen_folder(tmp_path):
     store = _seed_job()
     dest = tmp_path / "my audiobooks"

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from app.audio import wav
-from app.audio.wav import duration_seconds, is_valid_audio, read_wav, write_wav
+from ebook_audiobook.audio import wav
+from ebook_audiobook.audio.wav import duration_seconds, is_valid_audio, read_wav, write_wav
 
 
 def _tone(seconds=1.0, sr=24000):

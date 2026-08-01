@@ -11,14 +11,16 @@ from pathlib import Path
 import pytest
 from bs4 import BeautifulSoup
 
-from app import settings, worker
-from app.config import VoiceSettings
-from app.jobs.models import Book, Chapter
-from app.jobs.store import JobStore
-from app.pipeline import extract, layout
-from app.web import create_app
+from ebook_audiobook import settings, worker
+from ebook_audiobook.config import VoiceSettings
+from ebook_audiobook.jobs.models import Book, Chapter
+from ebook_audiobook.jobs.store import JobStore
+from ebook_audiobook.pipeline import extract, layout
+from ebook_audiobook.web import create_app
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+from ebook_audiobook import tools
+
+HAVE_FFMPEG = tools.ffmpeg_path() is not None
 
 
 # --- settings store ----------------------------------------------------------
@@ -138,12 +140,12 @@ def test_setup_banner_shows_until_dismissed():
 # --- library-mode render: tree + tags + sidecar (ffmpeg) ---------------------
 
 def _make_jpeg(path: Path) -> None:
-    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=blue:s=32x32",
+    subprocess.run([str(tools.ffmpeg_path()), "-y", "-f", "lavfi", "-i", "color=c=blue:s=32x32",
                     "-frames:v", "1", str(path)], capture_output=True, check=True)
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_library_render_builds_tree_tags_and_sidecar(tmp_path):
     root = tmp_path / "Audiobooks"
     s = settings.load_settings()
@@ -168,7 +170,7 @@ def test_library_render_builds_tree_tags_and_sidecar(tmp_path):
     assert Path(state.output_path) == expect.resolve() and expect.exists()
     assert (expect.parent / "cover.jpg").exists()  # sidecar
 
-    from app.audio.tag import read_tags
+    from ebook_audiobook.audio.tag import read_tags
     tags = read_tags(expect)
     assert tags["stik"] == 2                       # marked as Audiobook
     assert tags["album_artist"] == "Ada Lovelace"  # author matching
@@ -177,7 +179,7 @@ def test_library_render_builds_tree_tags_and_sidecar(tmp_path):
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_delete_prunes_empty_library_dirs_but_keeps_siblings(tmp_path):
     root = tmp_path / "Audiobooks"
     s = settings.load_settings()

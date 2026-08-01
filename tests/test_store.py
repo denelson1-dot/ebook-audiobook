@@ -1,7 +1,7 @@
-from app.config import VoiceSettings
-from app.hashing import segment_id, voice_key
-from app.jobs.models import Book, Chapter, JobState, Segment, Stage
-from app.jobs.store import JobStore
+from ebook_audiobook.config import VoiceSettings
+from ebook_audiobook.hashing import segment_id, voice_key
+from ebook_audiobook.jobs.models import Book, Chapter, JobState, Segment, Stage
+from ebook_audiobook.jobs.store import JobStore
 
 
 def test_roundtrip_book_chapters_segments_state():
@@ -70,7 +70,7 @@ def test_voice_key_ignores_encode_only_bitrate():
 
 
 def test_cleanup_intermediates_keeps_metadata_and_output(tmp_path):
-    from app.config import paths
+    from ebook_audiobook.config import paths
     store = JobStore("cln").ensure()
     store.save_book(Book(job_id="cln", source_path="", source_hash="cln", title="T", author="A"))
     # fake intermediate artifacts

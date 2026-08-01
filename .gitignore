@@ -5,12 +5,25 @@ local-data/
 # Python
 .venv/
 venv/
+env/
 __pycache__/
 *.pyc
+*.pyo
 *.egg-info/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 build/
 dist/
 
+# Installer / smoke-test scratch dirs
+fresh/
+verify/
+out/
+
 # OS / editor
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

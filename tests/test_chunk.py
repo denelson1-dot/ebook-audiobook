@@ -1,4 +1,4 @@
-from app.pipeline.chunk import chunk_structured, chunk_text, is_scene_break, split_sentences
+from ebook_audiobook.pipeline.chunk import chunk_structured, chunk_text, is_scene_break, split_sentences
 
 
 def test_split_basic_sentences():

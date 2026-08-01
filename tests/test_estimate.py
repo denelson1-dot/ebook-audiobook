@@ -1,5 +1,5 @@
-from app import config
-from app.audio import estimate
+from ebook_audiobook import config
+from ebook_audiobook.audio import estimate
 
 
 def test_audio_seconds():

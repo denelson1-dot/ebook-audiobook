@@ -15,11 +15,11 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import tools
 from .config import paths
 
 DEFAULT_VOICE_ID = "default"
@@ -158,16 +158,18 @@ class VoiceLibrary:
     @staticmethod
     def _ffmpeg_to_wav(src: str, dest: Path) -> None:
         """Decode any supported audio (incl. .mp4/.m4a/.aac) to mono 24 kHz WAV."""
-        if not shutil.which("ffmpeg"):
-            raise ValueError("ffmpeg is required to import non-WAV audio")
-        proc = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(src), "-vn", "-ac", "1", "-ar", "24000",
-             "-c:a", "pcm_s16le", str(dest)],
-            capture_output=True, text=True, timeout=300,
+        try:
+            ffmpeg = tools.require_ffmpeg()
+        except tools.MissingToolError as e:
+            raise ValueError(str(e)) from e
+        proc = tools.run(
+            [ffmpeg, "-y", "-i", src, "-vn", "-ac", "1", "-ar", "24000",
+             "-c:a", "pcm_s16le", dest],
+            timeout=300,
         )
         if proc.returncode != 0 or not dest.exists():
             dest.unlink(missing_ok=True)
-            raise ValueError(f"could not decode audio: {proc.stderr[-300:]}")
+            raise ValueError(f"could not decode audio: {(proc.stderr or '')[-300:]}")
 
     def delete(self, voice_id: str) -> bool:
         if voice_id == DEFAULT_VOICE_ID:

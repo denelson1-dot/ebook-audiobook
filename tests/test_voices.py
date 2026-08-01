@@ -5,9 +5,11 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from app.voices import DEFAULT_VOICE_ID, VoiceLibrary
+from ebook_audiobook.voices import DEFAULT_VOICE_ID, VoiceLibrary
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None
+from ebook_audiobook import tools
+
+HAVE_FFMPEG = tools.ffmpeg_path() is not None
 
 
 @pytest.fixture
@@ -67,7 +69,7 @@ def test_wav_input_stored_as_wav(clip):
 def test_mp4_audio_import_transcodes_to_wav(tmp_path, clip):
     # Build a real .mp4 (AAC audio) from the wav, then import it.
     mp4 = tmp_path / "voice.mp4"
-    subprocess.run(["ffmpeg", "-y", "-i", clip, "-c:a", "aac", str(mp4)],
+    subprocess.run([str(tools.ffmpeg_path()), "-y", "-i", clip, "-c:a", "aac", str(mp4)],
                    capture_output=True, check=True)
     v = VoiceLibrary().add("From MP4", src_path=str(mp4))
     clip_path = VoiceLibrary().clip_path(v.id)

@@ -12,12 +12,12 @@ import subprocess
 
 import pytest
 
-from app import config
-from app.config import VoiceSettings
-from app.jobs.models import Book, Chapter, JobState
-from app.jobs.store import JobStore
-from app.pipeline import assemble, extract
-from app import worker
+from ebook_audiobook import config
+from ebook_audiobook.config import VoiceSettings
+from ebook_audiobook.jobs.models import Book, Chapter, JobState
+from ebook_audiobook.jobs.store import JobStore
+from ebook_audiobook.pipeline import assemble, extract
+from ebook_audiobook import worker
 
 
 def test_intro_chapter_announces_title_and_author():
@@ -167,7 +167,7 @@ def test_gap_for_maps_boundaries():
 def test_assemble_chapter_inserts_graduated_gaps(tmp_path):
     import numpy as np
 
-    from app.audio.wav import duration_seconds, write_wav
+    from ebook_audiobook.audio.wav import duration_seconds, write_wav
 
     sr = 24000
     seg = np.zeros(int(0.5 * sr), dtype=np.float32)  # two 0.5s segments
@@ -198,12 +198,14 @@ def test_build_segments_prepends_title_and_carries_boundaries():
     assert all("*" not in s.text for s in segs)
     assert segs[1].boundary == "scene"
     # boundary is NOT part of the content hash
-    from app.hashing import segment_id
+    from ebook_audiobook.hashing import segment_id
     assert segs[1].segment_id == segment_id(segs[1].text, "fake-1", "vk")
 
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
-HAVE_CALIBRE = shutil.which("ebook-convert") is not None
+from ebook_audiobook import tools
+
+HAVE_FFMPEG = tools.ffmpeg_path() is not None
+HAVE_CALIBRE = tools.ebook_convert_path() is not None
 
 
 def _seed_job(job_id="fakejob"):
@@ -221,15 +223,48 @@ def _seed_job(job_id="fakejob"):
 
 
 def _ffprobe(path):
-    out = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_chapters", str(path)],
-        capture_output=True, text=True,
-    )
-    return json.loads(out.stdout)
+    """Container facts as ``{"format": {...}, "chapters": [...]}``.
+
+    Uses ffprobe when it exists, and otherwise reconstructs the same shape from
+    ``ffmpeg -f ffmetadata`` plus mutagen. Without this, every one of these
+    output-verification tests would silently skip on a machine that only has the
+    bundled ffmpeg — which is exactly the configuration most users run.
+    """
+    probe_exe = tools.ffprobe_path()
+    if probe_exe:
+        out = tools.run([probe_exe, "-v", "quiet", "-print_format", "json",
+                         "-show_format", "-show_chapters", str(path)])
+        return json.loads(out.stdout)
+
+    out = tools.run([str(tools.ffmpeg_path()), "-hide_banner", "-loglevel", "error",
+                     "-i", str(path), "-f", "ffmetadata", "-"])
+    chapters, current, timebase = [], None, 1000.0
+    for line in (out.stdout or "").splitlines():
+        line = line.strip()
+        if line == "[CHAPTER]":
+            current = {"tags": {}}
+            chapters.append(current)
+        elif current is None:
+            continue
+        elif line.startswith("TIMEBASE="):
+            # "1/1000" -> ticks per second
+            _num, _, den = line.split("=", 1)[1].partition("/")
+            timebase = float(den or 1)
+        elif line.startswith("START="):
+            current["start_time"] = str(int(line.split("=", 1)[1]) / timebase)
+        elif line.startswith("END="):
+            current["end_time"] = str(int(line.split("=", 1)[1]) / timebase)
+        elif line.startswith("title="):
+            current["tags"]["title"] = line.split("=", 1)[1]
+
+    from mutagen.mp4 import MP4
+
+    return {"format": {"duration": str(MP4(str(path)).info.length)},
+            "chapters": chapters}
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_render_assemble_package_fake_produces_valid_m4b():
     _seed_job()
     state = worker.render_job("fakejob")
@@ -245,7 +280,7 @@ def test_render_assemble_package_fake_produces_valid_m4b():
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg/ffprobe not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_render_excludes_deselected_chapters():
     store = _seed_job("excludejob")
     chapters = store.load_chapters()
@@ -263,7 +298,7 @@ def test_render_excludes_deselected_chapters():
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_resume_skips_already_rendered_segments():
     store = _seed_job("resumejob")
     worker.render_job("resumejob")
@@ -277,7 +312,7 @@ def test_resume_skips_already_rendered_segments():
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.skipif(not HAVE_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
 def test_preview_produces_wav():
     _seed_job("previewjob")
     state = worker.render_job("previewjob", preview_max_seconds=1.0)

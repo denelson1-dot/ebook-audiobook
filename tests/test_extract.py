@@ -1,4 +1,4 @@
-from app.pipeline import extract
+from ebook_audiobook.pipeline import extract
 
 
 def test_parse_epub_metadata_and_chapters(synthetic_epub):

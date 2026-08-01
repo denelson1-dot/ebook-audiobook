@@ -7,14 +7,12 @@ attached picture for cover art.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import soundfile as sf
 
-from .. import config
+from .. import config, tools
 
 
 class PackagingError(RuntimeError):
@@ -55,8 +53,10 @@ def package_m4b(
     workdir: Path | None = None,
     timeout: int = 3600,
 ) -> Path:
-    if not shutil.which("ffmpeg"):
-        raise PackagingError("ffmpeg not found. Install with: sudo apt install ffmpeg")
+    try:
+        ffmpeg = tools.require_ffmpeg()
+    except tools.MissingToolError as e:
+        raise PackagingError(str(e)) from e
     if not chapters:
         raise PackagingError("no chapter audio to package")
 
@@ -74,7 +74,7 @@ def package_m4b(
     meta_path = workdir / "ffmeta.txt"
     meta_path.write_text(_ffmetadata(title, author, chapters), encoding="utf-8")
 
-    cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
+    cmd = [str(ffmpeg), "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
            "-i", str(meta_path)]
     have_cover = cover_path is not None and Path(cover_path).exists()
     if have_cover:
@@ -86,7 +86,9 @@ def package_m4b(
     cmd += ["-c:a", "aac", "-b:a", f"{bitrate_kbps}k", "-ac", "1",
             "-movflags", "+faststart", "-f", "mp4", str(out_path)]
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = tools.run(cmd, timeout=timeout)
     if proc.returncode != 0 or not out_path.exists():
-        raise PackagingError(f"ffmpeg packaging failed ({proc.returncode}):\n{proc.stderr[-1000:]}")
+        raise PackagingError(
+            f"ffmpeg packaging failed ({proc.returncode}):\n{(proc.stderr or '')[-1000:]}"
+        )
     return out_path

@@ -157,6 +157,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .alert-error { border: 1px solid #4a2b32; background: #21161b; color: var(--danger);
   border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; white-space: pre-wrap; }
 
+/* ---- missing-prerequisite banner ---- */
+/* The install command is the point of this banner, so it gets to look like
+   something you copy: monospace, selectable, visually separated from the prose. */
+#prereqBanner h3 { margin: 0 0 8px; color: var(--danger); }
+#prereqBanner p { margin: 6px 0; color: var(--text); }
+#prereqBanner .meta { color: var(--muted); font-size: 13px; }
+#prereqBanner pre.fix { background: #14181f; border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; margin: 8px 0; overflow-x: auto;
+  color: var(--text); font-size: 13px; user-select: all; white-space: pre; }
+
 /* range slider with live value */
 .range { display: flex; align-items: center; gap: 12px; }
 .range input[type=range] { flex: 1; accent-color: var(--accent); }

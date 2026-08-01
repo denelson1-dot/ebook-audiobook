@@ -6,12 +6,14 @@ import time
 
 import pytest
 
-from app.jobs.models import Book, Chapter, JobState, Stage
-from app.jobs.store import JobStore
-from app.web import create_app
+from ebook_audiobook.jobs.models import Book, Chapter, JobState, Stage
+from ebook_audiobook.jobs.store import JobStore
+from ebook_audiobook.web import create_app
 
-HAVE_FFMPEG = shutil.which("ffmpeg") and shutil.which("ffprobe")
-HAVE_CALIBRE = shutil.which("ebook-convert")
+from ebook_audiobook import tools
+
+HAVE_FFMPEG = tools.ffmpeg_path() is not None
+HAVE_CALIBRE = tools.ebook_convert_path() is not None
 
 
 @pytest.fixture
@@ -72,7 +74,7 @@ def test_chapters_endpoint_populates_after_extract(client, synthetic_epub):
 
 
 def test_pronunciation_fixes_persist(client):
-    from app.config import VoiceSettings
+    from ebook_audiobook.config import VoiceSettings
     store = JobStore("pron").ensure()
     store.save_book(Book(job_id="pron", source_path="", source_hash="pron", title="T", author="A"))
     store.save_voice(VoiceSettings(engine="fake"))
@@ -171,3 +173,43 @@ def test_full_web_flow_fake_engine(client, synthetic_epub):
     r = client.post(f"/job/{job_id}/preview", data={"seconds": "1", "chapter_id": chapters[0].chapter_id})
     _wait_idle(client)
     assert store.segment_audio_path(seg.segment_id).stat().st_mtime_ns == mtime
+
+
+# --- upload filename handling ------------------------------------------------
+
+def test_upload_name_keeps_extension_for_non_ascii_titles():
+    """secure_filename() strips non-ASCII to nothing, which used to also throw
+    away the extension and make the import fail with a confusing message."""
+    from ebook_audiobook.web.app import _safe_upload_name
+
+    assert _safe_upload_name("Война и мир.epub").endswith(".epub")
+    assert _safe_upload_name("日本語の本.epub").endswith(".epub")
+    assert _safe_upload_name("Ünïcödé Bøøk.mobi").endswith(".mobi")
+
+
+def test_upload_name_is_path_safe():
+    from ebook_audiobook.web.app import _safe_upload_name
+
+    for hostile in ("../../etc/passwd.epub", "..\\..\\windows\\evil.epub",
+                    "/absolute/path.epub"):
+        out = _safe_upload_name(hostile)
+        assert "/" not in out and "\\" not in out and ".." not in out
+
+
+def test_upload_name_does_not_invent_an_extension():
+    from ebook_audiobook.web.app import _safe_upload_name
+
+    # No extension in, none out — import then reports the format clearly rather
+    # than guessing a parser.
+    assert _safe_upload_name("book") == "book"
+    assert "." not in _safe_upload_name("book")
+    # A long trailing dotted run isn't an extension, so it isn't treated as one.
+    assert _safe_upload_name("archive.tar.something-long") == "archive.tar.something-long"
+
+
+def test_upload_name_never_empty():
+    from ebook_audiobook.web.app import _safe_upload_name
+
+    assert _safe_upload_name("").strip()
+    assert _safe_upload_name("...").strip()
+    assert _safe_upload_name("книга").strip()

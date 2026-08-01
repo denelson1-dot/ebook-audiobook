@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Work out the version
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION"
+
+      # A tag that disagrees with pyproject.toml produces a release whose
+      # installer points at a wheel filename that doesn't exist. Catch it here.
+      - name: Tag must match pyproject version
+        run: |
+          PYPROJECT=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$PYPROJECT" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::tag says ${{ steps.version.outputs.version }} but pyproject.toml says $PYPROJECT"
+            exit 1
+          fi
+          echo "version $PYPROJECT confirmed"
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --sdist --wheel --outdir dist
+
+      - name: Verify the wheel contains its data files
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          required = ["ebook_audiobook/web/templates/base.html",
+                      "ebook_audiobook/web/static/app.css"]
+          missing = [r for r in required if r not in names]
+          if missing:
+              sys.exit("MISSING FROM WHEEL: " + ", ".join(missing))
+          print(f"{wheel} verified")
+          PY
+
+      - name: Smoke-test the built wheel
+        run: |
+          python -m venv verify
+          verify/bin/python -m pip install --quiet --upgrade pip
+          verify/bin/python -m pip install --quiet dist/*.whl
+          verify/bin/ebook-audiobook check --engine fake
+          verify/bin/python ci/smoke_render.py
+          verify/bin/python ci/smoke_web.py
+
+      # Publish installers with their version baked in, so `latest/download/`
+      # can serve a fixed script name while still resolving a versioned wheel.
+      - name: Stamp the installers with this version
+        run: |
+          mkdir -p out
+          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.sh  > out/install.sh
+          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.ps1 > out/install.ps1
+          chmod +x out/install.sh
+          grep -q "${{ steps.version.outputs.version }}" out/install.sh
+          grep -q "${{ steps.version.outputs.version }}" out/install.ps1
+          echo "installers stamped"
+
+      - name: Checksums
+        run: |
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: |
+            dist/*
+            out/install.sh
+            out/install.ps1
+
+  # Prove the published installers work on all three OSes before the release is
+  # visible, by running them against the wheel this build produced.
+  verify-installers:
+    name: verify installer on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install from the source tree (same code path, no release needed yet)
+        if: runner.os != 'Windows'
+        run: bash install.sh --yes --no-tts
+      - name: Install from the source tree (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./install.ps1 -Yes -NoTts
+      - name: Verify
+        if: runner.os != 'Windows'
+        run: |
+          "$HOME/.local/bin/ebook-audiobook" check --engine fake
+      - name: Verify (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & (Join-Path $env:LOCALAPPDATA "ebook-audiobook\bin\ebook-audiobook.cmd") check --engine fake
+
+  publish:
+    name: Publish the release
+    needs: [build, verify-installers]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: artifacts
+
+      - name: Assemble the assets
+        run: |
+          mkdir -p upload
+          cp artifacts/dist/* upload/
+          cp artifacts/out/install.sh artifacts/out/install.ps1 upload/
+          ls -la upload/
+
+      - name: Release notes
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          cat > NOTES.md <<EOF
+          ## Install
+
+          **macOS / Linux**
+          \`\`\`bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/v$VERSION/install.sh | bash
+          \`\`\`
+
+          **Windows** (PowerShell)
+          \`\`\`powershell
+          irm https://github.com/${{ github.repository }}/releases/download/v$VERSION/install.ps1 | iex
+          \`\`\`
+
+          The installer sets up its own private Python environment, picks the right
+          PyTorch build for your machine, and offers to install Calibre if it's missing.
+          Nothing is installed system-wide and no administrator rights are needed.
+
+          After installing, run \`ebook-audiobook\` (or use the Start Menu / application
+          menu entry). See the [README](https://github.com/${{ github.repository }}#readme)
+          for the full guide.
+
+          ### Requirements
+          - Python 3.11+ (the installer offers to install it)
+          - [Calibre](https://calibre-ebook.com/download) — reads your ebook files
+          - ffmpeg is **included**, no separate install needed
+
+          ### Verified on
+          Windows, macOS, and Linux — Python 3.11, 3.12, and 3.13.
+          EOF
+          cat NOTES.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ebook-audiobook ${{ needs.build.outputs.version }}
+          body_path: NOTES.md
+          files: upload/*
+          draft: false
+          prerelease: false

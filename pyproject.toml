@@ -1,15 +1,27 @@
 [project]
 name = "ebook-audiobook"
-version = "0.1.0"
+version = "1.0.0"
 description = "Offline, local ebook-to-audiobook converter with a single high-quality narrator voice."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "denelson1" }]
+keywords = ["audiobook", "tts", "epub", "m4b", "plex", "chatterbox", "offline"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
-    "Environment :: GPU :: NVIDIA CUDA",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 
 # Core deps keep the whole pipeline (extract -> normalize -> chunk -> assemble ->
@@ -17,17 +29,23 @@ classifiers = [
 # TTS engine lives behind the optional [tts] extra and is imported lazily.
 dependencies = [
     "flask>=3.0",
+    "waitress>=3.0",         # production WSGI server; pure Python, works on Windows
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "inflect>=7.0",
     "numpy>=1.26",
     "soundfile>=0.12",
     "mutagen>=1.47",
+    # Ships a static ffmpeg binary for Windows/macOS/Linux so users don't have to
+    # install one. A system ffmpeg on PATH is always preferred when present (it
+    # also brings ffprobe, which this wheel does not include).
+    "imageio-ffmpeg>=0.5",
 ]
 
 [project.optional-dependencies]
 # The GPU TTS engine. Installed separately because torch is large and its wheel
-# depends on your CUDA setup. See README for the exact install command.
+# depends on your CUDA setup. The installer picks the right torch build for the
+# machine; see CONTRIBUTING.md to do it by hand.
 tts = [
     "torch",
     "torchaudio",
@@ -38,17 +56,33 @@ tts = [
 ]
 dev = [
     "pytest>=8.0",
+    "build>=1.2",
 ]
 
+[project.urls]
+Homepage = "https://github.com/denelson1-dot/ebook-audiobook"
+Source = "https://github.com/denelson1-dot/ebook-audiobook"
+Issues = "https://github.com/denelson1-dot/ebook-audiobook/issues"
+
 [project.scripts]
-ebook-audiobook = "app.cli:main"
+ebook-audiobook = "ebook_audiobook.cli:main"
+
+# Windows: launched via pythonw.exe, so a desktop/Start-menu shortcut opens the
+# web UI without a console window flashing up behind the browser.
+[project.gui-scripts]
+ebook-audiobook-gui = "ebook_audiobook.cli:main_gui"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["ebook_audiobook*"]
+
+# Jinja templates and static assets are not .py files, so they must be declared
+# explicitly or the built wheel serves a UI with no templates (every page 500s).
+[tool.setuptools.package-data]
+"ebook_audiobook.web" = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

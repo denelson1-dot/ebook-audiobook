@@ -1,8 +1,9 @@
 """Paths and default settings.
 
-Local, private data lives under a single root (``local-data/`` next to the repo
-by default) so it is trivial to keep out of Git and to back up or wipe. Override
-the root with the ``EBAB_DATA_ROOT`` environment variable.
+All local, private data (imported books, rendered audio, voice clips, settings)
+lives under a single root so it is trivial to back up or wipe, and so nothing
+private is ever near the source tree. See :func:`data_root` for how that root is
+chosen on each platform.
 """
 
 from __future__ import annotations
@@ -11,15 +12,51 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Repo root = parent of the ``app`` package directory.
+from .platform_dirs import user_data_dir
+
+# Parent of the ``ebook_audiobook`` package directory. In a source checkout this
+# is the repo root; in an installed copy it is ``site-packages`` — which is why
+# it is only ever used together with :func:`_is_source_checkout`.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _is_source_checkout() -> bool:
+    """True when we're running from a cloned repo rather than an installed wheel.
+
+    Checked by looking for the project's own ``pyproject.toml`` as a sibling of
+    the package. An installed copy sits in ``site-packages``, which has no such
+    file, so this can never be fooled into treating a shared library directory
+    as somebody's checkout.
+    """
+    return (REPO_ROOT / "pyproject.toml").is_file() and (REPO_ROOT / "ebook_audiobook").is_dir()
+
+
+def legacy_repo_data_root() -> Path:
+    """The old repo-local data location, kept working for existing checkouts."""
+    return REPO_ROOT / "local-data"
+
+
 def data_root() -> Path:
+    """Resolve the one directory that holds everything this app stores.
+
+    Precedence, first match wins:
+
+    1. ``EBAB_DATA_ROOT`` — explicit override, always respected.
+    2. A ``local-data/`` directory that already exists inside a source checkout.
+       This is what installs from before the packaged release used, so an
+       existing setup keeps its books, jobs, and settings exactly where they are.
+    3. The per-user OS data directory (see :mod:`ebook_audiobook.platform_dirs`).
+       This is what a fresh install gets: outside the source tree, so upgrading
+       or reinstalling the app never touches the user's library.
+    """
     env = os.environ.get("EBAB_DATA_ROOT")
     if env:
         return Path(env).expanduser().resolve()
-    return REPO_ROOT / "local-data"
+    if _is_source_checkout():
+        legacy = legacy_repo_data_root()
+        if legacy.is_dir():
+            return legacy
+    return user_data_dir()
 
 
 @dataclass(frozen=True)

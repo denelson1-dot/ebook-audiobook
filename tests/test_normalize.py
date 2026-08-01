@@ -1,4 +1,4 @@
-from app.pipeline import normalize as n
+from ebook_audiobook.pipeline import normalize as n
 
 
 def test_curly_quotes_and_dashes():
