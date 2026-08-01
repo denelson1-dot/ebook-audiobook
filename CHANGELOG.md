@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.2 — 2026-08-01
+
+Books that Calibre choked on now import.
+
+- **An EPUB whose reading order contains the cover image is repaired
+  automatically.** The spine is a list of documents, but some commercial EPUBs
+  put the cover *image* in it. Calibre walks the spine assuming every entry
+  parsed into a document tree, calls `.find()` on raw JPEG bytes, and dies
+  inside its CSS flattener with a bare `TypeError` — no mention of the spine,
+  the cover, or the book. The entry is now dropped before conversion; the cover
+  itself stays in the manifest and is still used.
+
+  The repair is deliberately timid. It removes only entries whose media type is
+  positively known not to be a document (images, audio, video, fonts, CSS, the
+  NCX); anything unknown or unlabelled is left alone, because dropping a real
+  chapter would silently shorten an audiobook — a far worse outcome than the
+  crash being avoided.
+
+- **Failure messages no longer send you in a circle.** A failed conversion
+  advised converting the book to EPUB in Calibre, which is useless when the
+  file is already an EPUB and Calibre is what fell over. EPUB inputs now get
+  advice that applies to them, and the spine fault above is named in plain
+  words instead of surfacing a Python traceback.
+
 ## 1.1.1 — 2026-08-01
 
 A clean launch window. Starting the app from the Start Menu, the application

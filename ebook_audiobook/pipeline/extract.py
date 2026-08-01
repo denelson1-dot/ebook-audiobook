@@ -13,6 +13,7 @@ from __future__ import annotations
 import posixpath
 import re
 import subprocess
+import sys
 import urllib.parse
 import warnings
 import zipfile
@@ -57,15 +58,115 @@ class RawBook:
     series_index: str | None = None
 
 
+# --- repairing the input before Calibre sees it ------------------------------
+
+# An EPUB's spine is its reading order, so every entry has to be a document.
+# Some commercial EPUBs list the cover *image* there instead. Calibre walks the
+# spine assuming each item parsed into a tree, calls .find() on raw JPEG bytes,
+# and dies inside its CSS flattener with a bare TypeError — no mention of the
+# spine, the cover, or the book. Dropping the entry costs nothing (the cover is
+# still in the manifest and guide) and makes such books convert normally.
+#
+# Deliberately a deny-list of things we are certain are *not* documents, rather
+# than an allow-list of the ones we think are: an unknown or absent media type
+# is left alone, because dropping a real chapter would silently truncate a book,
+# which is far worse than the crash this avoids.
+_NOT_A_DOCUMENT_PREFIXES = ("image/", "audio/", "video/", "font/")
+_NOT_A_DOCUMENT_TYPES = frozenset({
+    "text/css",
+    "application/x-dtbncx+xml",
+    "application/font-woff",
+    "application/font-sfnt",
+    "application/vnd.ms-opentype",
+    "application/x-font-ttf",
+    "application/x-font-otf",
+})
+
+
+def _is_not_a_document(media_type: str) -> bool:
+    mt = (media_type or "").strip().lower()
+    if not mt:
+        return False  # unknown: assume a document and leave it alone
+    return mt.startswith(_NOT_A_DOCUMENT_PREFIXES) or mt in _NOT_A_DOCUMENT_TYPES
+
+
+def repair_epub_spine(src: Path, dest: Path) -> tuple[Path, list[str]] | None:
+    """Copy ``src`` to ``dest`` without its non-document spine entries.
+
+    Returns ``(dest, dropped_hrefs)``, or None when the book needs no repair.
+    Also returns None when the file can't be read as an EPUB at all: that is
+    Calibre's complaint to make, with its much better diagnostics.
+    """
+    from lxml import etree
+
+    try:
+        with zipfile.ZipFile(src) as zf:
+            opf_name = _opf_path(zf)
+            opf_bytes = zf.read(opf_name)
+    except (zipfile.BadZipFile, KeyError, ExtractionError, OSError):
+        return None
+
+    try:
+        root = etree.fromstring(opf_bytes)
+    except etree.XMLSyntaxError:
+        return None
+
+    # {*} matches any namespace, so this works whether or not the OPF declares
+    # the usual one.
+    media_types = {
+        item.get("id"): item.get("media-type", "")
+        for item in root.iterfind(".//{*}manifest/{*}item")
+        if item.get("id")
+    }
+
+    dropped: list[str] = []
+    for itemref in list(root.iterfind(".//{*}spine/{*}itemref")):
+        idref = itemref.get("idref")
+        if idref and _is_not_a_document(media_types.get(idref, "")):
+            dropped.append(idref)
+            itemref.getparent().remove(itemref)
+
+    if not dropped:
+        return None
+
+    new_opf = etree.tostring(root.getroottree(), xml_declaration=True, encoding="utf-8")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zout:
+        # mimetype has to stay the first entry and stored uncompressed, or the
+        # result is no longer a valid EPUB.
+        names = zin.namelist()
+        if "mimetype" in names:
+            zout.writestr(zipfile.ZipInfo("mimetype"), zin.read("mimetype"),
+                          compress_type=zipfile.ZIP_STORED)
+        for info in zin.infolist():
+            if info.filename == "mimetype":
+                continue
+            data = new_opf if info.filename == opf_name else zin.read(info.filename)
+            zout.writestr(info, data)
+    return dest, dropped
+
+
 def run_ebook_convert(src: Path, out_epub: Path, timeout: int = 1800) -> Path:
     try:
         exe = tools.require_ebook_convert()
     except tools.MissingToolError as e:
         raise ExtractionError(str(e)) from e
     out_epub.parent.mkdir(parents=True, exist_ok=True)
+
+    # Errors are always reported against the file the user actually gave us.
+    source = src
+    if src.suffix.lower() == ".epub":
+        repaired = repair_epub_spine(src, out_epub.parent / "repaired-input.epub")
+        if repaired:
+            source, dropped = repaired
+            plural = "entry" if len(dropped) == 1 else "entries"
+            print(f"repaired “{src.name}”: dropped {len(dropped)} non-document spine "
+                  f"{plural} ({', '.join(dropped)}) that Calibre cannot process",
+                  file=sys.stderr, flush=True)
+
     try:
         proc = tools.run(
-            [exe, src, out_epub, "--enable-heuristics"],
+            [exe, source, out_epub, "--enable-heuristics"],
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -94,10 +195,27 @@ def _convert_error_message(src: Path, proc: subprocess.CompletedProcess) -> str:
             "format its extension claims. Try re-downloading it, or convert it to EPUB "
             "in Calibre first."
         )
+    if "stylize_spine" in low or "flatcss" in low:
+        return (
+            f"“{src.name}” lists a file in its reading order that isn't a document — "
+            "usually the cover image — which Calibre can't process. We repair that "
+            "automatically before converting, so reaching this message means the book "
+            "is malformed in some further way. Try a different copy."
+        )
     tail = (proc.stderr or proc.stdout or "").strip()[-600:]
+    # Telling someone to convert to EPUB in Calibre is useless when the file is
+    # already an EPUB and Calibre is what just fell over on it.
+    if src.suffix.lower() == ".epub":
+        advice = (
+            "It's already an EPUB, so converting it again in Calibre will hit the same "
+            "fault — the file itself is likely malformed. Try a different copy of the "
+            "book, or open it in Calibre's Edit Book to see what's wrong."
+        )
+    else:
+        advice = "If this persists, convert it to EPUB in Calibre first."
     return (
         f"Couldn't convert “{src.name}” to EPUB (Calibre exited {proc.returncode}). "
-        "If this persists, convert it to EPUB in Calibre first.\n\n" + tail
+        f"{advice}\n\n" + tail
     )
 
 
