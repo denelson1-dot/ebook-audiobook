@@ -304,3 +304,37 @@ def test_macos_gets_no_index_flags():
     """There is one Mac wheel, on PyPI; passing an index could only narrow it."""
     for cmd in tb.install_commands(tb.BUILDS["mac"]):
         assert "--index-url" not in cmd
+
+
+# --- numpy, which --no-deps silently unpinned ---------------------------------
+
+def test_numpy_is_in_the_curated_list():
+    """--no-deps drops Chatterbox's numpy constraint along with everything else.
+    Without replacing it, pip installed numpy 2.4.6 on Python 3.12 — outside what
+    Chatterbox was built against, and not what the upgrade was validated on."""
+    assert any(d.startswith("numpy") for d in tb.CHATTERBOX_DEPS)
+
+
+def test_the_numpy_requirement_follows_chatterbox_s_own_rule():
+    """It declares numpy<2 below Python 3.13 and numpy>=2 at or above it."""
+    import sys
+    req = tb._numpy_requirement()
+    if sys.version_info >= (3, 13):
+        assert req == "numpy>=2.0.0"
+    else:
+        assert "<2.0.0" in req and ">=1.24.0" in req
+
+
+def test_the_numpy_requirement_carries_no_environment_marker():
+    """The installers hand this list to pip as shell words; a marker like
+    '; python_version < \"3.13\"' would not survive that intact, so the rule is
+    resolved here instead."""
+    for dep in tb.CHATTERBOX_DEPS:
+        assert ";" not in dep, f"{dep!r} carries a marker that shell-splitting would break"
+        assert " " not in dep, f"{dep!r} contains a space and would split into two arguments"
+
+
+def test_scipy_is_deliberately_left_unpinned():
+    """Constrain numpy in the same pip command and the resolver picks a scipy
+    that agrees; pinning both invites a conflict on every numpy change."""
+    assert not any(d.startswith("scipy") for d in tb.CHATTERBOX_DEPS)

@@ -21,6 +21,7 @@ GPU, and there never will be. Picking the index is therefore the whole job.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 
 # Minimum Python the installers will build an environment on.
@@ -53,13 +54,37 @@ TORCH_PIN = "2.9.1"
 #                               demo app; a large download for nothing
 #   spacy-pkuseg      dropped   Chinese segmentation, already behind a
 #                               try/except that logs and continues
-#   numpy/scipy       pinned    Chatterbox switches numpy major at Python 3.13;
-#                               scipy must agree with whichever numpy lands or
-#                               it refuses to import
+#   numpy             pinned    to Chatterbox's own rule for this Python —
+#                               see _numpy_requirement(). --no-deps drops that
+#                               constraint, and pip then installs numpy 2 on
+#                               Python 3.12, which is not what Chatterbox was
+#                               built against
 #
 # Re-check this list whenever CHATTERBOX_PIN moves. CI installs it for real.
 CHATTERBOX_PIN = "chatterbox-tts==0.1.7"
+
+
+def _numpy_requirement() -> str:
+    """Chatterbox's own numpy rule, resolved for the interpreter running this.
+
+    It declares `numpy<2.0.0` below Python 3.13 and `numpy>=2.0.0` at or above
+    it. Under --no-deps that constraint is dropped along with everything else,
+    and pip happily installed numpy 2.4.6 on Python 3.12 — outside what
+    Chatterbox was built against, and not the numpy the upgrade was validated
+    on. Resolved here rather than passed as an environment marker because the
+    installers hand this list to pip as shell words, and a marker like
+    `; python_version < "3.13"` does not survive that intact.
+
+    scipy is deliberately not pinned: constrain numpy in the same pip command
+    and the resolver picks a scipy that agrees with it.
+    """
+    if sys.version_info >= (3, 13):
+        return "numpy>=2.0.0"
+    return "numpy<2.0.0,>=1.24.0"
+
+
 CHATTERBOX_DEPS = (
+    _numpy_requirement(),
     "librosa==0.11.0",
     "s3tokenizer",
     "transformers==5.2.0",
