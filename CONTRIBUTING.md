@@ -114,3 +114,17 @@ Release with the installers stamped with that version.
 
 A tag that disagrees with `pyproject.toml` fails the build rather than
 publishing a release whose installer points at a wheel that doesn't exist.
+
+### If a release build fails
+
+Nothing is published unless every job passes, so a failure leaves you with a tag
+and no release. Fix the problem, then move the tag rather than bumping the
+version — the released code should be exactly what the tag points at:
+
+```bash
+git tag -d v1.2.3 && git push origin :refs/tags/v1.2.3   # remove the bad tag
+git tag -a v1.2.3 -m "..." && git push origin v1.2.3     # re-tag at the fix
+```
+
+Only do this while the release is unpublished. Once people can download it, cut
+a new patch version instead.
