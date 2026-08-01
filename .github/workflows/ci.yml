@@ -22,6 +22,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python: ["3.11", "3.12", "3.13"]
+        # macOS runners bill at 10x on private repos. The Python-version axis is
+        # about language compatibility, which is not macOS-specific, so cover all
+        # three versions on Linux and Windows and one on macOS. macOS-specific
+        # behaviour (the Calibre .app lookup, Application Support paths) is
+        # covered by tests/test_platform.py, which runs everywhere.
+        exclude:
+          - os: macos-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@v4
 

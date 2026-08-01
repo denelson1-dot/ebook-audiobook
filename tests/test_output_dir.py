@@ -48,7 +48,16 @@ def test_resolve_rejects_a_file(tmp_path):
         worker.resolve_output_dir(str(f))
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file-mode permissions")
+# POSIX file modes are the mechanism under test, so this can only run where they
+# apply: not on Windows (no geteuid, and chmod doesn't deny writes the same way)
+# and not as root, which bypasses them entirely. os.geteuid doesn't exist on
+# Windows at all, so it must be probed with getattr rather than called directly —
+# calling it at module scope failed *collection* of this whole file there.
+_IS_POSIX_NON_ROOT = hasattr(os, "geteuid") and os.geteuid() != 0
+
+
+@pytest.mark.skipif(not _IS_POSIX_NON_ROOT,
+                    reason="POSIX file-mode permissions don't apply here")
 def test_resolve_rejects_unwritable_folder(tmp_path):
     ro = tmp_path / "readonly"
     ro.mkdir()
