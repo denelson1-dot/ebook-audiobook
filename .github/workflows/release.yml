@@ -122,7 +122,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           "$HOME/.local/bin/ebook-audiobook" check --engine fake || true
-          "$HOME/.local/share/ebook-audiobook/venv/bin/python" ci/assert_prereqs.py
+          # Don't guess where the venv is: macOS puts it under
+          # "Library/Application Support", Linux under ~/.local/share. The
+          # launcher the installer wrote knows, so read the interpreter out of it.
+          VENV_PY=$(sed -n 's#^exec "\(.*\)/ebook-audiobook".*#\1/python#p' \
+                    "$HOME/.local/bin/ebook-audiobook")
+          test -x "$VENV_PY" || { echo "couldn't locate the installed interpreter"; exit 1; }
+          echo "using $VENV_PY"
+          "$VENV_PY" ci/assert_prereqs.py
       - name: Verify (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
