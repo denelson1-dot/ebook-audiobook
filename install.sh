@@ -49,6 +49,38 @@ ok()   { printf '  %s✓%s %s\n' "$GRN" "$N" "$*"; }
 warn() { printf '  %s!%s %s\n' "$YLW" "$N" "$*"; }
 die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$*" >&2; exit 1; }
 
+have_sudo() { command -v sudo >/dev/null 2>&1; }
+
+# Install packages with apt, keeping sudo's own failure noise away from the user.
+#
+# Whether sudo can prompt for a password is genuinely not predictable from here
+# (a readable /dev/tty is not sufficient), so rather than guess, run it and
+# interpret the outcome: on success say so, on failure print one clear line and
+# let the caller fall back. Interactive runs still get sudo's real prompt,
+# because stderr is only swallowed after an authentication attempt fails.
+apt_install() { # apt_install pkg...
+  have_sudo || { warn "sudo isn't available, so this can't be installed for you"; return 1; }
+  local log
+  log="$(mktemp)"
+  if sudo -n true >/dev/null 2>&1; then
+    sudo apt-get update >/dev/null 2>&1 || true
+    sudo apt-get install -y "$@" >"$log" 2>&1 && { rm -f "$log"; return 0; }
+  else
+    # Needs a password: let sudo own the terminal so its prompt is visible.
+    if sudo apt-get update >/dev/null 2>"$log" && sudo apt-get install -y "$@" >>"$log" 2>&1; then
+      rm -f "$log"; return 0
+    fi
+  fi
+  if grep -qi "terminal is required\|password is required\|no askpass" "$log" 2>/dev/null; then
+    warn "couldn't ask for your password here, so nothing was installed"
+  else
+    warn "installing $* failed (see below)"
+    tail -3 "$log" 2>/dev/null | sed 's/^/      /'
+  fi
+  rm -f "$log"
+  return 1
+}
+
 # Prompts must read from the terminal, not stdin: this script is normally piped
 # in from curl, so stdin is the script itself and `read` would consume it.
 ask() { # ask "question" [default y|n] -> 0 for yes
@@ -70,7 +102,28 @@ while [ $# -gt 0 ]; do
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
-    -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Printed inline rather than read back out of "$0": piped from curl, "$0" is
+    # "bash" and there is no file to read the comment header from.
+    -h|--help)
+      cat <<'HELP'
+ebook-audiobook installer (macOS and Linux)
+
+  curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.sh | bash
+
+Creates a private Python environment under your user data directory, installs
+the app and a suitable PyTorch build, checks for Calibre, and adds an
+`ebook-audiobook` command. Nothing is installed system-wide.
+
+Options:
+  --version X.Y.Z   install a specific release (default: latest)
+  --dir PATH        install somewhere other than the default
+  --cpu             force the CPU-only PyTorch build (small download)
+  --no-tts          skip PyTorch entirely (import books, can't render yet)
+  --yes, -y         accept all prompts (for scripted installs)
+  --uninstall       remove the app (your books and settings are kept)
+  -h, --help        show this
+HELP
+      exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
 done
@@ -124,11 +177,10 @@ if [ -z "$PYTHON" ]; then
       brew install python@3.12 || die "Homebrew couldn't install Python"
       PYTHON="$(command -v python3.12 || command -v python3)"
     fi
-  elif [ "$PLATFORM" = "linux" ] && command -v apt-get >/dev/null 2>&1; then
+  elif [ "$PLATFORM" = "linux" ] && command -v apt-get >/dev/null 2>&1 && have_sudo; then
     if ask "Install Python with 'sudo apt-get install python3 python3-venv'?" y; then
-      sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip \
-        || die "apt-get couldn't install Python"
-      PYTHON="$(command -v python3)"
+      apt_install python3 python3-venv python3-pip || true
+      PYTHON="$(command -v python3 || true)"
     fi
   fi
 fi
@@ -143,8 +195,9 @@ ok "$($PYTHON -V) at $PYTHON"
 NEED_PIP_BOOTSTRAP=0
 if ! "$PYTHON" -c 'import venv' >/dev/null 2>&1; then
   warn "Python's 'venv' module is missing"
-  if command -v apt-get >/dev/null 2>&1 && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
-    sudo apt-get update && sudo apt-get install -y python3-venv || true
+  if command -v apt-get >/dev/null 2>&1 && have_sudo \
+     && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
+    apt_install python3-venv || true
   fi
   "$PYTHON" -c 'import venv' >/dev/null 2>&1 \
     || die "Python's venv module is required.
@@ -153,8 +206,9 @@ if ! "$PYTHON" -c 'import venv' >/dev/null 2>&1; then
 fi
 if ! "$PYTHON" -c 'import ensurepip' >/dev/null 2>&1; then
   warn "Python's 'ensurepip' module is missing (common on Debian/Ubuntu)"
-  if command -v apt-get >/dev/null 2>&1 && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
-    sudo apt-get update && sudo apt-get install -y python3-venv >/dev/null 2>&1 || true
+  if command -v apt-get >/dev/null 2>&1 && have_sudo \
+     && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
+    apt_install python3-venv || true
   fi
   if ! "$PYTHON" -c 'import ensurepip' >/dev/null 2>&1; then
     NEED_PIP_BOOTSTRAP=1
@@ -303,9 +357,9 @@ else
     if ask "Install it now with 'brew install --cask calibre'?" y; then
       brew install --cask calibre && INSTALLED_CALIBRE=1 || warn "Homebrew install failed"
     fi
-  elif [ "$PLATFORM" = "linux" ] && command -v apt-get >/dev/null 2>&1; then
+  elif [ "$PLATFORM" = "linux" ] && command -v apt-get >/dev/null 2>&1 && have_sudo; then
     if ask "Install it now with 'sudo apt-get install calibre'?" y; then
-      sudo apt-get update && sudo apt-get install -y calibre && INSTALLED_CALIBRE=1 || warn "apt-get install failed"
+      apt_install calibre && INSTALLED_CALIBRE=1 || true
     fi
   fi
   if [ "$INSTALLED_CALIBRE" = "1" ]; then
