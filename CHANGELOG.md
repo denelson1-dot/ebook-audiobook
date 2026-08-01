@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-08-01
+
+A large release. Hardware support is the headline: current NVIDIA and AMD
+GPUs work where they previously could not run at all, Apple Silicon is
+properly supported, and a render no longer has to take over the machine.
+
+> **Upgrading:** any book you had part-rendered will re-render once. The
+> PyTorch version is now part of each segment's content hash, so cached audio
+> from the old engine is correctly discarded rather than being spliced
+> together with new audio. Finished `.m4b` files are untouched.
 
 **Current GPUs work.** The app was pinned to PyTorch 2.6.0 — not by choice, but
 because Chatterbox declares `torch==2.6.0` and we inherited it. That build's CUDA
@@ -116,9 +125,7 @@ for a CUDA wheel that has never existed for macOS.
 - `__version__` was hard-coded at `0.1.0` against a 1.0.2 release. It's read from
   the installed metadata now.
 
-## 1.0.2
-
-Every fix here is in the installers. The app itself is unchanged.
+### Installer fixes carried over from the unreleased 1.0.2
 
 - **The CPU-only install was never actually CPU-only.** PyTorch and Chatterbox
   were resolved in two separate pip commands. Chatterbox pins an exact torch
