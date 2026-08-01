@@ -171,8 +171,20 @@ if ($LASTEXITCODE -ne 0) { Fail "couldn't upgrade pip" }
 
 # --- 3. the app --------------------------------------------------------------
 Write-Step "Installing ebook-audiobook"
+# $PSScriptRoot is empty when this is piped through `iex`, so a bare
+# "is there a pyproject.toml?" test could pick up an unrelated project the user
+# happens to be standing in. Require that it is specifically this one.
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { "" }
-if ($scriptDir -and (Test-Path (Join-Path $scriptDir "pyproject.toml"))) {
+$isSourceTree = $false
+if ($scriptDir) {
+    $pyproject = Join-Path $scriptDir "pyproject.toml"
+    if ((Test-Path $pyproject) -and
+        (Test-Path (Join-Path $scriptDir "ebook_audiobook")) -and
+        (Select-String -Path $pyproject -Pattern '^name = "ebook-audiobook"' -Quiet)) {
+        $isSourceTree = $true
+    }
+}
+if ($isSourceTree) {
     # Running from a checkout: install from source. Used by CI to smoke-test this
     # installer, and by anyone testing a change before cutting a release.
     Write-Dim "installing from the source tree at $scriptDir"

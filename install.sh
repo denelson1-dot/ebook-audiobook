@@ -212,8 +212,22 @@ resolve_version() {
 
 # A checkout next to this script installs from source; that's how CI smoke-tests
 # the installer, and how you test a change before cutting a release.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
-if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
+# Piped from curl, BASH_SOURCE is unset and this resolves to the *current
+# directory* — so requiring a pyproject.toml alone would happily install whatever
+# unrelated Python project the user happened to be standing in. Require that it
+# is specifically this project, and that the script was really read from a file.
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
+fi
+IS_SOURCE_TREE=0
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ] \
+   && [ -d "$SCRIPT_DIR/ebook_audiobook" ] \
+   && grep -q '^name = "ebook-audiobook"' "$SCRIPT_DIR/pyproject.toml" 2>/dev/null; then
+  IS_SOURCE_TREE=1
+fi
+
+if [ "$IS_SOURCE_TREE" = "1" ]; then
   say "  ${DIM}installing from the source tree at $SCRIPT_DIR${N}"
   "$VPY" -m pip install --quiet "$SCRIPT_DIR" || die "install from source failed"
 else
