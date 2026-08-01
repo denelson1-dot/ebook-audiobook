@@ -18,6 +18,7 @@
 #   --dir PATH         install somewhere other than the default
 #   --cpu              force the CPU-only PyTorch build (small download)
 #   --gpu, --cuda      force the CUDA build when the GPU probe comes up empty
+#   --rocm, --amd      force the AMD ROCm build (Linux + Radeon)
 #   --no-tts           skip PyTorch entirely (import books, can't render yet)
 #   --yes              accept all prompts (for scripted installs)
 #   --uninstall        remove the app (your books and settings are kept)
@@ -32,11 +33,19 @@ VERSION="latest"
 # "latest/download/…" asset name is not an option; baking the version in beats
 # calling the GitHub API, which is rate-limited for unauthenticated users.
 PINNED_VERSION="__EBAB_VERSION__"
+# The AMD build. This exact index is not interchangeable: Chatterbox pins
+# torch==2.6.0, and 2.6.0+rocm wheels exist ONLY on rocm6.2.4 — the rocm6.3 and
+# rocm6.4 indexes start at torch 2.7. Bumping this without checking that the
+# torch pin still resolves will silently drop AMD users onto the CPU build.
+ROCM_INDEX="https://download.pytorch.org/whl/rocm6.2.4"
 ASSUME_YES=0
 FORCE_CPU=0
 FORCE_GPU=0
+FORCE_ROCM=0
 SKIP_TTS=0
 DO_UNINSTALL=0
+# Set only when an AMD card needs it; the launcher exports it when non-empty.
+HSA_OVERRIDE=""
 INSTALL_DIR=""
 
 # --- pretty output -----------------------------------------------------------
@@ -76,6 +85,55 @@ macos_supports_metal() {
   [ "$minor" -ge 3 ]
 }
 # --- END macos-metal-gate -----------------------------------------------------
+
+# Is there an AMD GPU that ROCm can drive?
+#
+# The kernel's DRM nodes are the authority: PCI vendor 0x1002 is AMD, and that
+# is true whether or not ROCm is installed — which matters, because we want to
+# offer the ROCm build to someone who hasn't got it yet. `rocminfo` is consulted
+# only for the architecture name, which decides whether the card needs
+# HSA_OVERRIDE_GFX_VERSION to be visible at all.
+#
+# Deliberately skips integrated graphics: nearly every AMD *CPU* also presents a
+# Radeon iGPU, and steering those users to a 2 GB ROCm download that then renders
+# slower than their CPU would be a worse default than the CPU build. A discrete
+# card has its own VRAM, so that is what we test for.
+detect_amd() {
+  [ "$PLATFORM" = "linux" ] || return 1
+  found=1
+  for card in /sys/class/drm/card[0-9]*; do
+    [ -r "$card/device/vendor" ] || continue
+    [ "$(cat "$card/device/vendor" 2>/dev/null)" = "0x1002" ] || continue
+    # mem_info_vram_total exists only for a real VRAM pool (discrete cards).
+    if [ -r "$card/device/mem_info_vram_total" ]; then
+      vram="$(cat "$card/device/mem_info_vram_total" 2>/dev/null || echo 0)"
+      # Integrated parts carve out a small aperture; require >2 GB to be sure.
+      case "$vram" in ''|*[!0-9]*) continue ;; esac
+      [ "$vram" -gt 2147483648 ] || continue
+    else
+      continue
+    fi
+    found=0
+    break
+  done
+  [ "$found" = "0" ] || return 1
+  GPU_NAME="AMD Radeon"
+  if command -v rocminfo >/dev/null 2>&1; then
+    GFX_ARCH="$(rocminfo 2>/dev/null | grep -om1 'gfx[0-9a-f]*' | head -1)"
+  fi
+  return 0
+}
+
+# Cards ROCm won't enumerate without being told which architecture to pretend to
+# be. These are ordinary consumer Radeons, so leaving a user to discover this
+# from a forum thread is not acceptable. Echoes the value, or nothing.
+hsa_override_for() {
+  case "$1" in
+    gfx1031|gfx1032|gfx1033|gfx1034|gfx1035|gfx1036) echo "10.3.0" ;;
+    gfx1101|gfx1102|gfx1103) echo "11.0.0" ;;
+    *) echo "" ;;
+  esac
+}
 
 # Is there an NVIDIA GPU that CUDA can actually use?
 #
@@ -152,6 +210,7 @@ while [ $# -gt 0 ]; do
     --dir)     INSTALL_DIR="${2:?--dir needs a value}"; shift 2 ;;
     --cpu)     FORCE_CPU=1; shift ;;
     --gpu|--cuda) FORCE_GPU=1; shift ;;
+    --rocm|--amd) FORCE_ROCM=1; shift ;;
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
@@ -173,6 +232,7 @@ Options:
   --cpu             force the CPU-only PyTorch build (small download)
   --gpu, --cuda     force the CUDA PyTorch build, even if this script's GPU
                     probe came up empty (e.g. a broken nvidia-smi)
+  --rocm, --amd     force the AMD ROCm build (Linux + Radeon)
   --no-tts          skip PyTorch entirely (import books, can't render yet)
   --yes, -y         accept all prompts (for scripted installs)
   --uninstall       remove the app (your books and settings are kept)
@@ -396,6 +456,7 @@ else
   step "Setting up the speech engine"
   TORCH_INDEX=""
   GPU_NAME=""
+  GFX_ARCH=""
   NVML_BROKEN=0
   MAC_NOTE=""
   # macOS is settled first, and deliberately ahead of --cpu/--gpu, because it is
@@ -430,10 +491,18 @@ else
     DEVICE_DESC="CUDA (forced with --gpu) — a novel takes roughly 2-3 hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
     SIZE="about 2.5 GB"
+  elif [ "$FORCE_ROCM" = "1" ]; then
+    DEVICE_DESC="AMD ROCm (forced with --rocm) — a novel takes roughly 3-4 hours"
+    TORCH_INDEX="$ROCM_INDEX"
+    SIZE="about 2 GB"
   elif detect_nvidia; then
     DEVICE_DESC="$GPU_NAME via CUDA — a novel takes roughly 2-3 hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
     SIZE="about 2.5 GB"
+  elif detect_amd; then
+    DEVICE_DESC="$GPU_NAME via ROCm — a novel takes roughly 3-4 hours"
+    TORCH_INDEX="$ROCM_INDEX"
+    SIZE="about 2 GB"
   else
     DEVICE_DESC="no GPU detected, CPU only — a novel can take many hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cpu"
@@ -443,6 +512,20 @@ else
   say "  Detected: ${B}${DEVICE_DESC}${N}"
   say "  Download: ${B}${SIZE}${N}"
   [ -n "$MAC_NOTE" ] && say "  ${DIM}${MAC_NOTE}${N}"
+  # A Radeon whose architecture ROCm doesn't list needs one environment
+  # variable to be visible at all. Work it out here and bake it into the
+  # launcher, so the user never has to find this out from a forum thread.
+  HSA_OVERRIDE=""
+  if [ "$TORCH_INDEX" = "$ROCM_INDEX" ] && [ -n "$GFX_ARCH" ]; then
+    HSA_OVERRIDE="$(hsa_override_for "$GFX_ARCH")"
+    if [ -n "$HSA_OVERRIDE" ]; then
+      say "  ${DIM}$GFX_ARCH needs HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE; the${N}"
+      say "  ${DIM}launcher will set it for you.${N}"
+    fi
+  elif [ "$TORCH_INDEX" = "$ROCM_INDEX" ]; then
+    say "  ${DIM}If ROCm reports no device later, install rocminfo and re-run,${N}"
+    say "  ${DIM}or set HSA_OVERRIDE_GFX_VERSION (10.3.0 for RX 6000, 11.0.0 for RX 7000).${N}"
+  fi
   [ "$NVML_BROKEN" = "1" ] && \
     say "  ${DIM}(nvidia-smi is broken on this machine — usually a driver upgrade${N}"
   [ "$NVML_BROKEN" = "1" ] && \
@@ -517,7 +600,8 @@ mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/ebook-audiobook" <<LAUNCHER
 #!/usr/bin/env bash
 # Generated by the ebook-audiobook installer.
-exec "$VENV/bin/ebook-audiobook" "\$@"
+${HSA_OVERRIDE:+export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE
+}exec "$VENV/bin/ebook-audiobook" "\$@"
 LAUNCHER
 chmod +x "$BIN_DIR/ebook-audiobook"
 ok "command: ebook-audiobook"

@@ -49,6 +49,7 @@ Menu entry; on Linux, an application-menu entry.
 |---|---|
 | `--cpu` / `-Cpu` | Force the CPU-only PyTorch build (~250 MB instead of ~2.5 GB) |
 | `--gpu` / `-Gpu` | Force the CUDA build when the GPU probe comes up empty (e.g. a broken `nvidia-smi`) |
+| `--rocm` / `--amd` | Force the AMD ROCm build (Linux + Radeon) |
 | `--no-tts` / `-NoTts` | Skip PyTorch for now — import books, add the engine later |
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
@@ -182,14 +183,24 @@ Only the speed changes.
 
 | Your hardware | Runs on | A ~110,000-word novel takes |
 |---|---|---|
-| NVIDIA GPU (Windows/Linux) | `cuda` | **2–3 hours** (~49 chars/sec on an RTX 3070 Ti) |
-| Apple Silicon Mac, macOS 12.3+ | `mps` | A few hours |
-| Intel Mac, or macOS below 12.3 | `cpu` | Many hours |
-| No GPU (any OS) | `cpu` | Many hours — works, but leave it overnight |
+| NVIDIA GPU (Windows/Linux) | CUDA | **2–3 hours** (~49 chars/sec on an RTX 3070 Ti) |
+| AMD Radeon (Linux) | ROCm | 3–4 hours |
+| Apple Silicon Mac, macOS 12.3+ | Metal | A few hours |
+| Intel Mac, or macOS below 12.3 | CPU | Many hours |
+| AMD Radeon (Windows) | CPU | Many hours — PyTorch's ROCm builds are Linux-only |
+| No GPU (any OS) | CPU | Many hours — works, but leave it overnight |
 
-`ebook-audiobook check` tells you which one you're on and why. The first segment
-is slower (warm-up); generating a preview measures your machine's real rate and
-refines the estimate shown for the full book.
+The installer picks the right build for your machine on its own — CUDA, ROCm,
+Metal, or CPU-only. `ebook-audiobook check` tells you which one you ended up on
+and why. The first segment is slower (warm-up); generating a preview measures
+your machine's real rate and refines the estimate shown for the full book.
+
+**AMD on Linux** gets the ROCm build automatically when a discrete Radeon is
+found. Some consumer cards (RX 6700/6600, RX 7600/7700/7800) aren't on ROCm's
+supported list and need `HSA_OVERRIDE_GFX_VERSION` set to be visible at all —
+the installer works this out and bakes it into the launcher, so there's nothing
+to configure. Integrated Radeon graphics are deliberately left on the CPU build,
+which is faster for them than ROCm would be.
 
 **Apple Silicon** is used automatically — there's one Mac build of PyTorch and it
 has Metal support built in, so `--cpu` and `--gpu` don't change what's

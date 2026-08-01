@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**AMD Radeon works out of the box on Linux.** The installer detects a discrete
+Radeon and installs PyTorch's ROCm build, and cards ROCm doesn't officially list
+— the RX 6700/6600 and RX 7600/7700/7800 families, all mainstream parts — get
+`HSA_OVERRIDE_GFX_VERSION` worked out and baked into the launcher, so they are
+visible rather than silently absent. `--rocm` forces it. Integrated Radeon
+graphics stay on the CPU build, which is faster for them than ROCm. On Windows,
+where PyTorch has no ROCm wheels, an AMD card is now named and explained instead
+of being passed over as "no GPU detected".
+
+A ROCm build of PyTorch impersonates the CUDA API, so an AMD GPU was previously
+reported to the user as NVIDIA. Vendor is now determined by `torch.version.hip`,
+and if ROCm is installed but can't see the Radeon, that specific situation is
+detected and the fix explained.
+
 **Apple Silicon is properly supported.** It was nominally handled and would have
 broken in practice: PyTorch's Metal backend doesn't implement every operator, and
 without `PYTORCH_ENABLE_MPS_FALLBACK` the first uncovered one ends the render —

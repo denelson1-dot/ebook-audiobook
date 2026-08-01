@@ -287,6 +287,22 @@ if ($NoTts) {
 
     Write-Host "  Detected: " -NoNewline; Write-Host $desc -ForegroundColor White
     Write-Host "  Download: " -NoNewline; Write-Host $size -ForegroundColor White
+
+    # An AMD card on Windows is worth naming rather than leaving as a silent
+    # "no GPU". PyTorch's ROCm wheels are Linux-only, and the Windows
+    # alternative (DirectML) is a different backend that doesn't run this model,
+    # so the CPU build genuinely is the right answer here - but a user who just
+    # watched us skip past their Radeon deserves to be told why.
+    if (-not $hasNvidia -and -not $Cpu -and -not $Gpu) {
+        try {
+            $amd = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -match 'Radeon|AMD' } | Select-Object -First 1
+            if ($amd) {
+                Write-Dim "$($amd.Name.Trim()) found, but PyTorch's AMD (ROCm) builds are"
+                Write-Dim "Linux-only, so this uses the CPU. On Linux the installer picks ROCm."
+            }
+        } catch {}
+    }
     if (Ask "Download and install the speech engine now?" "y") {
         # Resolve torch and Chatterbox together, in ONE pip command. Chatterbox
         # pins an exact torch version, so installing torch first and Chatterbox

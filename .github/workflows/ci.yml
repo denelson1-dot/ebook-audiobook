@@ -262,10 +262,26 @@ jobs:
         run: |
           CPU_INDEX="$(grep -om1 'https://download.pytorch.org/whl/cpu' install.sh)"
           test -n "$CPU_INDEX" || { echo "couldn't find the CPU index URL in install.sh"; exit 1; }
-          python -m pip install --dry-run --quiet --report report.json \
+          python -m pip install --dry-run --ignore-installed --quiet --report report.json \
             --index-url "$CPU_INDEX" --extra-index-url https://pypi.org/simple \
             torch torchaudio chatterbox-tts 'setuptools<81'
-          python ci/assert_cpu_resolution.py report.json
+          python ci/assert_torch_build.py report.json cpu
+
+      # The AMD index is load-bearing and not interchangeable: Chatterbox pins
+      # torch==2.6.0, and 2.6.0+rocm wheels exist ONLY on rocm6.2.4 — rocm6.3
+      # and rocm6.4 start at torch 2.7. Bump the index without checking and pip
+      # falls through to a plain PyPI torch, putting every AMD user silently on
+      # the CPU. Resolving only (--dry-run) downloads no wheels.
+      - name: The AMD torch resolution really is a ROCm build
+        if: runner.os == 'Linux'
+        run: |
+          ROCM_INDEX="$(grep -oEm1 'https://download\.pytorch\.org/whl/rocm[0-9.]+' install.sh)"
+          test -n "$ROCM_INDEX" || { echo "couldn't find the ROCm index URL in install.sh"; exit 1; }
+          echo "resolving against $ROCM_INDEX"
+          python -m pip install --dry-run --ignore-installed --quiet --report rocm.json \
+            --index-url "$ROCM_INDEX" --extra-index-url https://pypi.org/simple \
+            torch torchaudio chatterbox-tts 'setuptools<81'
+          python ci/assert_torch_build.py rocm.json rocm
 
       # --no-tts keeps this to seconds instead of downloading gigabytes of torch;
       # everything else the installer does is exercised for real.
