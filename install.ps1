@@ -207,7 +207,41 @@ if ($isSourceTree) {
     }
     $wheelUrl = "https://github.com/$Repo/releases/download/v$resolved/ebook_audiobook-$resolved-py3-none-any.whl"
     Write-Dim $wheelUrl
-    & $VenvPy -m pip install --quiet --upgrade $wheelUrl
+
+    # Download first, install second, so an HTTP problem produces a clear message
+    # rather than pip's wall of 404 text. Release assets of a *private* repo
+    # aren't publicly readable, so fall back to an authenticated fetch via the gh
+    # CLI when one is available; that makes the same one-liner work for the repo
+    # owner before the project is made public.
+    #
+    # The download must keep the wheel's real filename: pip parses the package
+    # name and version out of it, so a renamed or dot-prefixed file is rejected.
+    $wheelName = "ebook_audiobook-$resolved-py3-none-any.whl"
+    $dlDir = Join-Path $DataDir ".download"
+    New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+    $localWheel = Join-Path $dlDir $wheelName
+
+    $got = $false
+    try {
+        Invoke-WebRequest -Uri $wheelUrl -OutFile $localWheel -UseBasicParsing
+        $got = Test-Path $localWheel
+    } catch { $got = $false }
+
+    if (-not $got -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+        & gh release download "v$resolved" -R $Repo -p $wheelName -O $localWheel --clobber 2>$null
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $localWheel)) {
+            Write-Dim "(downloaded with your GitHub credentials - the repo isn't public yet)"
+            $got = $true
+        }
+    }
+
+    if (-not $got) {
+        Remove-Item -Recurse -Force $dlDir -ErrorAction SilentlyContinue
+        Fail "couldn't download $wheelName.`n       If the release exists, this usually means the repository is still private.`n       See https://github.com/$Repo/releases"
+    }
+
+    & $VenvPy -m pip install --quiet --upgrade $localWheel
+    Remove-Item -Recurse -Force $dlDir -ErrorAction SilentlyContinue
 }
 if ($LASTEXITCODE -ne 0) { Fail "couldn't install the app. Check your connection, or see https://github.com/$Repo/releases" }
 $appVer = & $VenvPy -c "import importlib.metadata as m; print(m.version('ebook-audiobook'))"

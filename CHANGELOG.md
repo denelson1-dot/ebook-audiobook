@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+- The installers now download the wheel themselves before handing it to pip, so
+  a failed download produces a clear explanation instead of pip's 404 output.
+- Added an authenticated fallback via the `gh` CLI. Release assets of a private
+  repository are not publicly readable, so the one-line installer could not work
+  at all while the project is private; it now does, for anyone with access.
+
 ## 1.0.0
 
 First packaged release. The app itself worked before this; the point of 1.0 is

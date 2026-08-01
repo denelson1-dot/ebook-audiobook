@@ -289,10 +289,45 @@ else
   [ -n "$RESOLVED" ] || die "couldn't work out which version to install.
        Pass one explicitly, e.g. --version 1.0.0
        Releases: https://github.com/$REPO/releases"
-  WHEEL_URL="https://github.com/$REPO/releases/download/v${RESOLVED}/ebook_audiobook-${RESOLVED}-py3-none-any.whl"
+  WHEEL="ebook_audiobook-${RESOLVED}-py3-none-any.whl"
+  WHEEL_URL="https://github.com/$REPO/releases/download/v${RESOLVED}/${WHEEL}"
   say "  ${DIM}$WHEEL_URL${N}"
-  "$VPY" -m pip install --quiet --upgrade "$WHEEL_URL" \
-    || die "couldn't download the app. Check your connection, or see https://github.com/$REPO/releases"
+  # Download into a scratch subdirectory, NOT as a dot-prefixed file: pip parses
+  # the package name and version out of a wheel's filename, so ".ebook_audiobook-
+  # 1.0.0-…whl" is read as a package literally named "-ebook-audiobook".
+  DL_DIR="$APP_DIR/.download"
+  mkdir -p "$DL_DIR"
+  TMP_WHEEL="$DL_DIR/$WHEEL"
+
+  # Download first, install second, so a private repo (or any HTTP problem) gives
+  # a clear message instead of pip's wall of 404 text. Release assets of a
+  # private repo are not publicly readable, so fall back to an authenticated
+  # fetch via the gh CLI when one is available — that makes the same one-liner
+  # work for the repo owner before the project is made public.
+  DOWNLOADED=0
+  if command -v curl >/dev/null 2>&1 \
+     && curl -fsSL -o "$TMP_WHEEL" "$WHEEL_URL" 2>/dev/null; then
+    DOWNLOADED=1
+  elif command -v wget >/dev/null 2>&1 && wget -qO "$TMP_WHEEL" "$WHEEL_URL" 2>/dev/null; then
+    DOWNLOADED=1
+  elif command -v gh >/dev/null 2>&1 \
+       && gh release download "v${RESOLVED}" -R "$REPO" -p "$WHEEL" -O "$TMP_WHEEL" --clobber >/dev/null 2>&1; then
+    say "  ${DIM}(downloaded with your GitHub credentials — the repo isn't public yet)${N}"
+    DOWNLOADED=1
+  fi
+
+  if [ "$DOWNLOADED" != "1" ]; then
+    rm -rf "$DL_DIR"
+    die "couldn't download $WHEEL.
+       If the release exists, this usually means the repository is still private.
+       Check https://github.com/$REPO/releases — and if it is private, either make
+       it public or install the wheel by hand:
+         <venv>/bin/pip install /path/to/$WHEEL"
+  fi
+
+  "$VPY" -m pip install --quiet --upgrade "$TMP_WHEEL" || {
+    rm -rf "$DL_DIR"; die "the downloaded package failed to install"; }
+  rm -rf "$DL_DIR"
 fi
 ok "installed $("$VPY" -c 'import importlib.metadata as m; print(m.version("ebook-audiobook"))' 2>/dev/null || echo "")"
 

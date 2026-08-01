@@ -32,6 +32,12 @@ Then start it:
 ebook-audiobook
 ```
 
+> **While this repository is private**, GitHub does not serve release assets to
+> anonymous requests, so the plain one-liner can't fetch the wheel. The installer
+> falls back to the [`gh` CLI](https://cli.github.com/) when it's installed and
+> signed in, which makes the same command work for anyone with repo access. Once
+> the repository is public, no such fallback is needed.
+
 That opens the web interface in your browser. On Windows there's also a Start
 Menu entry; on Linux, an application-menu entry.
 
