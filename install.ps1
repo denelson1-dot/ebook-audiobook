@@ -28,6 +28,13 @@
   Force the CUDA PyTorch build, even if this script's GPU probe came up empty
   (for example, a broken nvidia-smi).
 
+.PARAMETER Cuda126
+  Force the CUDA 12.6 PyTorch build, for GTX 900/1000-series and older cards
+  that the newer build has no kernels for.
+
+.PARAMETER Cuda128
+  Force the CUDA 12.8 PyTorch build (RTX 20-series and newer).
+
 .PARAMETER NoTts
   Skip PyTorch entirely. You can import books but not render audio yet.
 
@@ -43,6 +50,8 @@ param(
     [string]$InstallDir = "",
     [switch]$Cpu,
     [switch]$Gpu,
+    [switch]$Cuda126,
+    [switch]$Cuda128,
     [switch]$NoTts,
     [switch]$Yes,
     [switch]$Uninstall
@@ -261,10 +270,20 @@ if ($NoTts) {
     Write-Step "Setting up the speech engine"
     $hasNvidia = $false
     $gpuName = ""
+    $computeCaps = ""
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         try {
             $gpuName = (& nvidia-smi --query-gpu=name --format=csv,noheader 2>$null | Select-Object -First 1)
             if ($LASTEXITCODE -eq 0 -and $gpuName) { $hasNvidia = $true }
+        } catch {}
+        try {
+            # One line per GPU. Decides which CUDA build has kernels for the
+            # card. Filtered to well-formed values because a broken NVML prints
+            # its error to stdout, which would otherwise land here as garbage.
+            $caps = & nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>$null |
+                    ForEach-Object { $_.Trim() } |
+                    Where-Object { $_ -match '^\d+\.\d+$' }
+            if ($caps) { $computeCaps = ($caps -join ",") }
         } catch {}
     }
 
@@ -272,11 +291,14 @@ if ($NoTts) {
     # script, so install.sh and install.ps1 cannot drift apart. The app was
     # installed in section 3, so this module is importable by now.
     $forced = ""
-    if ($Cpu) { $forced = "cpu" } elseif ($Gpu) { $forced = "gpu" }
+    if ($Cpu) { $forced = "cpu" }
+    elseif ($Cuda126) { $forced = "cuda126" }
+    elseif ($Cuda128) { $forced = "cuda128" }
+    elseif ($Gpu) { $forced = "gpu" }
     $vendor = ""
     if ($hasNvidia) { $vendor = "nvidia" }
 
-    $id = ""; $index = ""; $size = ""; $label = ""
+    $id = ""; $index = ""; $size = ""; $label = ""; $pin = ""
     # Built as an array and splatted, with empty values omitted entirely.
     # Windows PowerShell 5.1 can silently drop an empty-string argument, which
     # would leave the next flag consuming the wrong value - so never pass one.
@@ -284,6 +306,7 @@ if ($NoTts) {
     if ($vendor)  { $tbArgs += @("--vendor", $vendor) }
     if ($forced)  { $tbArgs += @("--forced", $forced) }
     if ($gpuName) { $tbArgs += @("--gpu-name", $gpuName.Trim()) }
+    if ($computeCaps) { $tbArgs += @("--compute-caps", $computeCaps) }
     try {
         $out = & $VenvPy @tbArgs 2>$null
         foreach ($line in $out) {
@@ -293,6 +316,7 @@ if ($NoTts) {
                 "EBAB_TORCH_INDEX" { $index = $v }
                 "EBAB_TORCH_SIZE"  { $size = $v }
                 "EBAB_TORCH_LABEL" { $label = $v }
+                "EBAB_TORCH_PIN"   { $pin = $v }
             }
         }
     } catch {}
@@ -302,13 +326,13 @@ if ($NoTts) {
         # release predating this module). CPU always works; say so rather than
         # guessing at hardware.
         Write-Warn "couldn't ask the app which PyTorch build to use; falling back to CPU-only"
-        $id = "cpu"; $index = "https://download.pytorch.org/whl/cpu"; $size = "about 250 MB"
+        $id = "cpu"; $index = "https://download.pytorch.org/whl/cpu"; $size = "about 250 MB"; $pin = "2.9.1"
     }
 
     # The module supplies the facts; this supplies the phrasing.
-    if ($id -eq "cu124") {
+    if ($id -eq "cu128" -or $id -eq "cu126") {
         if ($forced -eq "gpu") { $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours" }
-        else { $desc = "$($gpuName.Trim()) via CUDA - a novel takes roughly 2-3 hours" }
+        else { $desc = "$($gpuName.Trim()) via $label - a novel takes roughly 2-3 hours" }
     } elseif ($forced -eq "cpu") {
         $desc = "CPU only (forced with -Cpu)"
     } else {
@@ -334,20 +358,35 @@ if ($NoTts) {
         } catch {}
     }
     if (Ask "Download and install the speech engine now?" "y") {
-        # Resolve torch and Chatterbox together, in ONE pip command. Chatterbox
-        # pins an exact torch version, so installing torch first and Chatterbox
-        # second lets that second resolve *downgrade* the torch we just picked -
-        # and with no index pinned there, pip takes the replacement from PyPI,
-        # silently swapping a 250 MB CPU build for the multi-gigabyte default
-        # CUDA one. Resolving together keeps the build we chose: for torch and
-        # torchaudio the PyTorch index wins (a local version like 2.6.0+cpu
-        # outranks plain 2.6.0), while other dependencies fall through to PyPI.
-        & $VenvPy -m pip install --quiet `
-            --index-url $index --extra-index-url "https://pypi.org/simple" `
-            torch torchaudio chatterbox-tts "setuptools<81"
+        # Three pip commands, in this order, and the order is load-bearing.
+        #
+        # 1. torch, pinned exactly, from the chosen index. The pin must be
+        #    exact: PyPI's torch is far ahead of the pinned indexes and PEP 440
+        #    ranks a plain 2.13.0 above 2.9.1+cu128, so a floor would quietly
+        #    fetch the default CUDA build from PyPI and undo the choice.
+        # 2. Chatterbox with --no-deps. It declares torch==2.6.0, which has no
+        #    kernels for current GPUs; letting it resolve drags the pinned
+        #    build back down.
+        # 3. Chatterbox's dependencies, curated by us (see torchbuild.py), with
+        #    the torch pins repeated so nothing there can replace the build.
+        $cbPin  = (& $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)" 2>$null)
+        $cbDeps = (& $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(' '.join(CHATTERBOX_DEPS))" 2>$null)
+        if (-not $cbPin) { $cbPin = "chatterbox-tts" }
+        $idxArgs = @()
+        if ($index) { $idxArgs = @("--index-url", $index, "--extra-index-url", "https://pypi.org/simple") }
+        $pins = @("torch==$pin", "torchaudio==$pin")
+
+        & $VenvPy -m pip install --quiet @idxArgs @pins
+        if ($LASTEXITCODE -eq 0) {
+            & $VenvPy -m pip install --quiet --no-deps $cbPin
+        }
+        if ($LASTEXITCODE -eq 0) {
+            $depList = @($cbDeps -split ' ' | Where-Object { $_ })
+            & $VenvPy -m pip install --quiet @idxArgs @pins @depList
+        }
         if ($LASTEXITCODE -ne 0) {
             Fail ("the speech engine failed to install. Re-run with -Cpu, or by hand:`n" +
-                  "         `"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`"")
+                  "         `"$VenvDir\Scripts\pip.exe`" install torch==$pin torchaudio==$pin")
         }
         # Report the build that actually landed. The whole bug above was
         # invisible precisely because nothing said which torch you ended up with.
@@ -356,8 +395,7 @@ if ($NoTts) {
         else { Write-Ok "speech engine ready" }
         Write-Dim "The ~1 GB voice model downloads the first time you render."
     } else {
-        Write-Warn "skipped - add it later with:"
-        Write-Dim "`"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`""
+        Write-Warn "skipped - re-run this installer to add it later."
     }
 }
 

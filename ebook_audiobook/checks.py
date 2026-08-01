@@ -107,6 +107,20 @@ def check_data_root() -> CheckResult:
         )
 
 
+def _torch_too_old(version: str) -> bool:
+    """Whether an installed torch predates the one we ship against.
+
+    Below 2.9 the CUDA build has no kernels for RTX 50-series and the ROCm build
+    predates RDNA4, so an upgraded app on a stale environment silently loses
+    hardware support. Worth naming rather than leaving to be discovered.
+    """
+    try:
+        parts = version.split("+")[0].split(".")
+        return (int(parts[0]), int(parts[1])) < (2, 9)
+    except (ValueError, IndexError):
+        return False
+
+
 def engine_install_hint() -> str:
     """How to install the speech engine into *this* interpreter's environment.
 
@@ -117,9 +131,13 @@ def engine_install_hint() -> str:
     PATH — which for a user who installed via the one-line installer is usually a
     different Python entirely.
     """
-    return (f'  "{sys.executable}" -m pip install torch torchaudio chatterbox-tts '
-            f'"setuptools<81"\n'
-            "  (see the README for the CPU-only and CUDA builds)")
+    from .torchbuild import TORCH_PIN
+
+    return (f'  Re-run the installer — it picks the right PyTorch build for\n'
+            f'  this machine. By hand, into this environment:\n'
+            f'    "{sys.executable}" -m pip install torch=={TORCH_PIN} '
+            f'torchaudio=={TORCH_PIN}\n'
+            f'  (see the README for which package index to use)')
 
 
 def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
@@ -145,6 +163,9 @@ def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
         cb = False
     detail = (f"torch {torch.__version__}, chatterbox={'yes' if cb else 'no'}, "
               f"running on {dev.describe()}")
+    if _torch_too_old(torch.__version__):
+        detail += ("  — this PyTorch predates 2.9 and has no kernels for the "
+                   "newest GPUs; re-run the installer to update it")
     # Any device can render; CPU is just slow, so it's not a failure.
     return CheckResult(
         "tts engine (chatterbox)", cb, detail,

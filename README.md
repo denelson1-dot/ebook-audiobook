@@ -50,6 +50,8 @@ Menu entry; on Linux, an application-menu entry.
 | `--cpu` / `-Cpu` | Force the CPU-only PyTorch build (~250 MB instead of ~2.5 GB) |
 | `--gpu` / `-Gpu` | Force the CUDA build when the GPU probe comes up empty (e.g. a broken `nvidia-smi`) |
 | `--rocm` / `--amd` | Force the AMD ROCm build (Linux + Radeon) |
+| `--cuda128` / `-Cuda128` | Force the CUDA 12.8 build (RTX 20-series and newer) |
+| `--cuda126` / `-Cuda126` | Force the CUDA 12.6 build (GTX 900/1000-series) |
 | `--no-tts` / `-NoTts` | Skip PyTorch for now — import books, add the engine later |
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
@@ -183,17 +185,27 @@ Only the speed changes.
 
 | Your hardware | Runs on | A ~110,000-word novel takes |
 |---|---|---|
-| NVIDIA GPU (Windows/Linux) | CUDA | **2–3 hours** (~49 chars/sec on an RTX 3070 Ti) |
-| AMD Radeon (Linux) | ROCm | 3–4 hours |
+| NVIDIA GPU, RTX 20-series and newer | CUDA 12.8 | **2–3 hours** (~44 chars/sec on an RTX 3070 Ti) |
+| NVIDIA GPU, GTX 900/1000-series | CUDA 12.6 | 2–4 hours |
+| AMD Radeon incl. RX 9000 (Linux) | ROCm 6.4 | 3–4 hours |
 | Apple Silicon Mac, macOS 12.3+ | Metal | A few hours |
-| Intel Mac, or macOS below 12.3 | CPU | Many hours |
+| macOS below 12.3 | CPU | Many hours |
 | AMD Radeon (Windows) | CPU | Many hours — PyTorch's ROCm builds are Linux-only |
 | No GPU (any OS) | CPU | Many hours — works, but leave it overnight |
+| **Intel Mac** | — | **Not supported.** PyTorch stopped building for Intel Macs after 2.2.2. The app installs and everything except rendering works. |
 
 The installer picks the right build for your machine on its own — CUDA, ROCm,
 Metal, or CPU-only. `ebook-audiobook check` tells you which one you ended up on
 and why. The first segment is slower (warm-up); generating a preview measures
 your machine's real rate and refines the estimate shown for the full book.
+
+**NVIDIA** gets CUDA 12.8, which is what RTX 50-series cards need — CUDA 12.4
+has no kernels for them at all. Cards older than the RTX 20-series (GTX 900/1000)
+aren't in that build, so they get CUDA 12.6 instead; the installer reads your
+card's compute capability and picks. On a machine with two GPUs it picks for the
+older one, so both keep working. `--cuda126` / `--cuda128` override it, and if
+the wrong one ever lands, `ebook-audiobook check` names the flag that fixes it
+rather than leaving you with a CUDA error mid-render.
 
 **AMD on Linux** gets the ROCm build automatically when a discrete Radeon is
 found. Some consumer cards (RX 6700/6600, RX 7600/7700/7800) aren't on ROCm's

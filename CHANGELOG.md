@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+**Current GPUs work.** The app was pinned to PyTorch 2.6.0 — not by choice, but
+because Chatterbox declares `torch==2.6.0` and we inherited it. That build's CUDA
+kernels stop at `sm_90`, so **RTX 50-series cards could not run at all**, and its
+ROCm index predates RDNA4, so **RX 9000-series could not either**. Both are
+current, actively-sold hardware.
+
+PyTorch is now 2.9.1, pinned by us. Chatterbox is installed with `--no-deps` and
+its dependency list is curated in `ebook_audiobook/torchbuild.py`, which also
+drops two packages it never needed: `gradio` (its demo UI, never imported by the
+library) and `spacy-pkuseg` (Chinese segmentation, already behind a
+`try/except`). `einops` is added, because Chatterbox imports it unguarded in
+three modules and never declares it.
+
+Validated before shipping, on an RTX 3070 Ti against a 2.6.0 baseline: identical
+transcriptions on every clip, identical durations, identical peak VRAM, and 0.98x
+the speed. The audio differs numerically — different float kernels — but not
+audibly.
+
+- **NVIDIA now gets CUDA 12.8 or 12.6**, chosen from the card's compute
+  capability. 12.8 covers RTX 20-series and newer including Blackwell; older
+  GTX 900/1000 cards get 12.6, which 12.8 has no kernels for. On a two-GPU
+  machine the older card decides, so both keep working. `--cuda128` /
+  `--cuda126` override it.
+- **If the wrong build ever lands**, `check` now says so and names the flag that
+  fixes it, instead of leaving an opaque CUDA error to surface mid-render. The
+  check honours CUDA's minor-version rule, so an RTX 40-series card (`sm_89`) on
+  a build listing `sm_86` is correctly treated as fine.
+- **AMD moves to ROCm 6.4**, needed for RX 9000-series. It requires a newer
+  `amdgpu` kernel driver than 6.2 did.
+- **Intel Macs are now told the truth.** PyTorch stopped building for macOS
+  x86_64 after 2.2.2, so the speech engine cannot be installed there — and could
+  not before this change either; the installer simply failed with pip's "no
+  matching distribution". It now says so and installs everything else.
+- **One place decides which build to install.** The CUDA index URL had been
+  written out in six places and the ROCm one in five. CI now fails the build if
+  either installer names an index more than once, and resolves all four builds
+  on every run to assert each one is what it claims.
+- **In-progress books re-render once.** The torch version is now part of
+  `engine_version`, which is folded into every segment's content hash — without
+  it, a book half-rendered on one PyTorch would resume on another and splice two
+  model stacks into a single audiobook with nothing reporting a problem.
+
 **Renders no longer have to take over the machine.** A new render intensity —
 Full speed (default), Balanced, or Quiet/background — trades wall-clock time for
 a computer you can keep using. Quiet caps PyTorch's CPU threads (which is what

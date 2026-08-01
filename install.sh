@@ -19,6 +19,7 @@
 #   --cpu              force the CPU-only PyTorch build (small download)
 #   --gpu, --cuda      force the CUDA build when the GPU probe comes up empty
 #   --rocm, --amd      force the AMD ROCm build (Linux + Radeon)
+#   --cuda128 / --cuda126  pick a specific CUDA build (see --help)
 #   --no-tts           skip PyTorch entirely (import books, can't render yet)
 #   --yes              accept all prompts (for scripted installs)
 #   --uninstall        remove the app (your books and settings are kept)
@@ -37,6 +38,7 @@ ASSUME_YES=0
 FORCE_CPU=0
 FORCE_GPU=0
 FORCE_ROCM=0
+FORCE_CUDA=""
 SKIP_TTS=0
 DO_UNINSTALL=0
 # Set only when an AMD card needs it; the launcher exports it when non-empty.
@@ -144,6 +146,12 @@ detect_nvidia() {
   if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
     [ -n "$GPU_NAME" ] || GPU_NAME="NVIDIA GPU"
+    # One line per GPU, e.g. "8.6". Decides which CUDA build has kernels for
+    # this card — CUDA 12.8 dropped everything below sm_70. Supported since
+    # driver 510; older drivers simply report nothing and we fall back to
+    # matching the model name.
+    COMPUTE_CAPS="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null \
+                    | tr -d ' ' | grep -E '^[0-9]+\.[0-9]+$' | paste -sd, - || true)"
     return 0
   fi
   if [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ]; then
@@ -206,6 +214,8 @@ while [ $# -gt 0 ]; do
     --cpu)     FORCE_CPU=1; shift ;;
     --gpu|--cuda) FORCE_GPU=1; shift ;;
     --rocm|--amd) FORCE_ROCM=1; shift ;;
+    --cuda126) FORCE_CUDA="cuda126"; shift ;;
+    --cuda128) FORCE_CUDA="cuda128"; shift ;;
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
@@ -228,6 +238,8 @@ Options:
   --gpu, --cuda     force the CUDA PyTorch build, even if this script's GPU
                     probe came up empty (e.g. a broken nvidia-smi)
   --rocm, --amd     force the AMD ROCm build (Linux + Radeon)
+  --cuda128         force the CUDA 12.8 build (RTX 20-series and newer)
+  --cuda126         force the CUDA 12.6 build (GTX 900/1000-series and older)
   --no-tts          skip PyTorch entirely (import books, can't render yet)
   --yes, -y         accept all prompts (for scripted installs)
   --uninstall       remove the app (your books and settings are kept)
@@ -452,6 +464,8 @@ else
   TORCH_INDEX=""
   GPU_NAME=""
   GFX_ARCH=""
+  COMPUTE_CAPS=""
+  INTEL_MAC=0
   NVML_BROKEN=0
   MAC_NOTE=""
   # macOS is settled first, and deliberately ahead of --cpu/--gpu, because it is
@@ -470,8 +484,13 @@ else
         MAC_NOTE="Metal needs macOS 12.3 or newer; updating macOS makes renders several times faster."
       fi
     else
-      DEVICE_DESC="Intel Mac, CPU only — a novel can take a very long time"
-      MAC_NOTE="No Mac has a CUDA GPU, and Metal needs Apple Silicon."
+      # PyTorch stopped shipping macOS x86_64 wheels after 2.2.2, so there is
+      # no build of the speech engine an Intel Mac can install at all. This was
+      # already true before the version bump — the old path simply failed with
+      # pip's "no matching distribution" instead of saying so.
+      INTEL_MAC=1
+      DEVICE_DESC="Intel Mac — the speech engine can't be installed"
+      MAC_NOTE="PyTorch stopped building for Intel Macs after 2.2.2. Everything except rendering works; on an Apple Silicon Mac it all does."
     fi
     if [ "$FORCE_CPU" = "1" ]; then
       MAC_NOTE="There is only one Mac build of PyTorch, so --cpu doesn't change this download. To keep a render off the GPU, run the app with EBAB_DEVICE=cpu."
@@ -493,11 +512,14 @@ else
   [ "$FORCE_CPU" = "1" ]  && FORCED="cpu"
   [ "$FORCE_GPU" = "1" ]  && FORCED="gpu"
   [ "$FORCE_ROCM" = "1" ] && FORCED="rocm"
+  [ -n "$FORCE_CUDA" ]    && FORCED="$FORCE_CUDA"
 
-  TORCH_ID=""; TORCH_INDEX=""; TORCH_LABEL=""; SIZE=""; TORCH_NOTE=""
+  TORCH_ID=""; TORCH_INDEX=""; TORCH_LABEL=""; SIZE=""; TORCH_NOTE=""; TORCH_PIN=""
+  CHATTERBOX_PIN="$("$VPY" -c 'from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)' 2>/dev/null || echo "chatterbox-tts")"
+  CHATTERBOX_DEPS="$("$VPY" -c 'from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(" ".join(CHATTERBOX_DEPS))' 2>/dev/null || true)"
   TORCH_VARS="$("$VPY" -m ebook_audiobook.torchbuild --platform "$PLATFORM" \
       --arch "$ARCH" --vendor "$VENDOR" --forced "$FORCED" \
-      --gpu-name "$GPU_NAME" 2>/dev/null || true)"
+      --gpu-name "$GPU_NAME" --compute-caps "$COMPUTE_CAPS" 2>/dev/null || true)"
   # Read into variables rather than eval: the values contain spaces, and this
   # script must not execute anything the subprocess happens to print.
   while IFS='=' read -r _k _v; do
@@ -507,6 +529,7 @@ else
       EBAB_TORCH_LABEL) TORCH_LABEL="$_v" ;;
       EBAB_TORCH_SIZE)  SIZE="$_v" ;;
       EBAB_TORCH_NOTE)  TORCH_NOTE="$_v" ;;
+      EBAB_TORCH_PIN)   TORCH_PIN="$_v" ;;
     esac
   done <<TORCHVARS
 $TORCH_VARS
@@ -518,13 +541,14 @@ TORCHVARS
     # loudly rather than guessing at hardware.
     warn "couldn't ask the app which PyTorch build to use; falling back to CPU-only"
     TORCH_ID="cpu"; TORCH_INDEX="https://download.pytorch.org/whl/cpu"
-    SIZE="about 250 MB"; TORCH_LABEL="CPU only"
+    SIZE="about 250 MB"; TORCH_LABEL="CPU only"; TORCH_PIN="2.9.1"
   fi
 
   # The human-facing line: the module supplies the facts, this supplies the
   # phrasing, including the GPU's own name and what the wait will feel like.
   case "$TORCH_ID" in
-    cu124) DEVICE_DESC="${GPU_NAME:-NVIDIA GPU} via CUDA — a novel takes roughly 2-3 hours" ;;
+    cu128|cu126)
+           DEVICE_DESC="${GPU_NAME:-NVIDIA GPU} via ${TORCH_LABEL} — a novel takes roughly 2-3 hours" ;;
     rocm)  DEVICE_DESC="${GPU_NAME:-AMD Radeon} via ROCm — a novel takes roughly 3-4 hours" ;;
     mac)   : ;;  # already set above, with the Metal/Intel distinction
     *)     if [ -n "$FORCED" ]; then
@@ -559,34 +583,49 @@ TORCHVARS
      && [ "$PLATFORM" = "linux" ]; then
     say "  ${DIM}If this machine does have an NVIDIA GPU, re-run with --gpu.${N}"
   fi
-  if ask "Download and install the speech engine now?" y; then
-    # Resolve torch and Chatterbox together, in ONE pip command. Chatterbox pins
-    # an exact torch version, so installing torch first and Chatterbox second
-    # lets that second resolve *downgrade* the torch we just picked — and with
-    # no index pinned there, pip takes the replacement from PyPI, silently
-    # swapping a 250 MB CPU build for the multi-gigabyte default CUDA one.
-    # Resolving together keeps the build we chose: for torch and torchaudio the
-    # PyTorch index wins (a local version like 2.6.0+cpu outranks plain 2.6.0),
-    # while every other dependency falls through to PyPI.
+  if [ "$INTEL_MAC" = "1" ]; then
+    warn "skipping the speech engine — no PyTorch build exists for Intel Macs"
+    say "  ${DIM}You can still import books, browse chapters and manage voices.${N}"
+  elif ask "Download and install the speech engine now?" y; then
+    # Three pip commands, in this order, and the order is load-bearing.
+    #
+    # 1. torch, pinned exactly, from the chosen index. The pin must be exact:
+    #    PyPI's torch is far ahead of the pinned indexes and PEP 440 ranks a
+    #    plain 2.13.0 above 2.9.1+cu128, so a floor would quietly fetch the
+    #    default CUDA build from PyPI and undo the choice entirely.
+    # 2. Chatterbox with --no-deps. It declares torch==2.6.0, which has no
+    #    kernels for current GPUs; letting it resolve would drag the pinned
+    #    build back down.
+    # 3. Chatterbox's dependencies, curated by us (see torchbuild.py), with the
+    #    torch pins repeated so nothing in that list can replace the build.
+    ENGINE_MANUAL="$VENV/bin/pip install torch==$TORCH_PIN torchaudio==$TORCH_PIN"
+    ENGINE_FAILED=0
     if [ -n "$TORCH_INDEX" ]; then
-      "$VPY" -m pip install --quiet \
-          --index-url "$TORCH_INDEX" --extra-index-url https://pypi.org/simple \
-          torch torchaudio chatterbox-tts 'setuptools<81' \
-        || die "the speech engine failed to install. Re-run with --cpu, or by hand:
-         $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
+      IDX="--index-url $TORCH_INDEX --extra-index-url https://pypi.org/simple"
     else
-      "$VPY" -m pip install --quiet torch torchaudio chatterbox-tts 'setuptools<81' \
-        || die "the speech engine failed to install. Re-run with --cpu, or by hand:
-         $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
+      IDX=""
     fi
+    # shellcheck disable=SC2086  # IDX is a deliberate multi-word flag list
+    "$VPY" -m pip install --quiet $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
+      || ENGINE_FAILED=1
+    if [ "$ENGINE_FAILED" = "0" ]; then
+      "$VPY" -m pip install --quiet --no-deps "$CHATTERBOX_PIN" || ENGINE_FAILED=1
+    fi
+    if [ "$ENGINE_FAILED" = "0" ]; then
+      # shellcheck disable=SC2086
+      "$VPY" -m pip install --quiet $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
+          $CHATTERBOX_DEPS || ENGINE_FAILED=1
+    fi
+    [ "$ENGINE_FAILED" = "0" ] || die "the speech engine failed to install. Re-run with --cpu, or by hand:
+         $ENGINE_MANUAL"
+
     # Report the build that actually landed. The whole bug above was invisible
     # precisely because nothing ever said which torch you ended up with.
     TORCH_BUILD="$("$VPY" -c 'import torch; print(torch.__version__)' 2>/dev/null || true)"
     ok "speech engine ready${TORCH_BUILD:+ (torch $TORCH_BUILD)}"
     say "  ${DIM}The ~1 GB voice model downloads the first time you render.${N}"
   else
-    warn "skipped — add it later with:"
-    say "    $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
+    warn "skipped — add it later by re-running this installer."
   fi
 fi
 

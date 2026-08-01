@@ -155,6 +155,14 @@ def _gpu_device(torch) -> Device | None:
 
     backend = "ROCm" if is_rocm else "cuda"
     notes = []
+    # Does this build actually have kernels for this card? A mismatch loads
+    # perfectly happily and then fails on the first real work, which without
+    # this surfaces as an opaque CUDA error partway through a render.
+    from .torchbuild import arch_supported
+
+    mismatch = arch_supported(torch)
+    if mismatch:
+        notes.append(mismatch)
     try:
         vram = torch.cuda.get_device_properties(0).total_memory
         if vram < MIN_VRAM_BYTES:

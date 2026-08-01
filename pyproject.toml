@@ -46,10 +46,18 @@ dependencies = [
 # The GPU TTS engine. Installed separately because torch is large and its wheel
 # depends on your CUDA setup. The installer picks the right torch build for the
 # machine; see CONTRIBUTING.md to do it by hand.
+# Pinned exactly, and it has to be. PyPI's torch runs well ahead of the pinned
+# PyTorch indexes, and PEP 440 ranks a plain 2.13.0 above 2.9.1+cu128 — so an
+# unpinned "torch" here resolves to the default CUDA build from PyPI and undoes
+# whichever build the installer chose. Keep in step with
+# ebook_audiobook.torchbuild.TORCH_PIN; CI asserts the resolution.
+#
+# chatterbox-tts is deliberately absent: it declares torch==2.6.0, which has no
+# kernels for current GPUs. The installer puts it in with --no-deps and supplies
+# its dependencies from torchbuild.CHATTERBOX_DEPS.
 tts = [
-    "torch",
-    "torchaudio",
-    "chatterbox-tts",
+    "torch==2.9.1",
+    "torchaudio==2.9.1",
     # Chatterbox's watermarker dep (resemble-perth) still imports pkg_resources,
     # which setuptools removed in 81. Pin below that until perth is updated.
     "setuptools<81",

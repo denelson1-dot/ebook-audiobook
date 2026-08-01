@@ -120,7 +120,18 @@ class ChatterboxAdapter(TTSAdapter):
             self._load_on("cpu")
 
         self._load_device = self._device
-        self._version = f"chatterbox-{pkg_ver}-{self._load_device}"
+        # The torch version belongs in here. engine_version is folded into every
+        # segment's content hash, so without it a book half-rendered on one torch
+        # would resume on another and splice two model stacks into a single
+        # audiobook with nothing reporting a problem. Major.minor only: a patch
+        # release isn't worth re-rendering a whole book for.
+        try:
+            import torch
+
+            torch_tag = "torch" + ".".join(torch.__version__.split(".")[:2])
+        except Exception:  # noqa: BLE001
+            torch_tag = "torch?"
+        self._version = f"chatterbox-{pkg_ver}-{torch_tag}-{self._load_device}"
 
     def _fall_back_to_cpu(self) -> bool:
         """Move the model to the CPU after the GPU ran out of memory.

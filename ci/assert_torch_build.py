@@ -27,13 +27,25 @@ from __future__ import annotations
 import json
 import sys
 
-# What each flavour must look like once resolved.
+# What each flavour must look like once resolved. The local version tag is
+# exact, not a prefix: "+cu" would happily accept cu124 when cu128 was asked
+# for, which is the whole class of bug this script exists to catch.
 FLAVOURS = {
-    # name: (required local-version substring, forbidden package prefixes)
+    # name: (required local-version tag, forbidden package prefixes)
     "cpu": ("+cpu", ("nvidia-", "pytorch-triton-rocm")),
-    "rocm": ("+rocm", ("nvidia-",)),
-    "cuda": ("+cu", ("pytorch-triton-rocm",)),
+    "rocm": ("+rocm6.4", ("nvidia-",)),
+    "cu126": ("+cu126", ("pytorch-triton-rocm",)),
+    "cu128": ("+cu128", ("pytorch-triton-rocm",)),
 }
+
+# Below this, the CUDA build has no kernels for RTX 50-series and the ROCm build
+# predates RDNA4 — the entire reason for the upgrade.
+MIN_TORCH = (2, 9)
+
+# Installed by Chatterbox's own resolution but deliberately excluded from ours:
+# gradio is never imported by the library, and spacy-pkuseg is Chinese-only and
+# already behind a try/except. Their presence means --no-deps was bypassed.
+FORBIDDEN_PACKAGES = ("gradio", "spacy-pkuseg")
 
 
 def main(argv: list[str]) -> int:
@@ -61,12 +73,29 @@ def main(argv: list[str]) -> int:
         version = resolved.get(name)
         if version is None:
             problems.append(f"{name} was not resolved at all")
-        elif wanted not in version:
+            continue
+        if wanted not in version:
             problems.append(
                 f"{name} resolved to {version!r}, which is not a {wanted} build — "
                 f"the {flavour} index did not win, so this install would run on "
                 f"the wrong hardware"
             )
+        # A floor rather than an exact pin resolves to PyPI's much newer torch,
+        # which has no local version tag at all. Catch that explicitly.
+        try:
+            base = version.split("+")[0].split(".")
+            if (int(base[0]), int(base[1])) < MIN_TORCH:
+                problems.append(
+                    f"{name} resolved to {version!r}, older than the "
+                    f"{MIN_TORCH[0]}.{MIN_TORCH[1]} needed for current GPUs")
+        except (ValueError, IndexError):
+            problems.append(f"{name} version {version!r} is unparseable")
+
+    for pkg in FORBIDDEN_PACKAGES:
+        if pkg in resolved:
+            problems.append(
+                f"{pkg} was resolved, so Chatterbox's own dependency list ran "
+                f"instead of the curated one")
 
     for prefix in forbidden:
         stowaways = sorted(n for n in resolved if n.startswith(prefix))

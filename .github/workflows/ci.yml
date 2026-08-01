@@ -259,11 +259,39 @@ jobs:
           reachable = {
               select("linux", vendor="nvidia").id, select("linux", vendor="amd").id,
               select("linux").id, select("macos").id,
+              # cu126 is only reachable via an old card's compute capability.
+              select("linux", vendor="nvidia", compute_caps=[(6, 1)]).id,
           }
           missing = set(BUILDS) - reachable
           assert not missing, f"unreachable builds: {missing}"
           print(f"all {len(BUILDS)} builds reachable from the selection logic")
           PY
+
+      # Every build we ship must resolve to the build we claim. Resolving only
+      # (--dry-run) downloads no wheels, so all four take seconds. This is the
+      # step that catches the failure mode that has now bitten twice: a pip
+      # resolution quietly substituting a different PyTorch build than the
+      # installer advertised.
+      - name: Every PyTorch build resolves to what it claims
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          PIN="$(python -c 'from ebook_audiobook.torchbuild import TORCH_PIN; print(TORCH_PIN)')"
+          DEPS="$(python -c 'from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(" ".join(CHATTERBOX_DEPS))')"
+          for flavour in cpu cu126 cu128 rocm; do
+            INDEX="$(python -c "from ebook_audiobook.torchbuild import BUILDS; print(BUILDS['$flavour'].index_url)")"
+            test -n "$INDEX" || { echo "no index for $flavour"; exit 1; }
+            echo "::group::$flavour -> $INDEX"
+            # Mirrors the installer: pinned torch from the chosen index plus the
+            # curated dependency list. Chatterbox is --no-deps at install time,
+            # so it contributes nothing to this resolution.
+            python -m pip install --dry-run --ignore-installed --quiet \
+              --report "report-$flavour.json" \
+              --index-url "$INDEX" --extra-index-url https://pypi.org/simple \
+              "torch==$PIN" "torchaudio==$PIN" $DEPS
+            python ci/assert_torch_build.py "report-$flavour.json" "$flavour"
+            echo "::endgroup::"
+          done
 
       - name: Parse install.ps1
         if: runner.os == 'Windows'
@@ -274,39 +302,6 @@ jobs:
             "$PWD/install.ps1", [ref]$null, [ref]$errs) | Out-Null
           if ($errs) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
           Write-Host "install.ps1 parses cleanly"
-
-      # Guards the one code path --no-tts skips, which is exactly why the 1.0.2
-      # bug survived: torch and Chatterbox were resolved in two separate pip
-      # commands, and the second — with no index pinned — swapped the CPU build
-      # for the default CUDA one from PyPI. A "250 MB" --cpu install landed
-      # 6.4 GB. Resolving only (--dry-run) keeps this to seconds and downloads
-      # no wheels. The index URL is read out of install.sh so the two can't drift.
-      - name: The CPU torch resolution stays CPU-only
-        if: runner.os == 'Linux'
-        run: |
-          CPU_INDEX="$(python -c 'from ebook_audiobook.torchbuild import BUILDS; print(BUILDS["cpu"].index_url)')"
-          test -n "$CPU_INDEX" || { echo "couldn't read the CPU index from torchbuild"; exit 1; }
-          echo "resolving against $CPU_INDEX"
-          python -m pip install --dry-run --ignore-installed --quiet --report report.json \
-            --index-url "$CPU_INDEX" --extra-index-url https://pypi.org/simple \
-            torch torchaudio chatterbox-tts 'setuptools<81'
-          python ci/assert_torch_build.py report.json cpu
-
-      # The AMD index is load-bearing and not interchangeable: Chatterbox pins
-      # torch==2.6.0, and 2.6.0+rocm wheels exist ONLY on rocm6.2.4 — rocm6.3
-      # and rocm6.4 start at torch 2.7. Bump the index without checking and pip
-      # falls through to a plain PyPI torch, putting every AMD user silently on
-      # the CPU. Resolving only (--dry-run) downloads no wheels.
-      - name: The AMD torch resolution really is a ROCm build
-        if: runner.os == 'Linux'
-        run: |
-          ROCM_INDEX="$(python -c 'from ebook_audiobook.torchbuild import BUILDS; print(BUILDS["rocm"].index_url)')"
-          test -n "$ROCM_INDEX" || { echo "couldn't read the ROCm index from torchbuild"; exit 1; }
-          echo "resolving against $ROCM_INDEX"
-          python -m pip install --dry-run --ignore-installed --quiet --report rocm.json \
-            --index-url "$ROCM_INDEX" --extra-index-url https://pypi.org/simple \
-            torch torchaudio chatterbox-tts 'setuptools<81'
-          python ci/assert_torch_build.py rocm.json rocm
 
       # --no-tts keeps this to seconds instead of downloading gigabytes of torch;
       # everything else the installer does is exercised for real.

@@ -28,13 +28,22 @@ PyTorch build that matches your hardware *first*, then the extra:
 
 ```bash
 # NVIDIA GPU (Linux/Windows):
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+pip install --no-deps chatterbox-tts==0.1.7
+python -c "from ebook_audiobook.torchbuild import CHATTERBOX_DEPS as d; print(' '.join(d))" | xargs pip install
 # Apple Silicon, or CPU-only:
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cpu
 
 pip install -e '.[tts]'
 python -m ebook_audiobook.cli check     # expect device=cuda|mps|cpu, chatterbox=yes
 ```
+
+The torch version is pinned **exactly**, and must stay that way: PyPI's torch is
+far ahead of the pinned indexes, and PEP 440 ranks a plain `2.13.0` above
+`2.9.1+cu128`, so a `>=` constraint silently fetches the wrong build from PyPI.
+Chatterbox goes in with `--no-deps` because it declares `torch==2.6.0`, which has
+no kernels for current GPUs; its dependency list lives in
+`ebook_audiobook/torchbuild.py` and CI installs it for real.
 
 `[tts]` pins `setuptools<81` because Chatterbox's watermarker dependency
 (`resemble-perth`) still imports `pkg_resources`, which newer setuptools removed.
