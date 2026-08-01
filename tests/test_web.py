@@ -273,3 +273,37 @@ def test_upload_with_a_non_ascii_name_still_imports(client, synthetic_epub):
     }
     r = client.post("/import", data=data, content_type="multipart/form-data")
     assert r.status_code == 302, r.data[:400]
+
+
+# --- disk space: the working volume and the destination are often different ---
+
+def test_space_reports_the_working_volume_by_default(client):
+    d = client.get("/api/space").get_json()
+    assert d["free_bytes"] is not None and d["total_bytes"] > 0
+    assert d["work"]["free_bytes"] == d["free_bytes"]
+    assert "output" not in d  # nothing asked about a destination
+
+
+def test_space_reports_the_destination_volume_too(client, tmp_path):
+    """A Plex library on a NAS or USB drive has nothing to do with the free
+    space where the temporary WAVs are written."""
+    dest = tmp_path / "library"
+    dest.mkdir()
+    d = client.get(f"/api/space?path={dest}").get_json()
+    assert d["output"]["free_bytes"] is not None
+    assert d["output"]["same_volume"] is True  # tmp_path really is the same fs here
+
+
+def test_space_handles_a_destination_that_does_not_exist_yet(client, tmp_path):
+    """The book's folder is only created when the render starts, so the plan
+    dialog necessarily asks about a path that isn't there — it must measure the
+    nearest existing parent rather than returning nothing."""
+    not_yet_created = tmp_path / "library" / "Author" / "Title (2024)"
+    d = client.get(f"/api/space?path={not_yet_created}").get_json()
+    assert d["output"]["free_bytes"] is not None
+
+
+def test_space_survives_an_unreachable_destination(client):
+    """An unmounted share must report unknown, not 500 the render dialog."""
+    d = client.get("/api/space?path=/definitely/not/mounted/anywhere/xyz").get_json()
+    assert "output" in d  # answered rather than erroring

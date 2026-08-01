@@ -89,6 +89,49 @@ def fmt_dt(iso) -> str:
         return str(iso)
 
 
+def _nearest_existing(path: Path) -> Path:
+    """Walk up to the first directory that exists.
+
+    A destination folder is usually created only when the render starts, and
+    ``disk_usage`` on a path that doesn't exist yet raises — but its parent
+    volume is what we actually want to measure. Falls back to the path itself
+    when nothing in the chain exists (an unmounted drive), which then reports
+    unknown rather than lying.
+    """
+    p = path
+    for _ in range(64):  # bounded: a symlink cycle must not hang a request
+        if p.exists():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return path
+
+
+def _disk_usage(path: Path) -> dict:
+    import shutil as _shutil
+
+    try:
+        usage = _shutil.disk_usage(str(_nearest_existing(path)))
+        return {"path": str(path), "free_bytes": usage.free, "total_bytes": usage.total}
+    except OSError:
+        # An unreachable network share, or a drive letter with nothing in it.
+        return {"path": str(path), "free_bytes": None, "total_bytes": None}
+
+
+def _same_volume(a: Path, b: Path) -> bool:
+    """Whether two paths live on the same filesystem.
+
+    ``st_dev`` is the reliable answer on POSIX *and* Windows (where it's the
+    volume serial number). When either path can't be stat'd, assume they differ
+    — reporting one figure for two volumes is the failure worth avoiding.
+    """
+    try:
+        return _nearest_existing(a).stat().st_dev == _nearest_existing(b).stat().st_dev
+    except OSError:
+        return False
+
+
 def _job_or_404(job_id: str) -> JobStore:
     store = JobStore(job_id)
     if not store.exists():
@@ -473,17 +516,29 @@ def create_app() -> Flask:
 
     @app.get("/api/space")
     def api_space():
-        """Free/total bytes on the filesystem that holds the working data. All
-        jobs share one data root, so this is a global figure the render-plan
-        dialog uses to warn before a large render fills the disk."""
-        import shutil as _shutil
+        """Free space for a render — on *both* filesystems it can touch.
 
-        root = paths().root
-        try:
-            usage = _shutil.disk_usage(str(root))
-            return {"free_bytes": usage.free, "total_bytes": usage.total}
-        except OSError:
-            return {"free_bytes": None, "total_bytes": None}
+        The bulky temporary WAVs go to the data root, but the finished .m4b goes
+        wherever the user chose, and for a Plex library that is very often a
+        different volume: a NAS mount, a USB drive. Reporting only the data root
+        meant a dialog that cheerfully showed 400 GB free while the destination
+        drive had 200 MB. ``?path=`` asks about a specific destination; without
+        it only the working volume is reported.
+        """
+        work = _disk_usage(paths().root)
+        out = {
+            # Kept at the top level: this is the working-files figure, which is
+            # what the existing plan dialog reads.
+            "free_bytes": work["free_bytes"],
+            "total_bytes": work["total_bytes"],
+            "work": work,
+        }
+        raw = (request.args.get("path") or "").strip()
+        if raw:
+            dest = _disk_usage(_nearest_existing(Path(raw).expanduser()))
+            dest["same_volume"] = _same_volume(paths().root, Path(raw).expanduser())
+            out["output"] = dest
+        return out
 
     @app.get("/job/<job_id>/preview.wav")
     def preview_audio(job_id):

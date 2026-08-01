@@ -350,3 +350,57 @@ def test_full_convert_from_epub(synthetic_epub):
     # The outro is set apart by a long lead-in pause (>= ~4s of the 5s lead).
     outro = probe["chapters"][-1]
     assert float(outro["end_time"]) - float(outro["start_time"]) > 4.0
+
+
+def test_a_full_disk_stops_the_render_with_a_resumable_message(tmp_path, monkeypatch):
+    """ENOSPC won't fix itself on the next attempt, so retrying twice more just
+    delays the news and buries it under a generic 'failed after 3 attempts'."""
+    import errno
+
+    from ebook_audiobook import worker as worker_mod
+
+    class FakeClip:
+        samples, sample_rate = None, 24000
+
+    class Adapter:
+        def synthesize(self, text):
+            return FakeClip()
+
+    calls = []
+
+    def full_disk(path, samples, sample_rate):
+        calls.append(path)
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(worker_mod, "write_wav", full_disk)
+    with pytest.raises(worker_mod.OutOfSpaceError) as e:
+        worker_mod._render_one(Adapter(), "hello", tmp_path / "seg.wav")
+
+    assert len(calls) == 1, "a full disk was retried instead of reported"
+    assert "free some space" in str(e.value).lower()
+    assert "resumes" in str(e.value).lower()
+
+
+def test_other_os_errors_are_still_retried(tmp_path, monkeypatch):
+    """A transient IO blip is exactly what the retries are for — don't lose them."""
+    from ebook_audiobook import worker as worker_mod
+
+    class FakeClip:
+        samples, sample_rate = None, 24000
+
+    class Adapter:
+        def synthesize(self, text):
+            return FakeClip()
+
+    calls = []
+
+    def flaky(path, samples, sample_rate):
+        calls.append(path)
+        raise OSError(errno.EIO, "I/O error")
+
+    import errno
+
+    monkeypatch.setattr(worker_mod, "write_wav", flaky)
+    with pytest.raises(RuntimeError):
+        worker_mod._render_one(Adapter(), "hello", tmp_path / "seg.wav")
+    assert len(calls) == 3, "retries were skipped for a non-fatal error"

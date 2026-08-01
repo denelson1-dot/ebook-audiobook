@@ -221,6 +221,9 @@ const jobId = {{ job_id|tojson }};
 const CHARS_PER_AUDIO_SECOND = {{ chars_per_audio_second|tojson }};
 const WAV_BYTES_PER_AUDIO_SECOND = {{ sample_rate|tojson }} * 2;  // mono, 16-bit PCM
 const SIZE_WARN_BYTES = {{ size_warn_bytes|tojson }};
+// The library root, not the book's own folder: the folder is only created when
+// the render starts, and the root is on the same volume either way.
+const LIBRARY_TARGET_DIR = {{ (audiobooks_root or "")|tojson }};
 let renderRate = {{ render_rate|tojson }};  // chars/sec, measured; may be null until a preview/render runs
 const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
                    repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
@@ -331,16 +334,33 @@ async function renderPlanBody() {
   const audioSecs = chars / CHARS_PER_AUDIO_SECOND;
   const sizeBytes = audioSecs * (currentBitrate() * 1000 / 8);
   const tempBytes = audioSecs * WAV_BYTES_PER_AUDIO_SECOND * 2;
-  let free = null, total = null;
-  try { const s = await getJSON("/api/space"); free = s.free_bytes; total = s.total_bytes; } catch {}
-  const tight = free !== null && free < tempBytes * 1.15;
+  // Ask about the destination too: the working files land in the data folder,
+  // but the finished .m4b goes where the user chose — very often a different
+  // drive (a NAS, a USB disk) with completely different free space.
+  const destDir = outputMode === "folder" ? outDirInput.value : (LIBRARY_TARGET_DIR || "");
+  let free = null, total = null, outFree = null, sameVolume = true;
+  try {
+    const q = destDir ? "?path=" + encodeURIComponent(destDir) : "";
+    const s = await getJSON("/api/space" + q);
+    free = s.free_bytes; total = s.total_bytes;
+    if (s.output) { outFree = s.output.free_bytes; sameVolume = s.output.same_volume; }
+  } catch {}
+  const workTight = free !== null && free < tempBytes * 1.15;
+  // Only a separate concern when the destination really is another volume;
+  // otherwise the working-files check already covers it.
+  const destTight = !sameVolume && outFree !== null && outFree < sizeBytes * 1.15;
+  const tight = workTight || destTight;
+  const destRow = (!sameVolume && outFree !== null)
+    ? `<div class="plan-row"><span>Free space where the audiobook is saved</span><strong class="${destTight ? "bad" : ""}">${humanBytes(outFree)}</strong></div>`
+    : "";
   const rows = `
     <div class="plan-row"><span>Sections to narrate</span><strong>${count}</strong></div>
     <div class="plan-row"><span>Audio length</span><strong>${chars ? fmtDuration(audioSecs) : "—"}</strong></div>
     ${renderRate ? `<div class="plan-row"><span>Estimated render time</span><strong>~${fmtDuration(chars / renderRate)}</strong></div>` : ""}
     <div class="plan-row highlight"><span>Temporary working files (peak)</span><strong>${humanBytes(tempBytes)}</strong></div>
     <div class="plan-row"><span>Final audiobook file</span><strong>${humanBytes(sizeBytes)}</strong></div>
-    <div class="plan-row"><span>Free space on disk</span><strong class="${tight ? "bad" : ""}">${humanBytes(free)}</strong></div>`;
+    <div class="plan-row"><span>Free space for working files</span><strong class="${workTight ? "bad" : ""}">${humanBytes(free)}</strong></div>
+    ${destRow}`;
   const explain = `
     <p class="plan-explain">While rendering, each piece of narration is saved as a large uncompressed
     audio file — about <strong>${humanBytes(tempBytes)}</strong> in total. That's temporary: it lets you

@@ -11,6 +11,7 @@ These functions are synchronous and drive the CLI directly; the web UI runs
 
 from __future__ import annotations
 
+import errno
 import shutil
 import tempfile
 import time
@@ -382,6 +383,10 @@ def build_segments(chapters: list[Chapter], engine_version: str, vkey: str,
 
 # --- rendering ---------------------------------------------------------------
 
+class OutOfSpaceError(RuntimeError):
+    """The disk filled up mid-render. Message is user-facing."""
+
+
 def _render_one(adapter, text: str, out_path: Path, retries: int = 2) -> None:
     last_err: Exception | None = None
     for _ in range(retries + 1):
@@ -391,6 +396,18 @@ def _render_one(adapter, text: str, out_path: Path, retries: int = 2) -> None:
             if is_valid_audio(out_path):
                 return
             last_err = RuntimeError("rendered audio failed validation (empty/too short)")
+        except OSError as e:
+            # A full disk will not fix itself on the next attempt, and retrying
+            # twice more just delays the news. Every segment rendered so far
+            # stays cached, so this is resumable once space is freed.
+            if e.errno == errno.ENOSPC:
+                out_path.unlink(missing_ok=True)
+                raise OutOfSpaceError(
+                    "The disk ran out of space while saving narration. "
+                    "Everything rendered so far is kept, so free some space and "
+                    "start the render again — it resumes where it stopped."
+                ) from e
+            last_err = e
         except Exception as e:  # noqa: BLE001 - engine failures are varied
             last_err = e
         out_path.unlink(missing_ok=True)
