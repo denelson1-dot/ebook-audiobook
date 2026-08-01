@@ -17,6 +17,7 @@
 #   --version X.Y.Z    install a specific release (default: latest)
 #   --dir PATH         install somewhere other than the default
 #   --cpu              force the CPU-only PyTorch build (small download)
+#   --gpu, --cuda      force the CUDA build when the GPU probe comes up empty
 #   --no-tts           skip PyTorch entirely (import books, can't render yet)
 #   --yes              accept all prompts (for scripted installs)
 #   --uninstall        remove the app (your books and settings are kept)
@@ -33,6 +34,7 @@ VERSION="latest"
 PINNED_VERSION="__EBAB_VERSION__"
 ASSUME_YES=0
 FORCE_CPU=0
+FORCE_GPU=0
 SKIP_TTS=0
 DO_UNINSTALL=0
 INSTALL_DIR=""
@@ -50,6 +52,32 @@ warn() { printf '  %s!%s %s\n' "$YLW" "$N" "$*"; }
 die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$*" >&2; exit 1; }
 
 have_sudo() { command -v sudo >/dev/null 2>&1; }
+
+# Is there an NVIDIA GPU that CUDA can actually use?
+#
+# nvidia-smi is the friendly answer — it hands us the model name — but it is not
+# the authority. It talks to NVML, which fails independently of CUDA: upgrade the
+# driver without rebooting and nvidia-smi dies with "Driver/library version
+# mismatch" on a machine where torch still runs on the GPU perfectly well.
+# Treating that as "no GPU" silently costs the user a 10x slower render, so when
+# NVML is unhappy, ask a lower-level question instead: is the kernel driver
+# loaded (a device node exists) and is the CUDA userspace library installed?
+# Sets GPU_NAME on success, and NVML_BROKEN=1 if we got there the hard way.
+detect_nvidia() {
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+    [ -n "$GPU_NAME" ] || GPU_NAME="NVIDIA GPU"
+    return 0
+  fi
+  if [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ]; then
+    if ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
+      GPU_NAME="NVIDIA GPU"
+      NVML_BROKEN=1
+      return 0
+    fi
+  fi
+  return 1
+}
 
 # Install packages with apt, keeping sudo's own failure noise away from the user.
 #
@@ -99,6 +127,7 @@ while [ $# -gt 0 ]; do
     --version) VERSION="${2:?--version needs a value}"; shift 2 ;;
     --dir)     INSTALL_DIR="${2:?--dir needs a value}"; shift 2 ;;
     --cpu)     FORCE_CPU=1; shift ;;
+    --gpu|--cuda) FORCE_GPU=1; shift ;;
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
@@ -118,6 +147,8 @@ Options:
   --version X.Y.Z   install a specific release (default: latest)
   --dir PATH        install somewhere other than the default
   --cpu             force the CPU-only PyTorch build (small download)
+  --gpu, --cuda     force the CUDA PyTorch build, even if this script's GPU
+                    probe came up empty (e.g. a broken nvidia-smi)
   --no-tts          skip PyTorch entirely (import books, can't render yet)
   --yes, -y         accept all prompts (for scripted installs)
   --uninstall       remove the app (your books and settings are kept)
@@ -335,14 +366,21 @@ ok "installed $("$VPY" -c 'import importlib.metadata as m; print(m.version("eboo
 if [ "$SKIP_TTS" = "1" ]; then
   step "Skipping the speech engine (--no-tts)"
   warn "you can import books, but rendering audio needs the engine"
-  say "  add it later with: $VENV/bin/pip install 'ebook-audiobook[tts]'"
+  say "  add it later with:"
+  say "    $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
 else
   step "Setting up the speech engine"
   TORCH_INDEX=""
+  GPU_NAME=""
+  NVML_BROKEN=0
   if [ "$FORCE_CPU" = "1" ]; then
     DEVICE_DESC="CPU only (forced with --cpu)"
     [ "$PLATFORM" = "linux" ] && TORCH_INDEX="https://download.pytorch.org/whl/cpu"
     SIZE="about 250 MB"
+  elif [ "$FORCE_GPU" = "1" ]; then
+    DEVICE_DESC="CUDA (forced with --gpu) — a novel takes roughly 2-3 hours"
+    TORCH_INDEX="https://download.pytorch.org/whl/cu124"
+    SIZE="about 2.5 GB"
   elif [ "$PLATFORM" = "macos" ]; then
     if [ "$ARCH" = "arm64" ]; then
       DEVICE_DESC="Apple Silicon GPU (MPS) — a novel takes several hours"
@@ -350,9 +388,8 @@ else
       DEVICE_DESC="Intel Mac, CPU only — a novel can take a very long time"
     fi
     SIZE="about 250 MB"
-  elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-    GPU="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo "NVIDIA GPU")"
-    DEVICE_DESC="$GPU via CUDA — a novel takes roughly 2-3 hours"
+  elif detect_nvidia; then
+    DEVICE_DESC="$GPU_NAME via CUDA — a novel takes roughly 2-3 hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
     SIZE="about 2.5 GB"
   else
@@ -363,21 +400,42 @@ else
 
   say "  Detected: ${B}${DEVICE_DESC}${N}"
   say "  Download: ${B}${SIZE}${N}"
+  [ "$NVML_BROKEN" = "1" ] && \
+    say "  ${DIM}(nvidia-smi is broken on this machine — usually a driver upgrade${N}"
+  [ "$NVML_BROKEN" = "1" ] && \
+    say "  ${DIM} without a reboot — but the driver and CUDA libraries are present.)${N}"
+  if [ "$FORCE_CPU" != "1" ] && [ "$FORCE_GPU" != "1" ] && [ -z "$GPU_NAME" ] \
+     && [ "$PLATFORM" = "linux" ]; then
+    say "  ${DIM}If this machine does have an NVIDIA GPU, re-run with --gpu.${N}"
+  fi
   if ask "Download and install the speech engine now?" y; then
+    # Resolve torch and Chatterbox together, in ONE pip command. Chatterbox pins
+    # an exact torch version, so installing torch first and Chatterbox second
+    # lets that second resolve *downgrade* the torch we just picked — and with
+    # no index pinned there, pip takes the replacement from PyPI, silently
+    # swapping a 250 MB CPU build for the multi-gigabyte default CUDA one.
+    # Resolving together keeps the build we chose: for torch and torchaudio the
+    # PyTorch index wins (a local version like 2.6.0+cpu outranks plain 2.6.0),
+    # while every other dependency falls through to PyPI.
     if [ -n "$TORCH_INDEX" ]; then
-      "$VPY" -m pip install --quiet torch torchaudio --index-url "$TORCH_INDEX" \
-        || die "PyTorch install failed. Re-run with --cpu, or install torch manually."
+      "$VPY" -m pip install --quiet \
+          --index-url "$TORCH_INDEX" --extra-index-url https://pypi.org/simple \
+          torch torchaudio chatterbox-tts 'setuptools<81' \
+        || die "the speech engine failed to install. Re-run with --cpu, or by hand:
+         $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
     else
-      "$VPY" -m pip install --quiet torch torchaudio \
-        || die "PyTorch install failed."
+      "$VPY" -m pip install --quiet torch torchaudio chatterbox-tts 'setuptools<81' \
+        || die "the speech engine failed to install. Re-run with --cpu, or by hand:
+         $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
     fi
-    "$VPY" -m pip install --quiet "ebook-audiobook[tts]" 2>/dev/null \
-      || "$VPY" -m pip install --quiet chatterbox-tts 'setuptools<81' \
-      || warn "the Chatterbox engine didn't install; run '$VENV/bin/pip install chatterbox-tts' to retry"
-    ok "speech engine ready"
+    # Report the build that actually landed. The whole bug above was invisible
+    # precisely because nothing ever said which torch you ended up with.
+    TORCH_BUILD="$("$VPY" -c 'import torch; print(torch.__version__)' 2>/dev/null || true)"
+    ok "speech engine ready${TORCH_BUILD:+ (torch $TORCH_BUILD)}"
     say "  ${DIM}The ~1 GB voice model downloads the first time you render.${N}"
   else
-    warn "skipped — add it later with: $VENV/bin/pip install 'ebook-audiobook[tts]'"
+    warn "skipped — add it later with:"
+    say "    $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
   fi
 fi
 
@@ -452,7 +510,7 @@ Comment=Turn ebooks you own into narrated audiobooks
 Exec=$BIN_DIR/ebook-audiobook web
 Icon=media-optical-audio
 Terminal=true
-Categories=AudioVideo;Audio;Utility;
+Categories=AudioVideo;Audio;
 DESKTOP
   chmod +x "$DESKTOP_DIR/ebook-audiobook.desktop"
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true

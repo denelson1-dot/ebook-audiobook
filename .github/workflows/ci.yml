@@ -216,6 +216,22 @@ jobs:
           if ($errs) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
           Write-Host "install.ps1 parses cleanly"
 
+      # Guards the one code path --no-tts skips, which is exactly why the 1.0.2
+      # bug survived: torch and Chatterbox were resolved in two separate pip
+      # commands, and the second — with no index pinned — swapped the CPU build
+      # for the default CUDA one from PyPI. A "250 MB" --cpu install landed
+      # 6.4 GB. Resolving only (--dry-run) keeps this to seconds and downloads
+      # no wheels. The index URL is read out of install.sh so the two can't drift.
+      - name: The CPU torch resolution stays CPU-only
+        if: runner.os == 'Linux'
+        run: |
+          CPU_INDEX="$(grep -om1 'https://download.pytorch.org/whl/cpu' install.sh)"
+          test -n "$CPU_INDEX" || { echo "couldn't find the CPU index URL in install.sh"; exit 1; }
+          python -m pip install --dry-run --quiet --report report.json \
+            --index-url "$CPU_INDEX" --extra-index-url https://pypi.org/simple \
+            torch torchaudio chatterbox-tts 'setuptools<81'
+          python ci/assert_cpu_resolution.py report.json
+
       # --no-tts keeps this to seconds instead of downloading gigabytes of torch;
       # everything else the installer does is exercised for real.
       - name: Run install.sh

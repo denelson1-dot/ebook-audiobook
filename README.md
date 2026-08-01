@@ -1,7 +1,8 @@
 # ebook-audiobook
 
 Turn a DRM-free ebook you own into a single, high-quality narrated audiobook
-(`.m4b`) you can drop into Plex and listen to on your phone.
+(`.m4b`) — chaptered, tagged, and filed ready for your Plex library. See
+[Listening to it](#listening-to-it) for which players show the chapters.
 
 Everything runs **on your own machine**. No cloud APIs, no accounts, no
 telemetry, nothing leaves the computer.
@@ -47,6 +48,7 @@ Menu entry; on Linux, an application-menu entry.
 | Option | Effect |
 |---|---|
 | `--cpu` / `-Cpu` | Force the CPU-only PyTorch build (~250 MB instead of ~2.5 GB) |
+| `--gpu` / `-Gpu` | Force the CUDA build when the GPU probe comes up empty (e.g. a broken `nvidia-smi`) |
 | `--no-tts` / `-NoTts` | Skip PyTorch for now — import books, add the engine later |
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
@@ -98,8 +100,9 @@ Run `ebook-audiobook` and your browser opens. Then:
    starts, so a bad path fails in a second rather than after three hours.
    There's a **Stop** button, and interrupted renders resume where they left off.
 5. The `.m4b` comes out tagged for Plex/Audnexus: marked as an Audiobook
-   (`stik=2`), album-artist set to the author, cover embedded, real chapter
-   markers, plus year and ISBN when the ebook provides them.
+   (`stik=2`), album-artist set to the author, cover embedded, one chapter
+   marker per chapter, plus year and ISBN when the ebook provides them.
+   ([Not every player shows the chapters](#listening-to-it) — Plex's own don't.)
 
 **Voices** — add your own rights-cleared reference clips, audition them, and
 switch between them per book.
@@ -118,6 +121,57 @@ ebook-audiobook convert book.epub --voice-ref clip.wav   # clone a voice
 ebook-audiobook convert book.epub --engine fake -y       # no-GPU plumbing test
 ebook-audiobook list                              # past conversions
 ```
+
+---
+
+## Listening to it
+
+Every book is written with a real chapter marker per chapter, stored **twice** —
+as a QuickTime chapter track and as a Nero `chpl` atom — so any player that reads
+chapters at all will find them. A render that somehow lost its markers is failed
+rather than shipped.
+
+> **Plex Media Server does not read chapters from audio files.** Only from video.
+> In Plex and Plexamp your book appears as one unbroken ten-hour track with no
+> chapter list and no skip-chapter buttons — which makes the scrub bar genuinely
+> hazardous in a car. This is a Plex limitation, not a problem with the file; it
+> has been [an open request since 2018][plex-req] with no implementation, and the
+> maintainer of the main Plex audiobook guide [says the same][plex-guide].
+
+Use a player that reads the chapters itself. These keep Plex as the library, so
+there's no second server to run:
+
+| Platform | Player | Notes |
+|---|---|---|
+| Android | [Chronicle Epilogue](https://play.google.com/store/apps/details?id=local.oss.chronicle) | Free, [open source](https://github.com/mattttvaughn/chronicle). Chapters, offline downloads, Android Auto, 0.5–3× speed, sleep timer, progress syncs back to Plex. Currently an open beta — join from the Play listing. Needs Android 13+; Android Auto support is basic (no voice control). |
+| Android | [Bookcamp](https://play.google.com/store/apps/details?id=app.bookcamp.android) | Chapters, offline, Android Auto — but subscription-only, and reviews report Android Auto and chapter-playback glitches. |
+| iOS | [Prologue](https://prologue.audio/) | Chapters, CarPlay (with a chapter list on the now-playing screen), Apple Watch, Siri, bookmarks, sleep timer, voice boost. Free; one-time $5 unlock for offline downloads. Also speaks Audiobookshelf, so it survives a later switch. |
+| iOS | [Bookcamp](https://apps.apple.com/us/app/bookcamp/id1523540165) | Chapters, offline, cross-device sync — but subscription-only. |
+
+Not committed to Plex? [Audiobookshelf](https://www.audiobookshelf.org/) reads
+these chapters natively on both server and client, and the library tree this tool
+writes (`{Author}/{Title} (Year)/`, or `{Author}/{Series}/{NN} - {Title} (Year)/`)
+already matches its expected `{Author}/{Series}/{Book}` layout — point it at the
+same folder and nothing needs re-rendering.
+
+<details>
+<summary>Checking the markers yourself</summary>
+
+If a player shows no chapters, confirm where the fault lies before blaming the
+file:
+
+```bash
+ffprobe -v error -print_format json -show_chapters "Your Book.m4b" \
+  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["chapters"]))'
+```
+
+A number greater than zero means the markers are there and the player is what's
+ignoring them.
+
+</details>
+
+[plex-req]: https://forums.plex.tv/t/support-for-reading-chapters-in-m4b-files/741874
+[plex-guide]: https://github.com/seanap/Plex-Audiobook-Guide/discussions/92
 
 ---
 

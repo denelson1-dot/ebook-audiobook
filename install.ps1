@@ -24,6 +24,10 @@
 .PARAMETER Cpu
   Force the CPU-only PyTorch build (a much smaller download).
 
+.PARAMETER Gpu
+  Force the CUDA PyTorch build, even if this script's GPU probe came up empty
+  (for example, a broken nvidia-smi).
+
 .PARAMETER NoTts
   Skip PyTorch entirely. You can import books but not render audio yet.
 
@@ -38,6 +42,7 @@ param(
     [string]$Version = "latest",
     [string]$InstallDir = "",
     [switch]$Cpu,
+    [switch]$Gpu,
     [switch]$NoTts,
     [switch]$Yes,
     [switch]$Uninstall
@@ -251,7 +256,7 @@ Write-Ok "installed $appVer"
 if ($NoTts) {
     Write-Step "Skipping the speech engine (-NoTts)"
     Write-Warn "you can import books, but rendering audio needs the engine"
-    Write-Dim "add it later with: `"$VenvDir\Scripts\pip.exe`" install `"ebook-audiobook[tts]`""
+    Write-Dim "add it later with: `"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`""
 } else {
     Write-Step "Setting up the speech engine"
     $hasNvidia = $false
@@ -266,6 +271,10 @@ if ($NoTts) {
     if ($Cpu) {
         $desc = "CPU only (forced with -Cpu)"; $size = "about 250 MB"
         $index = "https://download.pytorch.org/whl/cpu"
+    } elseif ($Gpu) {
+        $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours"
+        $size = "about 2.5 GB"
+        $index = "https://download.pytorch.org/whl/cu124"
     } elseif ($hasNvidia) {
         $desc = "$($gpuName.Trim()) via CUDA - a novel takes roughly 2-3 hours"
         $size = "about 2.5 GB"
@@ -279,17 +288,30 @@ if ($NoTts) {
     Write-Host "  Detected: " -NoNewline; Write-Host $desc -ForegroundColor White
     Write-Host "  Download: " -NoNewline; Write-Host $size -ForegroundColor White
     if (Ask "Download and install the speech engine now?" "y") {
-        & $VenvPy -m pip install --quiet torch torchaudio --index-url $index
-        if ($LASTEXITCODE -ne 0) { Fail "PyTorch install failed. Re-run with -Cpu, or install torch manually." }
-        & $VenvPy -m pip install --quiet "ebook-audiobook[tts]"
+        # Resolve torch and Chatterbox together, in ONE pip command. Chatterbox
+        # pins an exact torch version, so installing torch first and Chatterbox
+        # second lets that second resolve *downgrade* the torch we just picked -
+        # and with no index pinned there, pip takes the replacement from PyPI,
+        # silently swapping a 250 MB CPU build for the multi-gigabyte default
+        # CUDA one. Resolving together keeps the build we chose: for torch and
+        # torchaudio the PyTorch index wins (a local version like 2.6.0+cpu
+        # outranks plain 2.6.0), while other dependencies fall through to PyPI.
+        & $VenvPy -m pip install --quiet `
+            --index-url $index --extra-index-url "https://pypi.org/simple" `
+            torch torchaudio chatterbox-tts "setuptools<81"
         if ($LASTEXITCODE -ne 0) {
-            & $VenvPy -m pip install --quiet chatterbox-tts "setuptools<81"
-            if ($LASTEXITCODE -ne 0) { Write-Warn "the Chatterbox engine didn't install; retry with: `"$VenvDir\Scripts\pip.exe`" install chatterbox-tts" }
+            Fail ("the speech engine failed to install. Re-run with -Cpu, or by hand:`n" +
+                  "         `"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`"")
         }
-        Write-Ok "speech engine ready"
+        # Report the build that actually landed. The whole bug above was
+        # invisible precisely because nothing said which torch you ended up with.
+        $torchBuild = (& $VenvPy -c "import torch; print(torch.__version__)" 2>$null)
+        if ($torchBuild) { Write-Ok "speech engine ready (torch $($torchBuild.Trim()))" }
+        else { Write-Ok "speech engine ready" }
         Write-Dim "The ~1 GB voice model downloads the first time you render."
     } else {
-        Write-Warn "skipped - add it later with: `"$VenvDir\Scripts\pip.exe`" install `"ebook-audiobook[tts]`""
+        Write-Warn "skipped - add it later with:"
+        Write-Dim "`"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`""
     }
 }
 

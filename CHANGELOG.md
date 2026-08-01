@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.2
+
+Every fix here is in the installers. The app itself is unchanged.
+
+- **The CPU-only install was never actually CPU-only.** PyTorch and Chatterbox
+  were resolved in two separate pip commands. Chatterbox pins an exact torch
+  version, so the second command downgraded the torch the first had just chosen
+  — and because no package index was pinned on it, pip fetched the replacement
+  from PyPI, silently swapping the 250 MB CPU build for the default CUDA one.
+  A `--cpu` install advertised as "about 250 MB" landed 6.4 GB on disk. Both are
+  now resolved in a single command against the chosen index.
+- **A working GPU could be missed entirely.** The CUDA probe trusted
+  `nvidia-smi` alone, but that talks to NVML, which fails independently of CUDA
+  — upgrade the driver without rebooting and it reports a version mismatch on a
+  machine where PyTorch drives the GPU perfectly well. Such machines were sent
+  down the CPU path, making renders roughly 10x slower. The probe now falls back
+  to checking for the kernel driver and CUDA libraries, and says so when it does.
+- **Added `--gpu` / `-Gpu`** to force the CUDA build. `--cpu` had no counterpart,
+  so a bad probe result could not be overridden.
+- The installers now print which torch build actually landed. Both bugs above
+  were invisible because nothing ever said.
+- Dropped `pip install "ebook-audiobook[tts]"`, which could never succeed — the
+  name is not registered on PyPI, so it always failed into its fallback with the
+  error discarded. It also meant that whoever registered that name first would
+  have had their code installed into every user's environment.
+- The Linux application-menu entry no longer declares two main categories, which
+  could list the app twice in the menu.
+
 ## 1.0.1
 
 - The installers now download the wheel themselves before handing it to pip, so
