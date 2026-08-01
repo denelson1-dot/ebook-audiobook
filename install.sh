@@ -33,11 +33,6 @@ VERSION="latest"
 # "latest/download/…" asset name is not an option; baking the version in beats
 # calling the GitHub API, which is rate-limited for unauthenticated users.
 PINNED_VERSION="__EBAB_VERSION__"
-# The AMD build. This exact index is not interchangeable: Chatterbox pins
-# torch==2.6.0, and 2.6.0+rocm wheels exist ONLY on rocm6.2.4 — the rocm6.3 and
-# rocm6.4 indexes start at torch 2.7. Bumping this without checking that the
-# torch pin still resolves will silently drop AMD users onto the CPU build.
-ROCM_INDEX="https://download.pytorch.org/whl/rocm6.2.4"
 ASSUME_YES=0
 FORCE_CPU=0
 FORCE_GPU=0
@@ -483,31 +478,61 @@ else
     elif [ "$FORCE_GPU" = "1" ]; then
       MAC_NOTE="--gpu means CUDA, which no Mac has. Apple Silicon is already used automatically via Metal."
     fi
-  elif [ "$FORCE_CPU" = "1" ]; then
-    DEVICE_DESC="CPU only (forced with --cpu)"
-    TORCH_INDEX="https://download.pytorch.org/whl/cpu"
-    SIZE="about 250 MB"
-  elif [ "$FORCE_GPU" = "1" ]; then
-    DEVICE_DESC="CUDA (forced with --gpu) — a novel takes roughly 2-3 hours"
-    TORCH_INDEX="https://download.pytorch.org/whl/cu124"
-    SIZE="about 2.5 GB"
-  elif [ "$FORCE_ROCM" = "1" ]; then
-    DEVICE_DESC="AMD ROCm (forced with --rocm) — a novel takes roughly 3-4 hours"
-    TORCH_INDEX="$ROCM_INDEX"
-    SIZE="about 2 GB"
-  elif detect_nvidia; then
-    DEVICE_DESC="$GPU_NAME via CUDA — a novel takes roughly 2-3 hours"
-    TORCH_INDEX="https://download.pytorch.org/whl/cu124"
-    SIZE="about 2.5 GB"
-  elif detect_amd; then
-    DEVICE_DESC="$GPU_NAME via ROCm — a novel takes roughly 3-4 hours"
-    TORCH_INDEX="$ROCM_INDEX"
-    SIZE="about 2 GB"
-  else
-    DEVICE_DESC="no GPU detected, CPU only — a novel can take many hours"
-    TORCH_INDEX="https://download.pytorch.org/whl/cpu"
-    SIZE="about 250 MB"
   fi
+
+  # Which PyTorch build belongs here is decided by the app, not by this script.
+  # The index URLs used to be written out in six places across the two
+  # installers with no single source of truth, so a bump could land in some and
+  # not others. ebook_audiobook.torchbuild is importable by now because the app
+  # was installed in section 3, above.
+  VENDOR=""
+  if [ "$PLATFORM" != "macos" ]; then
+    if detect_nvidia; then VENDOR="nvidia"; elif detect_amd; then VENDOR="amd"; fi
+  fi
+  FORCED=""
+  [ "$FORCE_CPU" = "1" ]  && FORCED="cpu"
+  [ "$FORCE_GPU" = "1" ]  && FORCED="gpu"
+  [ "$FORCE_ROCM" = "1" ] && FORCED="rocm"
+
+  TORCH_ID=""; TORCH_INDEX=""; TORCH_LABEL=""; SIZE=""; TORCH_NOTE=""
+  TORCH_VARS="$("$VPY" -m ebook_audiobook.torchbuild --platform "$PLATFORM" \
+      --arch "$ARCH" --vendor "$VENDOR" --forced "$FORCED" \
+      --gpu-name "$GPU_NAME" 2>/dev/null || true)"
+  # Read into variables rather than eval: the values contain spaces, and this
+  # script must not execute anything the subprocess happens to print.
+  while IFS='=' read -r _k _v; do
+    case "$_k" in
+      EBAB_TORCH_ID)    TORCH_ID="$_v" ;;
+      EBAB_TORCH_INDEX) TORCH_INDEX="$_v" ;;
+      EBAB_TORCH_LABEL) TORCH_LABEL="$_v" ;;
+      EBAB_TORCH_SIZE)  SIZE="$_v" ;;
+      EBAB_TORCH_NOTE)  TORCH_NOTE="$_v" ;;
+    esac
+  done <<TORCHVARS
+$TORCH_VARS
+TORCHVARS
+
+  if [ -z "$TORCH_ID" ]; then
+    # Only reachable if the app failed to import (e.g. --version pinned to a
+    # release predating this module). The CPU build always works; say so
+    # loudly rather than guessing at hardware.
+    warn "couldn't ask the app which PyTorch build to use; falling back to CPU-only"
+    TORCH_ID="cpu"; TORCH_INDEX="https://download.pytorch.org/whl/cpu"
+    SIZE="about 250 MB"; TORCH_LABEL="CPU only"
+  fi
+
+  # The human-facing line: the module supplies the facts, this supplies the
+  # phrasing, including the GPU's own name and what the wait will feel like.
+  case "$TORCH_ID" in
+    cu124) DEVICE_DESC="${GPU_NAME:-NVIDIA GPU} via CUDA — a novel takes roughly 2-3 hours" ;;
+    rocm)  DEVICE_DESC="${GPU_NAME:-AMD Radeon} via ROCm — a novel takes roughly 3-4 hours" ;;
+    mac)   : ;;  # already set above, with the Metal/Intel distinction
+    *)     if [ -n "$FORCED" ]; then
+             DEVICE_DESC="CPU only (forced with --$FORCED)"
+           else
+             DEVICE_DESC="no GPU detected, CPU only — a novel can take many hours"
+           fi ;;
+  esac
 
   say "  Detected: ${B}${DEVICE_DESC}${N}"
   say "  Download: ${B}${SIZE}${N}"
@@ -516,13 +541,13 @@ else
   # variable to be visible at all. Work it out here and bake it into the
   # launcher, so the user never has to find this out from a forum thread.
   HSA_OVERRIDE=""
-  if [ "$TORCH_INDEX" = "$ROCM_INDEX" ] && [ -n "$GFX_ARCH" ]; then
+  if [ "$TORCH_ID" = "rocm" ] && [ -n "$GFX_ARCH" ]; then
     HSA_OVERRIDE="$(hsa_override_for "$GFX_ARCH")"
     if [ -n "$HSA_OVERRIDE" ]; then
       say "  ${DIM}$GFX_ARCH needs HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE; the${N}"
       say "  ${DIM}launcher will set it for you.${N}"
     fi
-  elif [ "$TORCH_INDEX" = "$ROCM_INDEX" ]; then
+  elif [ "$TORCH_ID" = "rocm" ]; then
     say "  ${DIM}If ROCm reports no device later, install rocminfo and re-run,${N}"
     say "  ${DIM}or set HSA_OVERRIDE_GFX_VERSION (10.3.0 for RX 6000, 11.0.0 for RX 7000).${N}"
   fi

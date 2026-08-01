@@ -241,6 +241,30 @@ jobs:
           check "" cpu
           echo "macOS Metal gate correct at every boundary"
 
+      # torchbuild.py is the only place a PyTorch index may be named. One CPU
+      # fallback is allowed in each installer, for the case where the app can't
+      # be imported at all; anything more means the duplication has returned.
+      - name: PyTorch indexes live in exactly one place
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          for f in install.sh install.ps1; do
+            n=$(grep -c 'download\.pytorch\.org' "$f" || true)
+            echo "  $f: $n reference(s)"
+            [ "$n" -le 1 ] || { echo "ERROR: $f names a PyTorch index $n times; use ebook_audiobook.torchbuild"; exit 1; }
+          done
+          python - <<'PY'
+          from ebook_audiobook.torchbuild import BUILDS, select
+          # Every build must be reachable, or a flag silently does nothing.
+          reachable = {
+              select("linux", vendor="nvidia").id, select("linux", vendor="amd").id,
+              select("linux").id, select("macos").id,
+          }
+          missing = set(BUILDS) - reachable
+          assert not missing, f"unreachable builds: {missing}"
+          print(f"all {len(BUILDS)} builds reachable from the selection logic")
+          PY
+
       - name: Parse install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -260,8 +284,9 @@ jobs:
       - name: The CPU torch resolution stays CPU-only
         if: runner.os == 'Linux'
         run: |
-          CPU_INDEX="$(grep -om1 'https://download.pytorch.org/whl/cpu' install.sh)"
-          test -n "$CPU_INDEX" || { echo "couldn't find the CPU index URL in install.sh"; exit 1; }
+          CPU_INDEX="$(python -c 'from ebook_audiobook.torchbuild import BUILDS; print(BUILDS["cpu"].index_url)')"
+          test -n "$CPU_INDEX" || { echo "couldn't read the CPU index from torchbuild"; exit 1; }
+          echo "resolving against $CPU_INDEX"
           python -m pip install --dry-run --ignore-installed --quiet --report report.json \
             --index-url "$CPU_INDEX" --extra-index-url https://pypi.org/simple \
             torch torchaudio chatterbox-tts 'setuptools<81'
@@ -275,8 +300,8 @@ jobs:
       - name: The AMD torch resolution really is a ROCm build
         if: runner.os == 'Linux'
         run: |
-          ROCM_INDEX="$(grep -oEm1 'https://download\.pytorch\.org/whl/rocm[0-9.]+' install.sh)"
-          test -n "$ROCM_INDEX" || { echo "couldn't find the ROCm index URL in install.sh"; exit 1; }
+          ROCM_INDEX="$(python -c 'from ebook_audiobook.torchbuild import BUILDS; print(BUILDS["rocm"].index_url)')"
+          test -n "$ROCM_INDEX" || { echo "couldn't read the ROCm index from torchbuild"; exit 1; }
           echo "resolving against $ROCM_INDEX"
           python -m pip install --dry-run --ignore-installed --quiet --report rocm.json \
             --index-url "$ROCM_INDEX" --extra-index-url https://pypi.org/simple \

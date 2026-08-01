@@ -268,21 +268,51 @@ if ($NoTts) {
         } catch {}
     }
 
-    if ($Cpu) {
-        $desc = "CPU only (forced with -Cpu)"; $size = "about 250 MB"
-        $index = "https://download.pytorch.org/whl/cpu"
-    } elseif ($Gpu) {
-        $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours"
-        $size = "about 2.5 GB"
-        $index = "https://download.pytorch.org/whl/cu124"
-    } elseif ($hasNvidia) {
-        $desc = "$($gpuName.Trim()) via CUDA - a novel takes roughly 2-3 hours"
-        $size = "about 2.5 GB"
-        $index = "https://download.pytorch.org/whl/cu124"
+    # Which PyTorch build belongs here is decided by the app, not by this
+    # script, so install.sh and install.ps1 cannot drift apart. The app was
+    # installed in section 3, so this module is importable by now.
+    $forced = ""
+    if ($Cpu) { $forced = "cpu" } elseif ($Gpu) { $forced = "gpu" }
+    $vendor = ""
+    if ($hasNvidia) { $vendor = "nvidia" }
+
+    $id = ""; $index = ""; $size = ""; $label = ""
+    # Built as an array and splatted, with empty values omitted entirely.
+    # Windows PowerShell 5.1 can silently drop an empty-string argument, which
+    # would leave the next flag consuming the wrong value - so never pass one.
+    $tbArgs = @("-m", "ebook_audiobook.torchbuild", "--platform", "windows", "--arch", "amd64")
+    if ($vendor)  { $tbArgs += @("--vendor", $vendor) }
+    if ($forced)  { $tbArgs += @("--forced", $forced) }
+    if ($gpuName) { $tbArgs += @("--gpu-name", $gpuName.Trim()) }
+    try {
+        $out = & $VenvPy @tbArgs 2>$null
+        foreach ($line in $out) {
+            $k, $v = $line -split "=", 2
+            switch ($k) {
+                "EBAB_TORCH_ID"    { $id = $v }
+                "EBAB_TORCH_INDEX" { $index = $v }
+                "EBAB_TORCH_SIZE"  { $size = $v }
+                "EBAB_TORCH_LABEL" { $label = $v }
+            }
+        }
+    } catch {}
+
+    if (-not $id) {
+        # Only reachable if the app can't be imported (e.g. -Version pinned to a
+        # release predating this module). CPU always works; say so rather than
+        # guessing at hardware.
+        Write-Warn "couldn't ask the app which PyTorch build to use; falling back to CPU-only"
+        $id = "cpu"; $index = "https://download.pytorch.org/whl/cpu"; $size = "about 250 MB"
+    }
+
+    # The module supplies the facts; this supplies the phrasing.
+    if ($id -eq "cu124") {
+        if ($forced -eq "gpu") { $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours" }
+        else { $desc = "$($gpuName.Trim()) via CUDA - a novel takes roughly 2-3 hours" }
+    } elseif ($forced -eq "cpu") {
+        $desc = "CPU only (forced with -Cpu)"
     } else {
         $desc = "no NVIDIA GPU detected, CPU only - a novel can take many hours"
-        $size = "about 250 MB"
-        $index = "https://download.pytorch.org/whl/cpu"
     }
 
     Write-Host "  Detected: " -NoNewline; Write-Host $desc -ForegroundColor White
