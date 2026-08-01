@@ -36,7 +36,15 @@ def test_resolve_creates_missing_folder(tmp_path):
 
 
 def test_resolve_expands_user(tmp_path, monkeypatch):
+    # Redirecting "~" needs the variable the *platform* actually consults:
+    # POSIX reads HOME, Windows reads USERPROFILE (falling back to
+    # HOMEDRIVE+HOMEPATH) and ignores HOME entirely. Setting only HOME meant this
+    # test escaped its sandbox on Windows and created a real ~/books directory.
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("HOMEDRIVE", raising=False)
+    monkeypatch.delenv("HOMEPATH", raising=False)
+
     out = worker.resolve_output_dir("~/books")
     assert out == (tmp_path / "books").resolve() and out.is_dir()
 

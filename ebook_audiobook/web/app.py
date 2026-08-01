@@ -13,7 +13,7 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 
-from .. import checks, config, settings as app_settings, worker
+from .. import checks, config, settings as app_settings, tools, worker
 from ..audio import estimate
 from ..config import VoiceSettings, paths
 from ..jobs.models import Stage
@@ -549,6 +549,15 @@ def create_app() -> Flask:
     def api_status():
         return {"busy": runner.is_busy(), "current": runner.current}
 
+    # Every page asks for this on load, and answering means running
+    # `ffmpeg -version` and `ebook-convert --version` as subprocesses. Process
+    # spawning isn't free — noticeably so on Windows — and the answer changes
+    # only when the user installs something, so cache it briefly. The TTL (rather
+    # than caching forever) means installing a missing tool clears the banner
+    # within a minute instead of needing a restart.
+    _prereq_cache: dict = {"at": 0.0, "value": None}
+    _PREREQ_TTL = 60.0
+
     @app.get("/api/prereqs")
     def api_prereqs():
         """What's installed and what isn't.
@@ -556,11 +565,19 @@ def create_app() -> Flask:
         Surfaced as a banner so a missing prerequisite is visible the moment the
         UI opens, rather than as a failed import ten minutes later.
         """
-        results = checks.run_all()
-        return {
-            "checks": [r.to_dict() for r in results],
-            "blocking": [r.to_dict() for r in checks.blocking_problems(results)],
-            "ok": not checks.blocking_problems(results),
-        }
+        import time
+
+        now = time.monotonic()
+        if _prereq_cache["value"] is None or now - _prereq_cache["at"] > _PREREQ_TTL:
+            tools.reset_cache()  # notice a tool installed since the last look
+            results = checks.run_all()
+            blocking = checks.blocking_problems(results)
+            _prereq_cache["value"] = {
+                "checks": [r.to_dict() for r in results],
+                "blocking": [r.to_dict() for r in blocking],
+                "ok": not blocking,
+            }
+            _prereq_cache["at"] = now
+        return _prereq_cache["value"]
 
     return app

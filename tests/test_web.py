@@ -212,3 +212,30 @@ def test_upload_name_never_empty():
     assert _safe_upload_name("").strip()
     assert _safe_upload_name("...").strip()
     assert _safe_upload_name("книга").strip()
+
+
+def test_prereqs_endpoint_is_cached(client, monkeypatch):
+    """Every page load hits this, and answering means spawning subprocesses.
+    Repeated requests must not re-probe."""
+    from ebook_audiobook import checks as checks_mod
+
+    calls = []
+    real = checks_mod.run_all
+
+    def counting(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(checks_mod, "run_all", counting)
+
+    for _ in range(5):
+        assert client.get("/api/prereqs").status_code == 200
+    assert len(calls) == 1, f"probed {len(calls)} times for 5 requests"
+
+
+def test_prereqs_reports_shape(client):
+    d = client.get("/api/prereqs").get_json()
+    assert set(d) == {"checks", "blocking", "ok"}
+    assert isinstance(d["ok"], bool)
+    for c in d["checks"]:
+        assert {"name", "ok", "detail", "fix", "required"} <= set(c)
