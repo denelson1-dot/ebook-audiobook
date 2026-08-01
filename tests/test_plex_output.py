@@ -4,7 +4,6 @@ The tagging/validation integration test needs ffmpeg (to mux a real .m4b and a
 real cover); the rest is pure-Python and always runs.
 """
 
-import shutil
 import subprocess
 from pathlib import Path
 

@@ -1,7 +1,6 @@
 """Web-layer integration tests. The heavier ones use Calibre + ffmpeg via the
 fake engine (no GPU), driving the same routes the browser hits."""
 
-import shutil
 import time
 
 import pytest

@@ -7,8 +7,6 @@ point — but they're marked so they can be skipped in a tool-less environment.
 
 import json
 import pathlib
-import shutil
-import subprocess
 
 import pytest
 

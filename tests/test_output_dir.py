@@ -6,7 +6,6 @@ actually lands in the chosen folder and the web route rejects a bad one.
 """
 
 import os
-import shutil
 
 import pytest
 

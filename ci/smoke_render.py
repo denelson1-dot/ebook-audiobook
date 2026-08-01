@@ -11,7 +11,6 @@ network, but every other stage of the pipeline is the real one.
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import zipfile
