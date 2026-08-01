@@ -53,6 +53,26 @@ die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$*" >&2; exit 1; }
 
 have_sudo() { command -v sudo >/dev/null 2>&1; }
 
+macos_version() { sw_vers -productVersion 2>/dev/null || echo "unknown"; }
+
+# Can this Mac use its GPU for rendering?
+#
+# PyTorch's Metal (MPS) backend requires macOS 12.3 or newer, on Apple Silicon.
+# Below that the same wheel installs fine and then quietly runs on the CPU, so
+# checking here is the difference between telling someone their render will take
+# three hours and letting them find out it takes thirty.
+macos_supports_metal() {
+  ver="$(macos_version)"
+  major="${ver%%.*}"
+  rest="${ver#*.}"
+  minor="${rest%%.*}"
+  case "$major" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$major" -gt 12 ] && return 0
+  [ "$major" -lt 12 ] && return 1
+  case "$minor" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$minor" -ge 3 ]
+}
+
 # Is there an NVIDIA GPU that CUDA can actually use?
 #
 # nvidia-smi is the friendly answer — it hands us the model name — but it is not
@@ -373,21 +393,39 @@ else
   TORCH_INDEX=""
   GPU_NAME=""
   NVML_BROKEN=0
-  if [ "$FORCE_CPU" = "1" ]; then
+  MAC_NOTE=""
+  # macOS is settled first, and deliberately ahead of --cpu/--gpu, because it is
+  # the one platform where those flags cannot change what gets downloaded: there
+  # is exactly one Mac wheel on PyPI, it already contains Metal (MPS) support,
+  # and no CUDA build exists for any Mac. Sending --gpu down the CUDA branch
+  # asked pip for a cu124 wheel that has never existed for macOS, so the install
+  # failed outright on the flag that was supposed to help.
+  if [ "$PLATFORM" = "macos" ]; then
+    SIZE="about 250 MB"
+    if [ "$ARCH" = "arm64" ]; then
+      if macos_supports_metal; then
+        DEVICE_DESC="Apple Silicon GPU (Metal) — a novel takes a few hours"
+      else
+        DEVICE_DESC="Apple Silicon, but macOS $(macos_version) is too old for Metal — CPU only"
+        MAC_NOTE="Metal needs macOS 12.3 or newer; updating macOS makes renders several times faster."
+      fi
+    else
+      DEVICE_DESC="Intel Mac, CPU only — a novel can take a very long time"
+      MAC_NOTE="No Mac has a CUDA GPU, and Metal needs Apple Silicon."
+    fi
+    if [ "$FORCE_CPU" = "1" ]; then
+      MAC_NOTE="There is only one Mac build of PyTorch, so --cpu doesn't change this download. To keep a render off the GPU, run the app with EBAB_DEVICE=cpu."
+    elif [ "$FORCE_GPU" = "1" ]; then
+      MAC_NOTE="--gpu means CUDA, which no Mac has. Apple Silicon is already used automatically via Metal."
+    fi
+  elif [ "$FORCE_CPU" = "1" ]; then
     DEVICE_DESC="CPU only (forced with --cpu)"
-    [ "$PLATFORM" = "linux" ] && TORCH_INDEX="https://download.pytorch.org/whl/cpu"
+    TORCH_INDEX="https://download.pytorch.org/whl/cpu"
     SIZE="about 250 MB"
   elif [ "$FORCE_GPU" = "1" ]; then
     DEVICE_DESC="CUDA (forced with --gpu) — a novel takes roughly 2-3 hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
     SIZE="about 2.5 GB"
-  elif [ "$PLATFORM" = "macos" ]; then
-    if [ "$ARCH" = "arm64" ]; then
-      DEVICE_DESC="Apple Silicon GPU (MPS) — a novel takes several hours"
-    else
-      DEVICE_DESC="Intel Mac, CPU only — a novel can take a very long time"
-    fi
-    SIZE="about 250 MB"
   elif detect_nvidia; then
     DEVICE_DESC="$GPU_NAME via CUDA — a novel takes roughly 2-3 hours"
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
@@ -400,6 +438,7 @@ else
 
   say "  Detected: ${B}${DEVICE_DESC}${N}"
   say "  Download: ${B}${SIZE}${N}"
+  [ -n "$MAC_NOTE" ] && say "  ${DIM}${MAC_NOTE}${N}"
   [ "$NVML_BROKEN" = "1" ] && \
     say "  ${DIM}(nvidia-smi is broken on this machine — usually a driver upgrade${N}"
   [ "$NVML_BROKEN" = "1" ] && \

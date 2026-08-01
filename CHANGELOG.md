@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+**Apple Silicon is properly supported.** It was nominally handled and would have
+broken in practice: PyTorch's Metal backend doesn't implement every operator, and
+without `PYTORCH_ENABLE_MPS_FALLBACK` the first uncovered one ends the render —
+possibly an hour in, since which operators get hit depends on the text. Metal
+memory is now released on unload, macOS below 12.3 (where Metal doesn't work) is
+detected and explained by the installer, and `--gpu` on a Mac no longer asks pip
+for a CUDA wheel that has never existed for macOS.
+
+- **A GPU running out of memory no longer costs the whole render.** VRAM pressure
+  isn't constant across a book, so an out-of-memory now retries with the cache
+  flushed and then moves to the CPU to finish, rather than failing the job.
+  Cards under 4 GB are called out before the render starts.
+- **`EBAB_DEVICE=cuda|mps|cpu`** forces the device when the automatic choice is
+  wrong.
+- **Queued jobs could be lost.** The web worker exits when idle and restarts on
+  demand; a job submitted in the instant it was exiting sat in the queue forever,
+  leaving the page stuck on a stage that never advanced and a Stop button that
+  did nothing, recoverable only by restarting.
+- **Deleting a job now frees the space it claimed to.** The copy of the ebook in
+  `imports/` was never removed, and every book uploaded through the browser was
+  stored twice — the staging copy was never cleaned up.
+- **The disk-space warning checked the wrong disk.** Free space was measured on
+  the data folder's volume, but the finished `.m4b` goes to the library folder,
+  which for Plex users is very often a different drive.
+- The final ffmpeg encode had a flat one-hour timeout, which a long book could
+  exceed — discarding the entire render at the last step. It now scales with the
+  audio length, and a timeout no longer leaves a truncated `.m4b` looking
+  finished.
+- A locked output file (open in a player, or being scanned by Plex) and a full
+  disk now explain themselves and say that the render resumes rather than
+  starting over.
+- `check` suggested `pip install 'ebook-audiobook[tts]'`, which could never work,
+  and `preview` printed a field a preview never sets — showing `None`, or a
+  previous render's `.m4b`.
+- `__version__` was hard-coded at `0.1.0` against a 1.0.2 release. It's read from
+  the installed metadata now.
+
 ## 1.0.2
 
 Every fix here is in the installers. The app itself is unchanged.

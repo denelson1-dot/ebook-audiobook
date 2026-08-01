@@ -183,12 +183,37 @@ Only the speed changes.
 | Your hardware | Runs on | A ~110,000-word novel takes |
 |---|---|---|
 | NVIDIA GPU (Windows/Linux) | `cuda` | **2–3 hours** (~49 chars/sec on an RTX 3070 Ti) |
-| Apple Silicon Mac | `mps` | Several hours |
+| Apple Silicon Mac, macOS 12.3+ | `mps` | A few hours |
+| Intel Mac, or macOS below 12.3 | `cpu` | Many hours |
 | No GPU (any OS) | `cpu` | Many hours — works, but leave it overnight |
 
-The first segment is slower (warm-up). Generating a preview measures your
-machine's real rate and refines the estimate shown for the full book.
-`EBAB_VERBOSE=1` shows the engine's own progress bars.
+`ebook-audiobook check` tells you which one you're on and why. The first segment
+is slower (warm-up); generating a preview measures your machine's real rate and
+refines the estimate shown for the full book.
+
+**Apple Silicon** is used automatically — there's one Mac build of PyTorch and it
+has Metal support built in, so `--cpu` and `--gpu` don't change what's
+downloaded. Metal needs macOS 12.3 or newer; below that the same install quietly
+runs on the CPU, so the installer says so rather than letting you discover it
+from the render time.
+
+**If a GPU runs out of memory** partway through, the render doesn't die — it
+retries once, then moves to the CPU and finishes. Everything already rendered
+stays cached either way.
+
+<details>
+<summary>Environment variables</summary>
+
+| Variable | Effect |
+|---|---|
+| `EBAB_DEVICE` | Force `cuda`, `mps`, or `cpu` instead of the automatic choice |
+| `EBAB_DATA_ROOT` | Put all stored data somewhere other than the default |
+| `EBAB_VERBOSE=1` | Show the engine's own progress bars and warnings |
+| `EBAB_PORT` / `EBAB_HOST` | Bind the web UI somewhere other than `127.0.0.1:5005` |
+| `EBAB_NO_BROWSER=1` | Don't open a browser window on start |
+| `EBAB_EBOOK_CONVERT` | Path to Calibre's `ebook-convert`, for unusual installs |
+
+</details>
 
 ---
 
