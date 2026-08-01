@@ -307,3 +307,52 @@ def test_space_survives_an_unreachable_destination(client):
     """An unmounted share must report unknown, not 500 the render dialog."""
     d = client.get("/api/space?path=/definitely/not/mounted/anywhere/xyz").get_json()
     assert "output" in d  # answered rather than erroring
+
+
+# --- render intensity --------------------------------------------------------
+
+def test_saving_the_power_mode_does_not_wipe_the_library_folder(client, tmp_path):
+    """The settings page saves each field independently. An absent field has to
+    mean 'leave it alone' — treating it as 'clear it' would silently unset the
+    Plex library folder the moment someone changed the render mode."""
+    lib = tmp_path / "audiobooks"
+    lib.mkdir()
+    r = client.post("/settings", data={"audiobooks_root": str(lib)})
+    assert r.get_json()["ok"]
+
+    r = client.post("/settings", data={"power_mode": "quiet"})
+    body = r.get_json()
+    assert body["power_mode"] == "quiet"
+    assert body["audiobooks_root"] == str(lib), "the library folder was cleared"
+
+
+def test_clearing_the_library_folder_still_works(client, tmp_path):
+    """An explicitly empty value must still mean 'clear'."""
+    lib = tmp_path / "audiobooks"
+    lib.mkdir()
+    client.post("/settings", data={"audiobooks_root": str(lib)})
+    r = client.post("/settings", data={"audiobooks_root": ""})
+    assert r.get_json()["audiobooks_root"] is None
+
+
+def test_an_invented_power_mode_is_rejected_not_stored(client):
+    r = client.post("/settings", data={"power_mode": "ludicrous"})
+    assert r.get_json()["power_mode"] == "full"
+
+
+def test_the_render_mode_is_remembered_on_the_job(client, tmp_path):
+    """A resume after a restart must not silently go back to full speed on
+    someone's laptop."""
+    store = JobStore("powerjob").ensure()
+    store.save_book(Book(job_id="powerjob", source_path="x.epub", source_hash="h"))
+    store.save_chapters([Chapter(chapter_id="c0", sequence=0, title="One",
+                                 text="hi", char_count=2, include=True)])
+    store.save_state(JobState(job_id="powerjob"))
+
+    out = tmp_path / "out"
+    out.mkdir()
+    r = client.post("/job/powerjob/render",
+                    data={"output_mode": "folder", "output_dir": str(out),
+                          "power_mode": "balanced"})
+    assert r.get_json()["ok"], r.get_json()
+    assert JobStore("powerjob").load_state().power_mode == "balanced"

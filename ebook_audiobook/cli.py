@@ -17,7 +17,7 @@ import argparse
 import os
 import sys
 
-from . import checks, config
+from . import checks, config, power
 from .audio import estimate
 from .config import VoiceSettings
 from .jobs.models import JobState
@@ -78,6 +78,9 @@ def _apply_voice(job_id: str, args) -> None:
 def cmd_check(args) -> int:
     results = checks.run_all(engine=args.engine)
     print(checks.format_results(results))
+    from . import settings as app_settings
+
+    print(f"\nrender intensity: {power.describe(app_settings.default_power_mode())}")
     problems = checks.blocking_problems(results)
     if problems:
         print(f"\n{len(problems)} problem(s) must be fixed before converting a book.")
@@ -130,7 +133,7 @@ def cmd_convert(args) -> int:
     if args.preview_seconds and args.engine != "fake":
         print(f"preview (~{args.preview_seconds}s)...")
         st = worker.render_job(job_id, preview_max_seconds=args.preview_seconds,
-                               progress=_progress)
+                               power_mode=args.power, progress=_progress)
         print()
         # preview_output, not output_path: a preview must never claim to be the
         # finished audiobook, so it's tracked separately. Reading output_path
@@ -147,7 +150,7 @@ def cmd_convert(args) -> int:
         state = worker.render_job(
             job_id, output_dir=args.output_dir,
             output_mode=worker.MODE_FOLDER if args.output_dir else None,
-            progress=_progress,
+            power_mode=args.power, progress=_progress,
         )
     except worker.OutputDirError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -174,7 +177,8 @@ def cmd_extract(args) -> int:
 
 def cmd_preview(args) -> int:
     _apply_voice(args.job_id, args)
-    state = worker.render_job(args.job_id, preview_max_seconds=args.seconds, progress=_progress)
+    state = worker.render_job(args.job_id, preview_max_seconds=args.seconds,
+                              power_mode=args.power, progress=_progress)
     print()
     print(f"preview: {state.preview_output}")
     return 0
@@ -186,7 +190,7 @@ def cmd_render(args) -> int:
         state = worker.render_job(
             args.job_id, output_dir=args.output_dir,
             output_mode=worker.MODE_FOLDER if args.output_dir else None,
-            progress=_progress,
+            power_mode=args.power, progress=_progress,
         )
     except worker.OutputDirError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -235,6 +239,12 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("paths", help="show where books, jobs, and settings are stored")
     c.set_defaults(func=cmd_paths)
 
+    def power_flag(sp):
+        sp.add_argument(
+            "--power", choices=list(power.MODES), default=None,
+            help="how hard to push this machine: full (default), balanced, "
+                 "or quiet (background — cooler and slower, good on a laptop)")
+
     def voice_flags(sp):
         sp.add_argument("--engine", choices=["chatterbox", "fake"], default="chatterbox")
         sp.add_argument("--voice-ref", dest="voice_ref", help="local rights-cleared reference clip")
@@ -250,6 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--output-dir", dest="output_dir", help="folder for the final .m4b (default: local-data/outputs)")
     c.add_argument("--preview-seconds", type=float, default=0, help="render a preview and confirm first")
     c.add_argument("-y", "--yes", action="store_true", help="skip preview confirmation")
+    power_flag(c)
     c.set_defaults(func=cmd_convert)
 
     c = sub.add_parser("extract", help="import (if needed) and extract chapters")
@@ -261,12 +272,14 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("job_id")
     c.add_argument("--seconds", type=float, default=30)
     voice_flags(c)
+    power_flag(c)
     c.set_defaults(func=cmd_preview)
 
     c = sub.add_parser("render", help="full render for a job")
     c.add_argument("job_id")
     voice_flags(c)
     c.add_argument("--output-dir", dest="output_dir", help="folder for the final .m4b (default: local-data/outputs)")
+    power_flag(c)
     c.set_defaults(func=cmd_render)
 
     c = sub.add_parser("list", help="list jobs")

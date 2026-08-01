@@ -21,6 +21,27 @@
   </div>
   <div class="hint" id="rootHint">The folder is checked for write access when you save.</div>
 </div>
+
+<div class="card">
+  <h3>How hard to work this machine</h3>
+  <p class="meta">A full render runs for hours. If you want to keep using this computer while it
+    does — or you're on a laptop that gets hot and loud — turn it down. The audiobook is
+    identical either way; only the time it takes changes. You can override this for any
+    single conversion.</p>
+  <div class="power-modes" style="margin-top:10px">
+    {% for m in power_modes %}
+    <label class="power-mode{% if m.id == power_mode %} selected{% endif %}">
+      <input type="radio" name="power_mode" value="{{ m.id }}"
+             {% if m.id == power_mode %}checked{% endif %}>
+      <span>
+        <strong>{{ m.label }}</strong>
+        <span class="meta">{{ m.description }}</span>
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+  <div class="hint" id="powerHint">Saved as the default for new conversions.</div>
+</div>
 {% endblock %}
 
 {% block script %}
@@ -47,6 +68,22 @@ const clearBtn = document.getElementById("clearRootBtn");
 if (clearBtn) clearBtn.addEventListener("click", async () => {
   await fetch("/settings", { method: "POST", body: new URLSearchParams({ audiobooks_root: "" }) });
   toast("Cleared"); setTimeout(() => location.reload(), 500);
+});
+
+// Saves on pick — no separate button, and deliberately posts only power_mode so
+// the library folder above is left untouched.
+document.querySelectorAll('input[name="power_mode"]').forEach((radio) => {
+  radio.addEventListener("change", async () => {
+    document.querySelectorAll(".power-mode").forEach((el) =>
+      el.classList.toggle("selected", el.contains(radio) && radio.checked));
+    const r = await fetch("/settings", {
+      method: "POST", body: new URLSearchParams({ power_mode: radio.value }),
+    });
+    document.getElementById("powerHint").textContent =
+      r.ok ? "Saved as the default for new conversions."
+           : "Couldn't save that setting.";
+    if (r.ok) toast("Saved");
+  });
 });
 </script>
 {% endblock %}

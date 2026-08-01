@@ -14,7 +14,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .. import worker
+from .. import power, worker
 from ..jobs.store import JobStore
 
 
@@ -98,6 +98,16 @@ class Runner:
                         self._pending[task.job_id] = n
                 self._q.task_done()
 
+            # A quiet render lowers this thread's scheduling priority, and on
+            # Linux an unprivileged process can raise its niceness but never
+            # lower it again. Retiring the thread is how that gets undone: the
+            # next submit starts a fresh one at normal priority, so a single
+            # background render can't quietly slow down every job after it.
+            if power.thread_is_tainted():
+                with self._lock:
+                    self._thread = None
+                return
+
     def _run(self, task: _Task) -> None:
         def cancelled() -> bool:
             return self._cancel_requested(task.job_id)
@@ -109,6 +119,7 @@ class Runner:
                 task.job_id,
                 preview_max_seconds=task.kwargs.get("seconds", 30),
                 preview_chapter_id=task.kwargs.get("chapter_id"),
+                power_mode=task.kwargs.get("power_mode"),
                 should_cancel=cancelled,
                 progress=_terminal_progress(task.job_id),
             )
@@ -117,6 +128,7 @@ class Runner:
                 task.job_id,
                 output_dir=task.kwargs.get("output_dir"),
                 output_mode=task.kwargs.get("output_mode"),
+                power_mode=task.kwargs.get("power_mode"),
                 should_cancel=cancelled,
                 progress=_terminal_progress(task.job_id),
             )

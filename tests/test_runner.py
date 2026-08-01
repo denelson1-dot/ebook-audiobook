@@ -149,3 +149,30 @@ def test_cancel_is_cleared_when_the_task_finishes():
     r.submit("job-1", "render")  # new work supersedes the stop
     assert _wait_for(lambda: done == ["job-1", "job-1"])
     assert not r._cancel_requested("job-1")
+
+
+def test_a_thread_left_at_a_priority_we_cannot_restore_is_retired():
+    """A quiet render lowers this thread's niceness, and POSIX won't let an
+    unprivileged process raise it back. Retiring the thread is the only way a
+    later full-speed render doesn't silently inherit the slowdown."""
+    from ebook_audiobook import power
+
+    r, done = _collecting_runner(idle_timeout=5.0)  # long: only taint should end it
+
+    def taint(task: _Task) -> None:
+        done.append(task.job_id)
+        power._tainted.value = True
+
+    r._run = taint
+    r.submit("quiet-render", "render")
+    assert _wait_for(lambda: done == ["quiet-render"])
+    assert _wait_for(lambda: r._thread is None), (
+        "the worker thread kept running at a priority it can't undo — every "
+        "later render would inherit it"
+    )
+
+    # And the replacement thread must start clean.
+    r._run = lambda task: done.append(task.job_id)
+    r.submit("full-render", "render")
+    assert _wait_for(lambda: done == ["quiet-render", "full-render"])
+    assert not power.thread_is_tainted()

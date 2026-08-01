@@ -23,7 +23,7 @@ from typing import Callable
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-from . import config, settings
+from . import config, power, settings
 from .audio.wav import is_valid_audio, read_wav, write_wav
 from .config import VoiceSettings, paths
 from .hashing import file_hash, segment_id, text_hash, voice_key
@@ -451,6 +451,7 @@ def render_job(
     output_mode: str | None = None,
     progress: Progress | None = None,
     should_cancel: "Callable[[], bool] | None" = None,
+    power_mode: str | None = None,
 ) -> JobState:
     """Render, assemble and package a job.
 
@@ -464,6 +465,10 @@ def render_job(
     Both fall back to the previously-saved choice. The destination is resolved
     and write-checked up front so a bad one fails immediately rather than after
     hours of synthesis. Previews ignore all of this.
+
+    ``power_mode`` ("full"/"balanced"/"quiet") caps how hard the render is
+    allowed to push the machine; see :mod:`ebook_audiobook.power`. Defaults to
+    the job's saved choice, then the global setting.
 
     ``should_cancel`` is polled between segments for cooperative cancellation.
     """
@@ -520,6 +525,17 @@ def render_job(
         st.preview_progress = 0.0
     store.save_state(st)
 
+    # How hard this render may push the machine. Applied to *this* thread before
+    # the model loads, so the load itself is paced too — on a laptop that first
+    # ~10s is a noticeable spike. Falls back to the saved per-job choice, then
+    # the global setting.
+    mode = power_mode
+    if mode is None:
+        mode = store.load_state().power_mode or settings.default_power_mode()
+    pace_profile = power.profile_for(mode)
+    for note in power.apply(pace_profile):
+        store.set_stage(Stage.PREVIEWING if is_preview else Stage.PREPARING, note)
+
     adapter = get_adapter(voice, config.SAMPLE_RATE)
     try:
         # Model load and segment building run INSIDE the try so any failure here
@@ -569,7 +585,11 @@ def render_job(
         rendered: list[tuple[Segment, Path]] = []  # (segment, path) in order
         chars_done = 0
         audio_secs = 0.0
-        t0 = time.monotonic()
+        # Time spent actually synthesizing, excluding any deliberate resting, so
+        # the chars/sec figure the UI shows stays a measure of the machine rather
+        # than of the power mode. Otherwise switching to quiet mode would look
+        # like the hardware had got slower.
+        work_seconds = 0.0
 
         for i, seg in enumerate(todo):
             if should_cancel and should_cancel():
@@ -578,15 +598,20 @@ def render_job(
             if path.exists() and is_valid_audio(path):
                 seg.status = "done"
             else:
+                seg_t0 = time.monotonic()
                 _render_one(adapter, seg.text, path)
+                seg_elapsed = time.monotonic() - seg_t0
+                work_seconds += seg_elapsed
                 seg.status = "done"
                 chars_done += len(seg.text)
+                # Rest between segments so a long render leaves the machine
+                # usable and cool. No-op at full speed.
+                power.pace(pace_profile, seg_elapsed)
             rendered.append((seg, path))
 
             state.rendered_segments = i + 1
-            elapsed = time.monotonic() - t0
-            if chars_done and elapsed > 0:
-                state.chars_per_render_second = round(chars_done / elapsed, 2)
+            if chars_done and work_seconds > 0:
+                state.chars_per_render_second = round(chars_done / work_seconds, 2)
 
             # A preview stops once it has enough audio, not once the chapter's
             # segments run out — so drive its progress off seconds produced.

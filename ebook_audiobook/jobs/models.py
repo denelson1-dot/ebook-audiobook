@@ -112,6 +112,11 @@ class JobState:
     # flat folder); ``output_dir`` is the resolved destination folder.
     output_mode: str | None = None
     output_dir: str | None = None
+    # How hard this job's render may push the machine: "full", "balanced" or
+    # "quiet". None means fall back to the global setting. Per-job because the
+    # right answer differs by book — an overnight run wants full speed, one
+    # started at 9am on a laptop does not.
+    power_mode: str | None = None
     # measured after a render: chars of text produced per second of wall clock.
     chars_per_render_second: float | None = None
     # history/audit: ISO-8601 UTC timestamps and final output size.

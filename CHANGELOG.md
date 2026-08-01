@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+**Renders no longer have to take over the machine.** A new render intensity —
+Full speed (default), Balanced, or Quiet/background — trades wall-clock time for
+a computer you can keep using. Quiet caps PyTorch's CPU threads (which is what
+otherwise pins every core and spins the fans), drops the render thread's
+scheduling priority, and rests between segments so the silicon can cool. On
+Apple Silicon it additionally requests Darwin's background QoS, which moves the
+work onto the efficiency cores — the difference between a warm fanless MacBook
+and a hot one. Set it globally in Settings, per conversion in the render dialog,
+or with `--power quiet` on the command line.
+
+The reported chars/sec deliberately excludes resting time, so choosing a quieter
+mode doesn't make the hardware look slower than it is. And because POSIX
+niceness is one-way for an unprivileged process, the worker thread is retired
+after a quiet render rather than letting its lowered priority leak into every
+job that follows.
+
 **AMD Radeon works out of the box on Linux.** The installer detects a discrete
 Radeon and installs PyTorch's ROCm build, and cards ROCm doesn't officially list
 — the RX 6700/6600 and RX 7600/7700/7800 families, all mainstream parts — get

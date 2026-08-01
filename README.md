@@ -208,6 +208,22 @@ downloaded. Metal needs macOS 12.3 or newer; below that the same install quietly
 runs on the CPU, so the installer says so rather than letting you discover it
 from the render time.
 
+### Keeping your computer usable
+
+A full render runs for hours at full tilt. If you want to keep working — or
+you're on a laptop that gets hot and loud — turn it down in **Settings**, or per
+conversion in the render dialog. The audiobook is byte-for-byte the same job
+either way; only the time changes.
+
+| Mode | What it does | Cost |
+|---|---|---|
+| **Full speed** | Everything available. The default. | — |
+| **Balanced** | Caps CPU threads, lowers priority, brief rests | ~10–25% slower |
+| **Quiet / background** | Few threads, lowest priority, rests half the time; on Apple Silicon it moves to the **efficiency cores** | ~2x slower |
+
+On the command line: `--power quiet`. The measured chars/sec figure ignores rest
+time, so switching modes doesn't make your hardware look slower than it is.
+
 **If a GPU runs out of memory** partway through, the render doesn't die — it
 retries once, then moves to the CPU and finishes. Everything already rendered
 stays cached either way.

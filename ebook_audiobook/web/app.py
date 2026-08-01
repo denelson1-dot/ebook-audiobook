@@ -14,7 +14,7 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 
-from .. import checks, config, settings as app_settings, tools, worker
+from .. import checks, config, power, settings as app_settings, tools, worker
 from ..audio import estimate
 from ..config import VoiceSettings, paths
 from ..jobs.models import Stage
@@ -184,6 +184,12 @@ def create_app() -> Flask:
             "audiobooks_root": s.audiobooks_root,
             # First-run nudge: no library folder chosen and not yet dismissed.
             "setup_needed": not s.audiobooks_root and not s.setup_dismissed,
+            "power_mode": s.power_mode,
+            "power_modes": [
+                {"id": m, "label": power.MODE_LABELS[m],
+                 "description": power.MODE_DESCRIPTIONS[m]}
+                for m in power.MODES
+            ],
         }
 
     # ----- pages ------------------------------------------------------------
@@ -224,19 +230,27 @@ def create_app() -> Flask:
 
     @app.post("/settings")
     def settings_save():
-        raw = (request.form.get("audiobooks_root") or "").strip()
         s = app_settings.load_settings()
-        if raw:
-            try:
-                out = worker.resolve_output_dir(raw)  # must be a writable folder
-            except worker.OutputDirError as e:
-                return {"ok": False, "error": str(e)}, 400
-            s.audiobooks_root = str(out)
-        else:
-            s.audiobooks_root = None  # cleared
+        # Each field is only touched when the form actually carries it. The page
+        # saves settings independently, and an absent field must mean "leave it
+        # alone" rather than "clear it" — otherwise saving the render mode would
+        # silently wipe the library folder.
+        if "audiobooks_root" in request.form:
+            raw = (request.form.get("audiobooks_root") or "").strip()
+            if raw:
+                try:
+                    out = worker.resolve_output_dir(raw)  # must be writable
+                except worker.OutputDirError as e:
+                    return {"ok": False, "error": str(e)}, 400
+                s.audiobooks_root = str(out)
+            else:
+                s.audiobooks_root = None  # explicitly cleared
+        if request.form.get("power_mode") is not None:
+            s.power_mode = power.normalize_mode(request.form.get("power_mode"))
         s.setup_dismissed = True  # user has engaged with setup either way
         app_settings.save_settings(s)
-        return {"ok": True, "audiobooks_root": s.audiobooks_root}
+        return {"ok": True, "audiobooks_root": s.audiobooks_root,
+                "power_mode": s.power_mode}
 
     @app.post("/settings/dismiss-setup")
     def settings_dismiss():
@@ -274,6 +288,7 @@ def create_app() -> Flask:
             state=state,
             est=est,
             output_mode=state.output_mode or worker.default_output_mode(),
+            job_power_mode=state.power_mode or app_settings.default_power_mode(),
             folder_dir=state.output_dir if state.output_mode == worker.MODE_FOLDER else str(paths().outputs),
             library_target=str(layout.library_m4b_path(Path(root), book)) if root else None,
             output_filename=layout.output_stem(book) + ".m4b",
@@ -409,6 +424,10 @@ def create_app() -> Flask:
             job_id, "preview",
             seconds=_f(request.form, "seconds", 30),
             chapter_id=request.form.get("chapter_id") or None,
+            power_mode=power.normalize_mode(
+                request.form.get("power_mode")
+                or JobStore(job_id).load_state().power_mode
+                or app_settings.default_power_mode()),
         )
         return {"ok": True}
 
@@ -430,7 +449,15 @@ def create_app() -> Flask:
         st.output_mode = mode
         st.output_dir = str(out_dir)
         store.save_state(st)
-        runner.submit(job_id, "render", output_mode=mode, output_dir=raw)
+        # Remember the intensity with the job so a resume after a restart
+        # doesn't silently go back to full speed on someone's laptop.
+        chosen_power = power.normalize_mode(
+            request.form.get("power_mode") or st.power_mode
+            or app_settings.default_power_mode())
+        st.power_mode = chosen_power
+        store.save_state(st)
+        runner.submit(job_id, "render", output_mode=mode, output_dir=raw,
+                      power_mode=chosen_power)
         return {"ok": True}
 
     @app.post("/job/<job_id>/cancel")

@@ -334,3 +334,19 @@ audio { width: 100%; margin-top: 14px; filter: saturate(.9); }
   padding: 11px 20px; border-radius: 999px; box-shadow: var(--shadow);
   opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 60; font-weight: 600; font-size: 14px; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+
+/* Render-intensity picker (Settings, and the render-plan dialog). */
+.power-modes { display: flex; flex-direction: column; gap: 8px; }
+.power-mode {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; transition: border-color .12s, background .12s;
+}
+.power-mode:hover { border-color: var(--accent); }
+.power-mode.selected { border-color: var(--accent); background: var(--accent-weak, rgba(127,127,255,.08)); }
+.power-mode input { margin-top: 3px; flex: none; }
+.power-mode > span { display: flex; flex-direction: column; gap: 2px; }
+.power-mode strong { font-weight: 600; }
+.plan-power { margin-top: 14px; }
+.plan-power-title { font-weight: 600; margin-bottom: 8px; }

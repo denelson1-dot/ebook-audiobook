@@ -224,6 +224,8 @@ const SIZE_WARN_BYTES = {{ size_warn_bytes|tojson }};
 // The library root, not the book's own folder: the folder is only created when
 // the render starts, and the root is on the same volume either way.
 const LIBRARY_TARGET_DIR = {{ (audiobooks_root or "")|tojson }};
+let powerMode = {{ job_power_mode|tojson }};
+const POWER_MODES = {{ power_modes|tojson }};
 let renderRate = {{ render_rate|tojson }};  // chars/sec, measured; may be null until a preview/render runs
 const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
                    repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
@@ -371,7 +373,19 @@ async function renderPlanBody() {
   const warn = tight
     ? `<div class="plan-warn">⚠ You may not have enough free space for the working files. Free up some disk space first, or render fewer sections.</div>`
     : "";
-  return { bodyHtml: `<div class="plan-table">${rows}</div>${explain}${warn}`, tight };
+  // Offered here rather than buried in Settings: this is the moment the user is
+  // committing hours of machine time, so it's when the trade-off is relevant.
+  const powerRows = POWER_MODES.map((m) => `
+    <label class="power-mode${m.id === powerMode ? " selected" : ""}">
+      <input type="radio" name="planPower" value="${m.id}" ${m.id === powerMode ? "checked" : ""}>
+      <span><strong>${m.label}</strong> <span class="meta">${m.description}</span></span>
+    </label>`).join("");
+  const powerBlock = `
+    <div class="plan-power">
+      <div class="plan-power-title">While this runs</div>
+      <div class="power-modes">${powerRows}</div>
+    </div>`;
+  return { bodyHtml: `<div class="plan-table">${rows}</div>${explain}${powerBlock}${warn}`, tight };
 }
 
 document.getElementById("renderBtn").addEventListener("click", async () => {
@@ -385,8 +399,10 @@ document.getElementById("renderBtn").addEventListener("click", async () => {
     danger: plan.tight,
   });
   if (!ok) return;
+  const picked = document.querySelector('input[name="planPower"]:checked');
+  if (picked) powerMode = picked.value;
   await saveSettings();
-  const body = { output_mode: outputMode };
+  const body = { output_mode: outputMode, power_mode: powerMode };
   if (outputMode === "folder") body.output_dir = outDirInput.value;
   const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
   if (!r.ok) {

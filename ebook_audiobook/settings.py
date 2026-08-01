@@ -25,6 +25,9 @@ class Settings:
     # True once the user has either set a root or explicitly skipped setup, so
     # the first-run prompt stops nagging on every page.
     setup_dismissed: bool = False
+    # Default render intensity for new jobs: "full", "balanced" or "quiet".
+    # See ebook_audiobook.power. A job may override it.
+    power_mode: str = "full"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -57,3 +60,14 @@ def save_settings(settings: Settings) -> Settings:
 def audiobooks_root() -> str | None:
     """The configured library root, or None if setup hasn't chosen one yet."""
     return load_settings().audiobooks_root
+
+
+def default_power_mode() -> str:
+    """The user's default render intensity, validated.
+
+    Read through power.normalize_mode so a hand-edited or stale settings file
+    can never put a render into a mode that doesn't exist.
+    """
+    from .power import normalize_mode
+
+    return normalize_mode(load_settings().power_mode)
