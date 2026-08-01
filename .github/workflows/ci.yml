@@ -206,6 +206,41 @@ jobs:
           bash -n install.sh
           if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh || true; fi
 
+      # This gate decides whether a Mac user is told to expect a three-hour
+      # render or a thirty-hour one, and it only ever executes on macOS — where
+      # the runner reports one OS version, so CI would exercise a single branch
+      # of it at best. Sourcing the function and feeding it versions costs
+      # nothing and covers every boundary, including macOS 26.
+      - name: The macOS Metal version gate is correct
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          # Pull the helpers verbatim out of the installer, so this tests the
+          # shipped code rather than a copy that can drift from it.
+          sed -n '/BEGIN macos-metal-gate/,/END macos-metal-gate/p' install.sh > /tmp/gate.sh
+          grep -q macos_supports_metal /tmp/gate.sh || { echo "helpers not found in install.sh"; exit 1; }
+          check() {
+            FAKE_VER="$1"; expected="$2"
+            actual=$(
+              . /tmp/gate.sh
+              macos_version() { echo "$FAKE_VER"; }
+              if macos_supports_metal; then echo metal; else echo cpu; fi
+            )
+            [ "$actual" = "$expected" ] || { echo "macOS $1: expected $expected, got $actual"; exit 1; }
+            echo "  macOS ${1:-(empty)} -> $actual"
+          }
+          check 11.7.1 cpu       # Big Sur: no MPS
+          check 12.2.1 cpu       # Monterey before 12.3
+          check 12.3   metal     # the exact cutoff
+          check 12.3.1 metal
+          check 13.5   metal     # Ventura
+          check 14.4.1 metal     # Sonoma
+          check 15.2   metal     # Sequoia
+          check 26.0   metal     # the version-number jump must not read as old
+          check unknown cpu      # sw_vers missing or failed
+          check "" cpu
+          echo "macOS Metal gate correct at every boundary"
+
       - name: Parse install.ps1
         if: runner.os == 'Windows'
         shell: pwsh

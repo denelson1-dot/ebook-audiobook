@@ -53,7 +53,10 @@ die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$*" >&2; exit 1; }
 
 have_sudo() { command -v sudo >/dev/null 2>&1; }
 
-macos_version() { sw_vers -productVersion 2>/dev/null || echo "unknown"; }
+# --- BEGIN macos-metal-gate (extracted verbatim by CI; keep the markers) ------
+macos_version() {
+  sw_vers -productVersion 2>/dev/null || echo "unknown"
+}
 
 # Can this Mac use its GPU for rendering?
 #
@@ -72,6 +75,7 @@ macos_supports_metal() {
   case "$minor" in ''|*[!0-9]*) return 1 ;; esac
   [ "$minor" -ge 3 ]
 }
+# --- END macos-metal-gate -----------------------------------------------------
 
 # Is there an NVIDIA GPU that CUDA can actually use?
 #
