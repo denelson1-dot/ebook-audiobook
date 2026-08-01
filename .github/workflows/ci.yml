@@ -75,12 +75,14 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build --wheel --outdir dist
 
-      - name: Jinja templates and static assets must be inside the wheel
+      - name: The wheel's data files match the source tree exactly
         shell: python
         run: |
-          import glob, sys, zipfile
+          import glob, pathlib, sys, zipfile
           wheel = glob.glob("dist/*.whl")[0]
-          names = zipfile.ZipFile(wheel).namelist()
+          names = set(zipfile.ZipFile(wheel).namelist())
+
+          # Present, or the UI 500s on every page.
           required = [
               "ebook_audiobook/web/templates/base.html",
               "ebook_audiobook/web/templates/library.html",
@@ -92,7 +94,26 @@ jobs:
           if missing:
               print("MISSING FROM WHEEL:", *missing, sep="\n  ")
               sys.exit(1)
-          print(f"{wheel}: all {len(required)} data files present")
+
+          # And nothing EXTRA. setuptools reuses a local build/lib directory, so
+          # a stale checkout can ship a template that was deleted from the source
+          # long ago — which is exactly what happened to a local install once.
+          # CI builds clean so this should never fire here; it is the tripwire
+          # that says the packaging has started carrying things it shouldn't.
+          for kind in ("templates", "static"):
+              on_disk = {p.name for p in
+                         pathlib.Path(f"ebook_audiobook/web/{kind}").iterdir()
+                         if p.is_file()}
+              in_wheel = {n.rsplit("/", 1)[1] for n in names
+                          if n.startswith(f"ebook_audiobook/web/{kind}/")
+                          and not n.endswith("/")}
+              extra = in_wheel - on_disk
+              if extra:
+                  print(f"STALE {kind} IN WHEEL (not in the source tree):",
+                        *sorted(extra), sep="\n  ")
+                  sys.exit(1)
+              print(f"  {kind}: {len(in_wheel)} files, matching the source tree")
+          print(f"{wheel}: data files verified")
 
       - name: Install the wheel into a clean environment
         shell: bash
