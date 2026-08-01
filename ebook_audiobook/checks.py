@@ -12,7 +12,7 @@ import platform
 import sys
 from dataclasses import dataclass
 
-from . import tools
+from . import device, tools
 from .config import data_root, paths
 
 
@@ -107,6 +107,21 @@ def check_data_root() -> CheckResult:
         )
 
 
+def engine_install_hint() -> str:
+    """How to install the speech engine into *this* interpreter's environment.
+
+    Deliberately not ``pip install 'ebook-audiobook[tts]'``: that extra only
+    resolves if the project is on PyPI under that name, which it is not, so the
+    advice could never work. ``sys.executable -m pip`` also targets the venv the
+    app is actually running in, rather than whichever ``pip`` happens to be on
+    PATH — which for a user who installed via the one-line installer is usually a
+    different Python entirely.
+    """
+    return (f'  "{sys.executable}" -m pip install torch torchaudio chatterbox-tts '
+            f'"setuptools<81"\n'
+            "  (see the README for the CPU-only and CUDA builds)")
+
+
 def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
     """Non-fatal: the pipeline runs with the fake engine without this."""
     if engine == "fake":
@@ -117,29 +132,23 @@ def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
         return CheckResult(
             "tts engine (chatterbox)", False,
             "not installed — you can import books, but not render audio",
-            fix="pip install 'ebook-audiobook[tts]'  (see the README for GPU builds)",
+            fix=engine_install_hint(),
             required=False,
         )
 
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
+    dev = device.select_device()
     try:
         import chatterbox  # noqa: F401
 
         cb = True
     except Exception:
         cb = False
-    detail = f"torch {torch.__version__}, device={device}, chatterbox={'yes' if cb else 'no'}"
-    if device == "cpu":
-        detail += " (CPU works but is slow — an NVIDIA GPU or Apple Silicon is much faster)"
+    detail = (f"torch {torch.__version__}, chatterbox={'yes' if cb else 'no'}, "
+              f"running on {dev.describe()}")
     # Any device can render; CPU is just slow, so it's not a failure.
     return CheckResult(
         "tts engine (chatterbox)", cb, detail,
-        fix=None if cb else "pip install 'ebook-audiobook[tts]'",
+        fix=None if cb else engine_install_hint(),
         required=False,
     )
 
