@@ -57,10 +57,18 @@ def tag_m4b(path: Path, book: Book) -> None:
     audio["sonm"] = [sort_val]
 
     if book.cover_path and Path(book.cover_path).exists():
+        # The format flag is taken from the bytes, not the filename. Covers are
+        # normalized to JPEG/PNG on extraction, but a job created before that
+        # (or edited by hand) can still have PNG data in a .jpg — and a wrong
+        # flag here yields a file that looks perfect and renders as a blank
+        # square. Anything unrecognisable is left off rather than mislabelled.
+        from ..pipeline.cover import PNG, sniff_image
+
         data = Path(book.cover_path).read_bytes()
-        fmt = (MP4Cover.FORMAT_PNG if Path(book.cover_path).suffix.lower() == ".png"
-               else MP4Cover.FORMAT_JPEG)
-        audio["covr"] = [MP4Cover(data, imageformat=fmt)]
+        kind = sniff_image(data)
+        if kind is not None:
+            fmt = MP4Cover.FORMAT_PNG if kind == PNG else MP4Cover.FORMAT_JPEG
+            audio["covr"] = [MP4Cover(data, imageformat=fmt)]
 
     # Deterministic Audnexus matching when we have an identifier.
     if book.isbn:

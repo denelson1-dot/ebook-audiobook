@@ -30,6 +30,7 @@ from .hashing import file_hash, segment_id, text_hash, voice_key
 from .jobs.models import Book, Chapter, JobState, Segment, Stage
 from .jobs.store import JobStore
 from .pipeline import assemble, extract, layout, package
+from .pipeline import cover as cover_mod
 from .pipeline.chunk import chunk_structured
 from .pipeline.normalize import apply_pronunciation, normalize_text, normalize_title
 from .tts import get_adapter
@@ -300,10 +301,16 @@ def _extract_job(store: JobStore) -> list[Chapter]:
             "needed."
         )
 
+    # Trust the bytes, not the manifest's extension: covers arrive as WebP,
+    # GIF, or PNG-in-a-.jpg, and embedding those under the wrong format flag
+    # produces a file that validates fine and shows a blank square in Plex.
     if raw.cover_bytes:
-        cover = store.dir / f"cover{raw.cover_ext or '.jpg'}"
-        cover.write_bytes(raw.cover_bytes)
-        book.cover_path = str(cover)
+        normalized = cover_mod.normalize_cover(raw.cover_bytes)
+        if normalized:
+            data, ext = normalized
+            cover = store.dir / f"cover{ext}"
+            cover.write_bytes(data)
+            book.cover_path = str(cover)
     book.title = raw.title
     book.author = raw.author
     book.year = raw.year
