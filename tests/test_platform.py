@@ -216,3 +216,40 @@ def test_trailing_dot_stripped():
 def test_empty_or_junk_title_falls_back():
     assert layout.sanitize_component("", "Untitled") == "Untitled"
     assert layout.sanitize_component('///:::', "Untitled") == "Untitled"
+
+
+# --- launching without a console (Windows pythonw.exe) -----------------------
+
+def test_console_setup_survives_absent_streams(monkeypatch):
+    """Desktop/Start-Menu shortcuts run under pythonw.exe, where sys.stdout and
+    sys.stderr are None. Anything that prints would otherwise die with
+    AttributeError before the browser ever opened."""
+    from ebook_audiobook.cli import _use_utf8_console
+
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    _use_utf8_console()
+
+    assert sys.stdout is not None and sys.stderr is not None
+    print("this must not raise")              # the actual failure mode
+    print("nor this", file=sys.stderr)
+    sys.stdout.write("nor a direct write")
+    sys.stdout.flush()
+
+
+def test_console_setup_is_idempotent():
+    """It runs on every entry point; calling it twice must be harmless."""
+    from ebook_audiobook.cli import _use_utf8_console
+
+    _use_utf8_console()
+    _use_utf8_console()
+    print("still fine")
+
+
+def test_gui_entry_point_is_exported():
+    """pyproject registers this as a gui_script; a rename would silently break
+    every desktop shortcut created by the installer."""
+    from ebook_audiobook import cli
+
+    assert callable(cli.main_gui)

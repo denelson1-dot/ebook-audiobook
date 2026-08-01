@@ -14,6 +14,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import checks, config
@@ -25,15 +26,27 @@ from . import worker
 
 
 def _use_utf8_console() -> None:
-    """Make sure printing a book title can't crash the program on Windows.
+    """Make the output streams safe to print to, whatever launched us.
 
-    Windows consoles still default to a legacy code page (cp1252 in the US/EU),
-    and Python encodes stdout with it. One curly quote or accented author name —
-    both extremely common in ebook metadata — would then raise
-    ``UnicodeEncodeError`` from an innocent ``print``. Re-encoding as UTF-8 with
-    replacement means the worst case is a mangled character, not a crash.
+    Two Windows-specific hazards, both of which turn an innocent ``print`` into a
+    crash:
+
+    * Windows consoles still default to a legacy code page (cp1252 in the US and
+      much of Europe), and Python encodes stdout with it. A single curly quote or
+      accented author name — both everywhere in ebook metadata — raises
+      ``UnicodeEncodeError``. Re-encoding as UTF-8 with replacement means the
+      worst case is a mangled character rather than a failed render.
+    * Launched through ``pythonw.exe`` (which is how the desktop and Start Menu
+      shortcuts run, so no console window appears), ``sys.stdout`` and
+      ``sys.stderr`` are ``None``. Anything that prints then dies with
+      ``AttributeError: 'NoneType' object has no attribute 'write'``. Pointing
+      them at the null device keeps every print harmless.
     """
-    for stream in (sys.stdout, sys.stderr):
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+            continue
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError, OSError):
