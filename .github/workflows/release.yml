@@ -72,29 +72,37 @@ jobs:
           verify/bin/python ci/smoke_render.py
           verify/bin/python ci/smoke_web.py
 
-      # Publish installers with their version baked in, so `latest/download/`
-      # can serve a fixed script name while still resolving a versioned wheel.
+      # Publish the installers under names that say who they are for, so the
+      # release's file list is self-explanatory rather than two cryptic scripts.
+      # Deliberately version-FREE: `releases/latest/download/<name>` can only
+      # resolve a fixed filename, and that URL is the documented one-liner. The
+      # version still travels inside the script (stamped below) so it always
+      # fetches the wheel it belongs to.
       - name: Stamp the installers with this version
         run: |
           mkdir -p out
-          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.sh  > out/install.sh
-          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.ps1 > out/install.ps1
-          chmod +x out/install.sh
-          grep -q "${{ steps.version.outputs.version }}" out/install.sh
-          grep -q "${{ steps.version.outputs.version }}" out/install.ps1
+          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.sh  > out/install-macos-linux.sh
+          sed "s/__EBAB_VERSION__/${{ steps.version.outputs.version }}/" install.ps1 > out/install-windows.ps1
+          chmod +x out/install-macos-linux.sh
+          grep -q "${{ steps.version.outputs.version }}" out/install-macos-linux.sh
+          grep -q "${{ steps.version.outputs.version }}" out/install-windows.ps1
           echo "installers stamped"
 
+      # Cover the installers too, not just the wheel. They are what people pipe
+      # into a shell, so they are the assets most worth being able to verify.
       - name: Checksums
         run: |
+          cp out/install-macos-linux.sh out/install-windows.ps1 dist/
           cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+          rm -f install-macos-linux.sh install-windows.ps1
 
       - uses: actions/upload-artifact@v4
         with:
           name: release-files
           path: |
             dist/*
-            out/install.sh
-            out/install.ps1
+            out/install-macos-linux.sh
+            out/install-windows.ps1
 
   # Prove the published installers work on all three OSes before the release is
   # visible, by running them against the wheel this build produced.
@@ -158,23 +166,41 @@ jobs:
         run: |
           mkdir -p upload
           cp artifacts/dist/* upload/
-          cp artifacts/out/install.sh artifacts/out/install.ps1 upload/
+          cp artifacts/out/install-macos-linux.sh artifacts/out/install-windows.ps1 upload/
           ls -la upload/
 
       - name: Release notes
         run: |
           VERSION="${{ needs.build.outputs.version }}"
+          REPO="${{ github.repository }}"
           cat > NOTES.md <<EOF
+          ### Which download do I need?
+
+          | Your computer | File |
+          |---|---|
+          | **Windows** 10 / 11 (64-bit) | \`install-windows.ps1\` |
+          | **macOS** — Apple Silicon (M1 and later) | \`install-macos-linux.sh\` |
+          | **macOS** — Intel | \`install-macos-linux.sh\` — see the note below |
+          | **Linux** — x86-64 or ARM64 | \`install-macos-linux.sh\` |
+
+          You don't need to pick an architecture: the app itself is pure Python and
+          runs anywhere, and the installer detects your CPU and GPU and fetches the
+          matching PyTorch build (NVIDIA CUDA, AMD ROCm, Apple Metal, or CPU-only).
+
+          The \`.whl\` and \`.tar.gz\` are the Python package, for installing with
+          \`pip\` yourself. Most people want one of the two installers above.
+          \`SHA256SUMS.txt\` lets you verify any of them.
+
           ## Install
 
           **macOS / Linux**
           \`\`\`bash
-          curl -fsSL https://github.com/${{ github.repository }}/releases/download/v$VERSION/install.sh | bash
+          curl -fsSL https://github.com/$REPO/releases/download/v$VERSION/install-macos-linux.sh | bash
           \`\`\`
 
           **Windows** (PowerShell)
           \`\`\`powershell
-          irm https://github.com/${{ github.repository }}/releases/download/v$VERSION/install.ps1 | iex
+          irm https://github.com/$REPO/releases/download/v$VERSION/install-windows.ps1 | iex
           \`\`\`
 
           The installer sets up its own private Python environment, picks the right
@@ -182,13 +208,24 @@ jobs:
           Nothing is installed system-wide and no administrator rights are needed.
 
           After installing, run \`ebook-audiobook\` (or use the Start Menu / application
-          menu entry). See the [README](https://github.com/${{ github.repository }}#readme)
-          for the full guide.
+          menu entry). See the [README](https://github.com/$REPO#readme) for the full guide.
 
           ### Requirements
           - Python 3.11+ (the installer offers to install it)
           - [Calibre](https://calibre-ebook.com/download) — reads your ebook files
           - ffmpeg is **included**, no separate install needed
+
+          ### Hardware
+          | | Speed for a ~110,000-word novel |
+          |---|---|
+          | NVIDIA GPU (Windows / Linux) | 2–3 hours |
+          | AMD Radeon (Linux, ROCm) | 3–4 hours |
+          | Apple Silicon, macOS 12.3+ (Metal) | a few hours |
+          | No GPU, or Intel Mac | many hours — leave it overnight |
+
+          > **Intel Macs**: PyTorch stopped shipping Intel-Mac builds after 2.2.2, so
+          > the speech engine can't be installed there. The app installs and everything
+          > except rendering works.
 
           ### Verified on
           Windows, macOS, and Linux — Python 3.11, 3.12, and 3.13.
@@ -198,7 +235,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: ebook-audiobook ${{ needs.build.outputs.version }}
+          name: ebook-audiobook ${{ needs.build.outputs.version }} — Windows, macOS, Linux
           body_path: NOTES.md
           files: upload/*
           draft: false

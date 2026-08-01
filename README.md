@@ -18,13 +18,13 @@ Nothing is installed system-wide and you don't need administrator rights.
 **macOS and Linux**
 
 ```bash
-curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-macos-linux.sh | bash
 ```
 
 **Windows** — open PowerShell and run:
 
 ```powershell
-irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.ps1 | iex
+irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1 | iex
 ```
 
 Then start it:
@@ -73,7 +73,7 @@ Menu entry; on Linux, an application-menu entry.
 ebook-audiobook-uninstall            # macOS/Linux
 ```
 ```powershell
-iex "& { $(irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.ps1) } -Uninstall"
+iex "& { $(irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1) } -Uninstall"
 ```
 
 Your books, settings, and finished audiobooks are **never** deleted by an
