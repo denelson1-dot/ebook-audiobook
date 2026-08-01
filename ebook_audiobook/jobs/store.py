@@ -111,9 +111,36 @@ class JobStore:
                     pass
         return total
 
+    def imported_source(self) -> Path | None:
+        """The copy of the ebook made at import time, if it's still there.
+
+        Lives in ``imports/`` rather than the job directory, so it has to be
+        found via book.json and cleaned up explicitly — otherwise deleting a job
+        leaves the whole ebook on disk and the space the UI promised to free
+        never comes back.
+        """
+        try:
+            src = Path(self.load_book().source_path)
+        except (OSError, ValueError, KeyError):
+            return None
+        # Only ever remove files we put in imports/ ourselves. A job created
+        # by the CLI from a path outside the data root must never have the
+        # user's own copy of the book deleted out from under them.
+        try:
+            imports = paths().imports.resolve()
+            if src.resolve().parent != imports:
+                return None
+        except OSError:
+            return None
+        return src if src.is_file() else None
+
     def disk_bytes(self) -> int:
-        """All bytes this job occupies: its job dir plus its final output."""
+        """All bytes this job occupies: its job dir, its imported source copy,
+        and its final output."""
         total = self._tree_bytes(self.dir) + self._tree_bytes(self.preview_path())
+        src = self.imported_source()
+        if src:
+            total += self._tree_bytes(src)
         out = self.output_path()
         if out:
             total += self._tree_bytes(out)
@@ -155,8 +182,11 @@ class JobStore:
         freed = self.disk_bytes()
         state = self.load_state()
         out = self.output_path()
+        src = self.imported_source()  # read before the job dir (and book.json) go
         shutil.rmtree(self.dir, ignore_errors=True)
         self.preview_path().unlink(missing_ok=True)
+        if src:
+            src.unlink(missing_ok=True)
         if out:
             Path(out).unlink(missing_ok=True)
             # For a library-tree output, tidy up the book's own folder (its

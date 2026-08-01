@@ -7,6 +7,7 @@ import pytest
 
 from ebook_audiobook.jobs.models import Book, Chapter, JobState, Stage
 from ebook_audiobook.jobs.store import JobStore
+from ebook_audiobook.config import paths
 from ebook_audiobook.web import create_app
 
 from ebook_audiobook import tools
@@ -239,3 +240,36 @@ def test_prereqs_reports_shape(client):
     assert isinstance(d["ok"], bool)
     for c in d["checks"]:
         assert {"name", "ok", "detail", "fix", "required"} <= set(c)
+
+
+def test_uploading_a_book_leaves_no_second_copy_behind(client, synthetic_epub):
+    """An upload used to be saved under its own name *and* copied to a
+    content-addressed name, so every book uploaded through the browser was
+    stored twice and the staging copy was never reclaimed by anything."""
+    import io
+
+    data = {
+        "file": (io.BytesIO(synthetic_epub.read_bytes()), "War and Peace.epub"),
+        "engine": "fake",
+    }
+    r = client.post("/import", data=data, content_type="multipart/form-data")
+    assert r.status_code == 302
+    job_id = r.headers["Location"].rstrip("/").split("/")[-1]
+
+    imports = paths().imports
+    left = sorted(p.name for p in imports.iterdir() if p.is_file())
+    assert left == [f"{job_id}.epub"], f"staging copies left in imports/: {left}"
+    assert not list(paths().tmp.glob("upload-*")), "upload staging file not cleaned up"
+
+
+def test_upload_with_a_non_ascii_name_still_imports(client, synthetic_epub):
+    """secure_filename() strips non-ASCII to nothing; the extension decides which
+    importer runs, so it has to survive independently of the stem."""
+    import io
+
+    data = {
+        "file": (io.BytesIO(synthetic_epub.read_bytes()), "Война и мир.epub"),
+        "engine": "fake",
+    }
+    r = client.post("/import", data=data, content_type="multipart/form-data")
+    assert r.status_code == 302, r.data[:400]

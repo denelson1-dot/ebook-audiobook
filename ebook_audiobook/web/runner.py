@@ -44,6 +44,11 @@ class _Task:
 
 
 class Runner:
+    # How long the worker waits for new work before exiting. Not a tuning knob —
+    # it's here so the idle-exit race can be stress-tested at a timeout short
+    # enough to hit the window thousands of times a second.
+    IDLE_TIMEOUT = 1.0
+
     def __init__(self):
         self._q: "queue.Queue[_Task]" = queue.Queue()
         self._thread: threading.Thread | None = None
@@ -54,7 +59,7 @@ class Runner:
 
     def _ensure_thread(self) -> None:
         with self._lock:
-            if self._thread and self._thread.is_alive():
+            if self._thread is not None and self._thread.is_alive():
                 return
             self._thread = threading.Thread(target=self._loop, daemon=True)
             self._thread.start()
@@ -62,9 +67,21 @@ class Runner:
     def _loop(self) -> None:
         while True:
             try:
-                task = self._q.get(timeout=1.0)
+                task = self._q.get(timeout=self.IDLE_TIMEOUT)
             except queue.Empty:
-                return  # idle: let the thread exit; re-spawned on next submit
+                # Idle — the thread exits and is re-spawned on the next submit.
+                # Deciding that under the lock is what makes it safe: submit()
+                # enqueues *before* calling _ensure_thread, so a thread that
+                # simply returned here could be seen as still alive by a submit
+                # that had already queued work, and the task would sit in the
+                # queue forever with the UI stuck on "queued" and a Stop button
+                # that does nothing. Re-checking the queue while holding the same
+                # lock closes that window in both directions.
+                with self._lock:
+                    if not self._q.empty():
+                        continue
+                    self._thread = None
+                    return
             self.current = f"{task.job_id}:{task.kind}"
             try:
                 self._run(task)

@@ -8,6 +8,7 @@ browser polls ``/job/<id>/status`` and ``/api/status``.
 from __future__ import annotations
 
 import re
+import uuid
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
@@ -291,26 +292,43 @@ def create_app() -> Flask:
     @app.post("/import")
     def import_ebook():
         engine = request.form.get("engine", "chatterbox")
+
+        def fail(message: str, code: int = 400):
+            return render_template("new.html", start=str(Path.home()),
+                                   error=message), code
+
         src_path = None
+        # An upload lands in a staging file that is always removed below:
+        # import_ebook() takes its own content-addressed copy, so keeping this
+        # one would silently store every uploaded book twice, forever.
+        staged: Path | None = None
         upload = request.files.get("file")
         if upload and upload.filename:
-            dest = p.imports / _safe_upload_name(upload.filename)
-            upload.save(dest)
-            src_path = str(dest)
+            staged = p.tmp / f"upload-{uuid.uuid4().hex}-{_safe_upload_name(upload.filename)}"
+            try:
+                upload.save(staged)
+            except OSError as e:
+                staged.unlink(missing_ok=True)
+                return fail(f"Couldn't save the uploaded file — is the disk full?\n\n{e}")
+            src_path = str(staged)
         elif request.form.get("path"):
             # Local path import is intentional for a single-user localhost tool.
             src_path = request.form["path"].strip()
         if not src_path:
-            return render_template("new.html", start=str(Path.home()),
-                                   error="Choose an ebook file first."), 400
+            return fail("Choose an ebook file first.")
         try:
             job_id = worker.import_ebook(src_path, engine=engine)
         except FileNotFoundError:
-            return render_template("new.html", start=str(Path.home()),
-                                   error=f"That file no longer exists:\n{src_path}"), 400
+            return fail(f"That file no longer exists:\n{src_path}")
         except ValueError as e:
             # Unsupported/again-actionable format problems — show the guidance inline.
-            return render_template("new.html", start=str(Path.home()), error=str(e)), 400
+            return fail(str(e))
+        except OSError as e:
+            # Out of space, unreadable source, permission denied on the data dir.
+            return fail(f"Couldn't import that book:\n\n{e}")
+        finally:
+            if staged is not None:
+                staged.unlink(missing_ok=True)
         runner.submit(job_id, "extract")
         return redirect(url_for("job_page", job_id=job_id))
 

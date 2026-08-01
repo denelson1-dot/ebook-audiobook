@@ -1,4 +1,4 @@
-from ebook_audiobook.config import VoiceSettings
+from ebook_audiobook.config import VoiceSettings, paths
 from ebook_audiobook.hashing import segment_id, voice_key
 from ebook_audiobook.jobs.models import Book, Chapter, JobState, Segment, Stage
 from ebook_audiobook.jobs.store import JobStore
@@ -106,3 +106,49 @@ def test_delete_removes_everything(tmp_path):
     assert freed >= 1234
     assert not store.dir.exists()
     assert not store.preview_path().exists()
+
+
+# --- reclaiming disk space ---------------------------------------------------
+#
+# A 3 GB library makes leaks matter. Two paths used to leave the whole ebook
+# behind: deleting a job never touched its imported copy, and the web upload
+# staged a second copy that nothing ever removed.
+
+def test_delete_removes_the_imported_copy_of_the_book():
+    """Deleting a job must actually free the space the UI said it would."""
+    imports = paths().ensure().imports
+    src = imports / "job-del.epub"
+    src.write_bytes(b"x" * 5000)
+
+    store = JobStore("job-del").ensure()
+    store.save_book(Book(job_id="job-del", source_path=str(src), source_hash="h"))
+    store.save_state(JobState(job_id="job-del"))
+
+    assert store.disk_bytes() >= 5000  # the import is counted...
+    freed = store.delete()
+    assert not src.exists(), "the imported ebook survived a job delete"
+    assert freed >= 5000  # ...and reported as freed
+
+
+def test_delete_never_touches_a_book_outside_the_data_folder(tmp_path):
+    """A CLI job points at the user's own file. Deleting the job must not eat it."""
+    users_own = tmp_path / "my-library" / "novel.epub"
+    users_own.parent.mkdir(parents=True)
+    users_own.write_bytes(b"precious")
+
+    store = JobStore("job-ext").ensure()
+    store.save_book(Book(job_id="job-ext", source_path=str(users_own), source_hash="h"))
+    store.save_state(JobState(job_id="job-ext"))
+
+    assert store.imported_source() is None
+    store.delete()
+    assert users_own.exists(), "deleting a job deleted the user's own ebook"
+
+
+def test_imported_source_tolerates_a_missing_or_broken_book_record():
+    """Never let cleanup bookkeeping raise and block a delete."""
+    store = JobStore("job-empty").ensure()
+    assert store.imported_source() is None  # no book.json at all
+
+    store.save_book(Book(job_id="job-empty", source_path="", source_hash=""))
+    assert store.imported_source() is None

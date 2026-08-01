@@ -129,10 +129,13 @@ def cmd_convert(args) -> int:
 
     if args.preview_seconds and args.engine != "fake":
         print(f"preview (~{args.preview_seconds}s)...")
-        worker.render_job(job_id, preview_max_seconds=args.preview_seconds, progress=_progress)
+        st = worker.render_job(job_id, preview_max_seconds=args.preview_seconds,
+                               progress=_progress)
         print()
-        st = JobStore(job_id).load_state()
-        print(f"  preview: {st.output_path}")
+        # preview_output, not output_path: a preview must never claim to be the
+        # finished audiobook, so it's tracked separately. Reading output_path
+        # here printed None, or worse, a previous full render's .m4b.
+        print(f"  preview: {st.preview_output}")
         if not args.yes:
             resp = input("proceed with full render? [y/N] ").strip().lower()
             if resp != "y":
@@ -173,7 +176,7 @@ def cmd_preview(args) -> int:
     _apply_voice(args.job_id, args)
     state = worker.render_job(args.job_id, preview_max_seconds=args.seconds, progress=_progress)
     print()
-    print(f"preview: {state.output_path}")
+    print(f"preview: {state.preview_output}")
     return 0
 
 
