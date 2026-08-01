@@ -12,7 +12,9 @@ import platform
 import sys
 from dataclasses import dataclass
 
-from . import device, tools
+# quiet is imported for its side effect: it filters the engine's import-time
+# noise before check_tts_engine() below pulls chatterbox in.
+from . import device, quiet, tools  # noqa: F401
 from .config import data_root, paths
 
 

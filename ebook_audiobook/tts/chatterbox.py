@@ -10,23 +10,15 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-import warnings
 
 import numpy as np
 
-from .. import device
+from .. import device, quiet
 from .adapter import AudioClip, TTSAdapter, VoiceConfig
 
-# The ML stack is noisy: a "loaded PerthNet" stdout line, tqdm sampling bars, and
-# a handful of import-time deprecation warnings from perth/diffusers/HF. Silence
-# them by default so our own progress line is the only output. Set EBAB_VERBOSE=1
-# to restore everything (useful when debugging the engine).
-_VERBOSE = os.environ.get("EBAB_VERBOSE") == "1"
-if not _VERBOSE:
-    os.environ.setdefault("TQDM_DISABLE", "1")  # kills the sampling progress bars
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", message=r".*pkg_resources is deprecated.*")
+# Imported for its side effect: the engine's import-time noise is filtered out
+# before we pull the library in below. See ebook_audiobook/quiet.py.
+_VERBOSE = quiet.VERBOSE
 
 
 def _hush_loggers() -> None:

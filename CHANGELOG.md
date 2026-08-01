@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.1 — 2026-08-01
+
+A clean launch window. Starting the app from the Start Menu, the application
+menu, or a terminal produced a screen of alarming-looking errors that were
+never ours — GPU driver complaints, component-updater failures, extension
+chatter — leaving a new user to conclude the app had crashed when it had in
+fact started perfectly.
+
+- **The browser we open no longer reports into our window.** `webbrowser.open`
+  spawns the browser with no output redirection, so it inherited our stdout and
+  stderr; Chrome writes a wall of startup diagnostics to stderr. The launch is
+  now wrapped so the browser gets `devnull` instead.
+- **The engine's deprecation warning is suppressed for real.** The filters
+  existed but were registered in the TTS adapter, and the startup check imports
+  `chatterbox` (and so `perth`) to report whether the engine is present — which
+  happens without the adapter ever being loaded. They now live in
+  `ebook_audiobook/quiet.py`, imported before either path pulls the engine in.
+
+A normal start is now two lines: where it is running, and how to stop it. Set
+`EBAB_VERBOSE=1` to get everything back when debugging the engine.
+
 ## 1.1.0 — 2026-08-01
 
 A large release. Hardware support is the headline: current NVIDIA and AMD
