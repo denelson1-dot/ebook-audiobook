@@ -21,7 +21,20 @@ from ..jobs.store import JobStore
 def _terminal_progress(job_id: str):
     """A throttled progress printer so the console running the server shows the
     render is alive (segments completing) instead of sitting silent after the
-    'loading TTS model' line."""
+    'loading TTS model' line.
+
+    Returns None when there is no console to print to — launched from the
+    application menu or a Start Menu shortcut, stderr is a pipe, the journal, or
+    (under pythonw) the null device, and printing there is at best invisible and
+    at worst several thousand lines of noise in the system log per render.
+    """
+    stderr = getattr(sys, "stderr", None)
+    try:
+        if not (stderr and stderr.isatty()):
+            return None
+    except (AttributeError, ValueError):
+        return None
+
     last = [0.0]
 
     def cb(state) -> None:
@@ -160,6 +173,20 @@ class Runner:
             if job_id is None:
                 return self.current is not None or bool(self._pending)
             return (self.current or "").startswith(f"{job_id}:") or self._pending.get(job_id, 0) > 0
+
+    def current_kind(self) -> str | None:
+        """What is running right now — "render", "preview", "extract",
+        "voice_test" — or None.
+
+        The quit paths use this to size their warning: interrupting a six-hour
+        render deserves a different sentence from interrupting a voice sample
+        that will be finished before the user reads it.
+        """
+        current = self.current
+        if not current:
+            return None
+        _, _, kind = current.partition(":")
+        return kind or None
 
 
 runner = Runner()

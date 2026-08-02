@@ -39,8 +39,31 @@ ebook-audiobook
 > signed in, which makes the same command work for anyone with repo access. Once
 > the repository is public, no such fallback is needed.
 
-That opens the web interface in your browser. On Windows there's also a Start
-Menu entry; on Linux, an application-menu entry.
+That opens the app in its own window — no terminal to leave sitting there, and
+no tab lost among your others. You'll also find it in the Start Menu on Windows,
+the Applications folder on macOS, and the application menu on Linux.
+
+**Closing the window doesn't stop a render.** The app keeps running in the
+system tray so an overnight conversion finishes on its own; open the window
+again from the tray or by launching the app a second time. To stop it properly,
+use **Quit** — in the tray menu, or at the bottom of the sidebar. Either one
+warns you first if a render is still going.
+
+<details>
+<summary>What the window actually is, and when the tray isn't there</summary>
+
+The interface is a local web app, shown in a chromeless window borrowed from
+whichever Chromium-family browser you have (Chrome, Edge, Brave, Chromium). If
+you don't have one, it falls back to a normal tab in your default browser —
+Firefox has no equivalent window mode.
+
+The tray icon needs a system tray, and **GNOME doesn't have one** unless you've
+installed an AppIndicator shell extension. Without a tray the app still works
+and still keeps running after you close the window; you just get it back by
+launching it again rather than from a tray icon, and you quit from the sidebar.
+Run with `--no-tray` to skip the tray deliberately.
+
+</details>
 
 <details>
 <summary>Installer options</summary>
@@ -85,9 +108,9 @@ uninstall. `ebook-audiobook paths` shows you where they live.
 
 ## Using it
 
-### The web interface
+### The app window
 
-Run `ebook-audiobook` and your browser opens. Then:
+Run `ebook-audiobook`, or launch it from your applications menu. Then:
 
 1. **New conversion** → pick a DRM-free ebook from your computer.
 2. Choose a **voice** and adjust the settings — expressiveness and pacing up
@@ -115,7 +138,9 @@ actions.
 ### The command line
 
 ```bash
-ebook-audiobook                                   # open the web UI
+ebook-audiobook                                   # open the app window
+ebook-audiobook web --no-tray                     # ...without a tray icon
+ebook-audiobook web --no-browser                  # ...server only, no window
 ebook-audiobook check                             # is everything installed?
 ebook-audiobook paths                             # where is my data?
 ebook-audiobook convert book.epub --preview-seconds 30   # preview, then confirm
@@ -370,11 +395,13 @@ see exactly where. By default:
 | Linux | `~/.local/share/ebook-audiobook` |
 
 ```
-imports/    copies of your source ebooks
-jobs/       per-book state + cached segment/chapter audio
-voices/     your reference clips
-outputs/    previews, and finished files when no library folder is set
+imports/          copies of your source ebooks
+jobs/             per-book state + cached segment/chapter audio
+voices/           your reference clips
+outputs/          previews, and finished files when no library folder is set
+browser-profile/  the app window's own browser profile (~50 MB, disposable)
 settings.json
+runtime.json      only while running: which port the app is on
 ```
 
 Finished audiobooks go to your **Plex library folder** (set in Settings), not
@@ -464,9 +491,9 @@ deleted after two weeks, and never transmitted. `ebook-audiobook report` prints
 it for you to share if *you* choose to, with your home directory and book titles
 removed.
 
-**Security:** the web interface has **no authentication** and binds to
-`127.0.0.1` deliberately. It's a single-user local tool. Don't expose it to a
-network or bind it to `0.0.0.0` — the "import by local path" feature reads
+**Security:** the interface behind the app window has **no authentication** and
+binds to `127.0.0.1` deliberately. It's a single-user local tool. Don't expose it
+to a network or bind it to `0.0.0.0` — the "import by local path" feature reads
 arbitrary local files, so an exposed instance would leak them.
 
 ---

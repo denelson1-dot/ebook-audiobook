@@ -55,7 +55,13 @@ jobs:
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           required = ["ebook_audiobook/web/templates/base.html",
-                      "ebook_audiobook/web/static/app.css"]
+                      "ebook_audiobook/web/static/app.css",
+                      # Without these the app still runs, just with no tray icon
+                      # and a generic window — a failure quiet enough that only
+                      # an explicit check catches it.
+                      "ebook_audiobook/assets/icon-256.png",
+                      "ebook_audiobook/assets/icon.ico",
+                      "ebook_audiobook/assets/icon.icns"]
           missing = [r for r in required if r not in names]
           if missing:
               sys.exit("MISSING FROM WHEEL: " + ", ".join(missing))

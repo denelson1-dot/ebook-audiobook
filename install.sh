@@ -265,10 +265,18 @@ BIN_DIR="$HOME/.local/bin"
 # --- uninstall ---------------------------------------------------------------
 if [ "$DO_UNINSTALL" = "1" ]; then
   step "Uninstalling ebook-audiobook"
+  # Keep this list identical to the generated ebook-audiobook-uninstall below.
+  # The banner tells people the two are equivalent, and a divergence here is
+  # invisible until someone is left with a launcher that bounces once and dies
+  # because the program it points at is gone.
   rm -rf "$VENV"
   rm -f "$BIN_DIR/ebook-audiobook"
+  rm -f "$BIN_DIR/ebook-audiobook-uninstall"
   rm -f "$HOME/.local/share/applications/ebook-audiobook.desktop"
-  rm -f "$HOME/Desktop/ebook-audiobook.desktop"
+  rm -f "$HOME/.local/share/icons/hicolor"/*/apps/ebook-audiobook.png
+  rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/ebook-audiobook.svg"
+  rm -rf "$HOME/Applications/ebook-audiobook.app"
+  rm -rf "$DATA_DIR/browser-profile"
   ok "program removed"
   say ""
   say "  Your books, settings, and audiobooks were NOT deleted. They're in:"
@@ -670,6 +678,18 @@ LAUNCHER
 chmod +x "$BIN_DIR/ebook-audiobook"
 ok "command: ebook-audiobook"
 
+# Where the wheel keeps the icons, so the desktop entry and the .app bundle can
+# point at real files rather than a stock system icon.
+ASSETS="$("$VPY" -c 'import ebook_audiobook, pathlib; print(pathlib.Path(ebook_audiobook.__file__).parent / "assets")' 2>/dev/null || true)"
+# What actually got installed. $VERSION is the *requested* version and is
+# usually the literal "latest", which macOS will not accept as a bundle version.
+# CFBundleVersion must be period-separated integers, and __version__ degrades to
+# "0.0.0+unknown" when the dist metadata can't be read — which macOS rejects.
+APP_VERSION="$("$VPY" -c 'import ebook_audiobook; print(ebook_audiobook.__version__)' 2>/dev/null || echo "")"
+case "$APP_VERSION" in
+  ''|*[!0-9.]*) APP_VERSION="1.0" ;;
+esac
+
 # A self-contained uninstaller, so removing the app never requires re-fetching
 # this script or remembering which directories it touched.
 cat > "$BIN_DIR/ebook-audiobook-uninstall" <<UNINSTALL
@@ -680,6 +700,12 @@ echo "Removing the ebook-audiobook program from:"
 echo "  $VENV"
 rm -rf "$VENV"
 rm -f "$HOME/.local/share/applications/ebook-audiobook.desktop"
+rm -f "$HOME/.local/share/icons/hicolor"/*/apps/ebook-audiobook.png
+rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/ebook-audiobook.svg"
+rm -rf "$HOME/Applications/ebook-audiobook.app"
+# The app window's own browser profile. Regenerated on next launch; holds no
+# books, settings or audiobooks, only Chromium's window-size cache.
+rm -rf "$DATA_DIR/browser-profile"
 rm -f "$BIN_DIR/ebook-audiobook"
 echo
 echo "Done. Your books, settings, and audiobooks were kept, in:"
@@ -691,21 +717,102 @@ chmod +x "$BIN_DIR/ebook-audiobook-uninstall"
 ok "command: ebook-audiobook-uninstall"
 
 if [ "$PLATFORM" = "linux" ]; then
+  # Install the icon into the hicolor theme, which is where the panel, the
+  # window manager and the application menu all look it up by name.
+  if [ -n "$ASSETS" ] && [ -d "$ASSETS" ]; then
+    ICON_DIR="$HOME/.local/share/icons/hicolor"
+    for SIZE in 16 24 32 48 64 128 256 512; do
+      if [ -f "$ASSETS/icon-$SIZE.png" ]; then
+        mkdir -p "$ICON_DIR/${SIZE}x${SIZE}/apps"
+        cp "$ASSETS/icon-$SIZE.png" "$ICON_DIR/${SIZE}x${SIZE}/apps/ebook-audiobook.png"
+      fi
+    done
+    if [ -f "$ASSETS/icon.svg" ]; then
+      mkdir -p "$ICON_DIR/scalable/apps"
+      cp "$ASSETS/icon.svg" "$ICON_DIR/scalable/apps/ebook-audiobook.svg"
+    fi
+    command -v gtk-update-icon-cache >/dev/null 2>&1 \
+      && gtk-update-icon-cache -qtf "$ICON_DIR" 2>/dev/null || true
+    ok "application icon"
+  fi
+
   DESKTOP_DIR="$HOME/.local/share/applications"
   mkdir -p "$DESKTOP_DIR"
+  # Terminal=false: the app opens its own window and, when the desktop has a
+  # tray, keeps running there after that window is closed. There is no longer a
+  # terminal the user has to leave open, so putting one on screen would be
+  # showing them a window whose only content is log output.
+  #
+  # StartupWMClass matches the --class the app window is launched with, which is
+  # what makes the window group under this icon rather than the browser's.
   cat > "$DESKTOP_DIR/ebook-audiobook.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=ebook-audiobook
 Comment=Turn ebooks you own into narrated audiobooks
 Exec=$BIN_DIR/ebook-audiobook web
-Icon=media-optical-audio
-Terminal=true
+Icon=ebook-audiobook
+Terminal=false
+StartupWMClass=ebook-audiobook
+StartupNotify=true
 Categories=AudioVideo;Audio;
 DESKTOP
   chmod +x "$DESKTOP_DIR/ebook-audiobook.desktop"
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
   ok "application menu entry"
+fi
+
+if [ "$PLATFORM" = "macos" ]; then
+  # Until now macOS got only the CLI: no Dock icon, no Spotlight entry, no way
+  # to start this without opening Terminal first. A bundle is the minimum that
+  # makes it an application — a plist, a shell stub, and an icon.
+  MAC_APP="$HOME/Applications/ebook-audiobook.app"
+  mkdir -p "$MAC_APP/Contents/MacOS" "$MAC_APP/Contents/Resources"
+  cat > "$MAC_APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>              <string>ebook-audiobook</string>
+  <key>CFBundleDisplayName</key>       <string>ebook-audiobook</string>
+  <key>CFBundleIdentifier</key>        <string>io.github.denelson1.ebook-audiobook</string>
+  <key>CFBundleVersion</key>           <string>$APP_VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+  <key>CFBundlePackageType</key>       <string>APPL</string>
+  <key>CFBundleExecutable</key>        <string>ebook-audiobook</string>
+  <key>CFBundleIconFile</key>          <string>icon</string>
+  <key>NSHighResolutionCapable</key>   <true/>
+  <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
+  <key>LSApplicationCategoryType</key> <string>public.app-category.productivity</string>
+  <!-- Menu-bar app: no Dock tile reserved at launch. The running process sets
+       the same policy itself (see desktop/tray.py), because by then it has
+       exec'd out of this bundle and no longer reads this file. -->
+  <key>LSUIElement</key>               <true/>
+</dict>
+</plist>
+PLIST
+  # The stub checks before it execs. A Finder-launched process has no terminal,
+  # so without this an uninstalled or half-installed app just bounces once in
+  # the Dock and dies with the reason buried in the unified log.
+  cat > "$MAC_APP/Contents/MacOS/ebook-audiobook" <<MACSTUB
+#!/usr/bin/env bash
+# Generated by the ebook-audiobook installer.
+BIN="$BIN_DIR/ebook-audiobook"
+if [ ! -x "\$BIN" ]; then
+  osascript -e 'display alert "ebook-audiobook is not installed" message "The program this app points at is missing. Re-run the installer to fix it." as critical' >/dev/null 2>&1
+  exit 1
+fi
+exec "\$BIN" web
+MACSTUB
+  chmod +x "$MAC_APP/Contents/MacOS/ebook-audiobook"
+  if [ -n "$ASSETS" ] && [ -f "$ASSETS/icon.icns" ]; then
+    cp "$ASSETS/icon.icns" "$MAC_APP/Contents/Resources/icon.icns"
+  else
+    warn "no icon.icns found; the app will use the generic bundle icon"
+  fi
+  # Bump the bundle's mtime or Finder and Dock keep showing the previous icon.
+  touch "$MAC_APP"
+  ok "application: $MAC_APP"
 fi
 
 # PATH advice, only when it's actually needed.

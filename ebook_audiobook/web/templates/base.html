@@ -16,6 +16,14 @@
         <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}"><span class="ic">🗣</span> Voices</a>
         <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}"><span class="ic">⚙</span> Settings</a>
       </nav>
+      {% if can_quit %}
+      {# Closing the window only closes the window — the server keeps running so
+         an overnight render survives. This is the way out that actually stops
+         it, for people who never look at the tray. #}
+      <div class="nav-foot">
+        <button type="button" class="nav-quit" id="quitBtn"><span class="ic">⏻</span> Quit</button>
+      </div>
+      {% endif %}
     </aside>
     <main class="main">
       {# Missing prerequisites are shown before anything else: without Calibre
@@ -63,6 +71,43 @@
       {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
   </script>
+  {% if can_quit %}
+  <script>
+  // What a given background task costs to interrupt. Everything here is
+  // resumable — segments are cached on disk — so the warning is about time
+  // lost, not work destroyed, and it says so.
+  const QUIT_WARNINGS = {
+    render:  ["A render is still going", "Quitting stops it. Finished chapters are kept, so re-rendering later picks up where this left off rather than starting over."],
+    preview: ["A preview is still rendering", "Quitting stops it. You can render another one any time."],
+    extract: ["A book is still being extracted", "Quitting stops it. The book stays imported and you can extract it again."],
+    voice_test: ["A voice sample is still rendering", "Quitting stops it. It only takes a few seconds to redo."],
+  };
+
+  document.getElementById("quitBtn").addEventListener("click", async () => {
+    let r = await fetch("/quit", { method: "POST" });
+    if (r.status === 409) {
+      const { kind } = await r.json();
+      const [title, detail] = QUIT_WARNINGS[kind] ||
+        ["Something is still running", "Quitting stops it."];
+      const ok = await confirmDialog({
+        title, danger: true, confirmLabel: "Quit anyway",
+        bodyHtml: `<p>${escapeHtml(detail)}</p>`,
+      });
+      if (!ok) return;
+      r = await fetch("/quit?force=1", { method: "POST" });
+    }
+    if (!r.ok) { toast("Couldn't quit — see the terminal or the logs."); return; }
+    // Shutting down closes the window too, when the window is one we opened.
+    // This is for when it isn't — no Chromium installed, so the UI is a tab in
+    // the user's own browser, which is not ours to close. The server answers
+    // before it stops precisely so there is time to swap this in, rather than
+    // letting the browser race it and show its own error page.
+    document.body.innerHTML =
+      '<div class="quit-screen"><h1>ebook-audiobook has stopped</h1>' +
+      '<p>You can close this window.</p></div>';
+  });
+  </script>
+  {% endif %}
   {% if setup_needed %}
   <script>
   const homeDir = {{ home_dir|tojson }};
