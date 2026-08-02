@@ -42,6 +42,59 @@
   </div>
   <div class="hint" id="powerHint">Saved as the default for new conversions.</div>
 </div>
+
+<div class="card">
+  <h3>Back up your books</h3>
+  <p class="meta">Rendered audio is left out by default. It is reproducible from the book and
+    your voice settings, and it is typically a <em>thousand times</em> larger than the work it
+    surrounds — so including it turns a 30&nbsp;MB backup into a 3&nbsp;GB one for nothing.
+    Choose <strong>Everything</strong> only if re-rendering would cost you more than the disk space.</p>
+  <div class="btn-row" style="margin-top:10px">
+    <label class="meta">What to include:
+      <select id="backupProfile">
+        <option value="projects" selected>Books and settings — no rendered audio</option>
+        <option value="settings">Settings and voice clips only</option>
+        <option value="full">Everything, including rendered audio</option>
+      </select>
+    </label>
+  </div>
+  <!-- pre, not div: the breakdown is a padded table, and HTML would collapse
+       both the newlines and the column alignment into one run-on line. -->
+  <pre id="backupBreakdown" class="meta mono"
+       style="margin-top:10px;white-space:pre;overflow-x:auto">Measuring…</pre>
+  <div class="btn-row" style="margin-top:12px">
+    <button type="button" class="btn primary" id="backupBtn">Download backup</button>
+  </div>
+  <div class="hint" id="backupHint">Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>.</div>
+</div>
+
+<div class="card">
+  <h3>Updates</h3>
+  <p class="meta">You're running <strong>{{ app_version }}</strong>. Checking asks GitHub what the
+    latest release is — the only request this app ever makes to the internet. It happens when you
+    press the button, and never on its own.</p>
+  <div class="btn-row" style="margin-top:10px">
+    <button type="button" class="btn" id="updateBtn">Check for updates</button>
+    <span class="meta" id="updateText"></span>
+  </div>
+  <label class="meta" style="display:block;margin-top:12px">
+    <input type="checkbox" id="autoUpdateCheck" {% if check_for_updates %}checked{% endif %}>
+    Let this page check automatically when it loads
+  </label>
+  <div class="hint" id="updateHint">Off by default. Nothing else in the app contacts the network.</div>
+</div>
+
+<div class="card">
+  <h3>Problem reports</h3>
+  <p class="meta">If something fails, the reason is kept in a small local log — capped in size and
+    deleted after two weeks. The report below is safe to paste into a bug report: your home folder
+    is replaced with <code>~</code> and book titles are left out.</p>
+  <div id="diagText" class="meta">Loading…</div>
+  <div class="btn-row" style="margin-top:12px">
+    <a class="btn" id="reportBtn" href="/diagnostics/report">Download report</a>
+    <button type="button" class="btn ghost" id="clearLogBtn">Clear log</button>
+  </div>
+</div>
 {% endblock %}
 
 {% block script %}
@@ -85,5 +138,85 @@ document.querySelectorAll('input[name="power_mode"]').forEach((radio) => {
     if (r.ok) toast("Saved");
   });
 });
+
+// --- backup ---------------------------------------------------------------
+const profileSel = document.getElementById("backupProfile");
+async function refreshBackupEstimate() {
+  const el = document.getElementById("backupBreakdown");
+  el.textContent = "Measuring…";
+  try {
+    const r = await fetch(`/backup/estimate?profile=${encodeURIComponent(profileSel.value)}`);
+    const d = await r.json();
+    if (!d.ok) { el.textContent = d.error || "Couldn't measure"; return; }
+    const rows = d.categories.map((c) =>
+      `${c.included ? "+" : "−"} ${c.label.padEnd(20)} ${String(c.files).padStart(7)} files  ${c.human.padStart(10)}${c.included ? "" : "   (left out)"}`);
+    rows.push("", `backup size: ${d.human} in ${d.files} files`);
+    if (d.excluded_human !== "0 B") rows.push(`left out:    ${d.excluded_human}`);
+    el.textContent = rows.join("\n");
+  } catch { el.textContent = "Couldn't measure the data folder."; }
+}
+profileSel.addEventListener("change", refreshBackupEstimate);
+refreshBackupEstimate();
+
+document.getElementById("backupBtn").addEventListener("click", () => {
+  // A plain form post so the browser handles the download (and a multi-gigabyte
+  // "full" backup streams rather than being buffered in memory by fetch).
+  const f = document.createElement("form");
+  f.method = "POST"; f.action = "/backup";
+  const i = document.createElement("input");
+  i.type = "hidden"; i.name = "profile"; i.value = profileSel.value;
+  f.appendChild(i); document.body.appendChild(f); f.submit(); f.remove();
+  document.getElementById("backupHint").textContent =
+    "Building the archive… the download starts when it's ready.";
+});
+
+// --- updates --------------------------------------------------------------
+async function checkUpdates() {
+  const text = document.getElementById("updateText");
+  text.textContent = "Checking…";
+  try {
+    const r = await fetch("/updates/check", { method: "POST" });
+    const d = await r.json();
+    text.textContent = d.message || "";
+    if (d.available) {
+      text.innerHTML = `${d.message} <a href="${d.notes_url}" target="_blank" rel="noopener">Release notes</a>`;
+      document.getElementById("updateHint").innerHTML =
+        `Upgrade by running <code>ebook-audiobook update --apply</code>, or: <code>${d.command}</code>`;
+    }
+  } catch { text.textContent = "Couldn't check right now."; }
+}
+document.getElementById("updateBtn").addEventListener("click", checkUpdates);
+const autoBox = document.getElementById("autoUpdateCheck");
+autoBox.addEventListener("change", async () => {
+  await fetch("/settings", {
+    method: "POST",
+    body: new URLSearchParams({ check_for_updates: autoBox.checked ? "1" : "0" }),
+  });
+  toast("Saved");
+  if (autoBox.checked) checkUpdates();
+});
+if (autoBox.checked) checkUpdates();
+
+// --- diagnostics ----------------------------------------------------------
+async function refreshDiagnostics() {
+  const el = document.getElementById("diagText");
+  try {
+    const r = await fetch("/diagnostics");
+    const d = await r.json();
+    const kb = Math.round(d.bytes / 1024);
+    if (!d.errors.length) {
+      el.textContent = `No errors logged. (Log capped at ${Math.round(d.max_bytes / 1024)} KB, kept ${d.max_age_days} days.)`;
+      return;
+    }
+    el.innerHTML = `<strong>${d.errors.length} recent error(s)</strong>, log is ${kb} KB:<br>` +
+      d.errors.slice(0, 5).map((e) =>
+        `<span class="mono">${e.ts} · ${e.op} · ${e.error}</span>`).join("<br>");
+  } catch { el.textContent = "Couldn't read the log."; }
+}
+document.getElementById("clearLogBtn").addEventListener("click", async () => {
+  await fetch("/diagnostics/clear", { method: "POST" });
+  toast("Cleared"); refreshDiagnostics();
+});
+refreshDiagnostics();
 </script>
 {% endblock %}

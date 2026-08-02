@@ -123,7 +123,88 @@ ebook-audiobook convert book.epub -y --bitrate 64        # straight through
 ebook-audiobook convert book.epub --voice-ref clip.wav   # clone a voice
 ebook-audiobook convert book.epub --engine fake -y       # no-GPU plumbing test
 ebook-audiobook list                              # past conversions
+ebook-audiobook backup ~/books.zip                # back up your work
+ebook-audiobook restore ~/books.zip               # put it back
+ebook-audiobook update                            # is there a newer release?
+ebook-audiobook logs                              # what went wrong recently
+ebook-audiobook report                            # that, as a bug report
 ```
+
+---
+
+## Backing up
+
+```bash
+ebook-audiobook backup --dry-run          # what would be included, and how big
+ebook-audiobook backup ~/books.zip        # the default: no rendered audio
+```
+
+The default leaves rendered audio out, and the difference is not subtle. On a
+machine with three books converted:
+
+```
++ settings                   1 files       113 B
++ voice clips                4 files      1.3 MB
++ imported books             5 files     10.4 MB
++ project data              23 files     19.0 MB
+- rendered audio         4,637 files      3.3 GB  (excluded)
+- finished audiobooks        3 files      5.0 MB  (excluded)
+
+backup size (uncompressed): 30.8 MB in 33 files
+left out:                   3.3 GB
+```
+
+Rendered audio is content-addressed and reproducible from the book plus your
+voice settings, so keeping it costs a hundred times the space to save something
+a re-render recreates exactly. The 30 MB is the part that can't be recreated.
+
+| Profile | Contains |
+|---|---|
+| `--profile settings` | Settings and voice clips. Tiny. |
+| `--profile projects` | **Default.** The above, plus your ebooks and every conversion's chaptering, metadata and covers. |
+| `--profile full` | Everything above plus rendered audio and finished `.m4b` files. |
+
+Individual switches (`--include-audio`, `--no-imports`, `--include-outputs`,
+`--include-models`) override whichever profile you picked, and `--max-size 500MB`
+refuses to write anything larger. The installed program's own virtualenv is
+never included — it lives under the data folder but it isn't your data.
+
+Restoring never overwrites a file that already exists unless you pass `--force`,
+so a restore can't quietly destroy work newer than the backup.
+
+---
+
+## Updates
+
+```bash
+ebook-audiobook update            # ask GitHub what the latest release is
+ebook-audiobook update --apply    # download and run the official installer
+```
+
+Nothing checks for updates on its own. The check is a request to GitHub, and
+this app's whole premise is that it doesn't talk to anyone without being asked —
+so it happens when you run that command or press the button in **Settings**. The
+Settings page has an opt-in to check when it loads; it's off until you turn it on.
+
+Upgrading re-runs the same installer a new user runs, rather than a separate
+upgrade path that gets less testing. Your books and settings are untouched.
+
+---
+
+## When something goes wrong
+
+Failures are recorded to a small local log — one line of JSON each, capped at
+about 750 KB total, and deleted after two weeks. Nothing is transmitted.
+
+```bash
+ebook-audiobook logs              # recent failures
+ebook-audiobook report            # a Markdown bug report, ready to file
+```
+
+The report includes your version, OS, Python, GPU and the traceback — enough for
+someone (or something) to diagnose it without a back-and-forth. Before it's
+shown, your home directory is replaced with `~` and book titles are dropped, so
+reporting a bug doesn't publish your reading history.
 
 ---
 
@@ -363,10 +444,25 @@ Don't clone someone's voice without their permission.
 generated audio so AI-generated speech can be identified after the fact. This is
 a deliberate responsible-AI feature and is present in every file this produces.
 
-**Privacy:** everything runs locally. No cloud APIs, no telemetry, and no network
-traffic at all except two one-time downloads: the app itself, and the ~1 GB voice
-model from Hugging Face on your first render. Your books, voice clips, and
-generated audio never leave the machine.
+**Privacy:** everything runs locally. No cloud APIs and no telemetry. Your books,
+voice clips, and generated audio never leave the machine. The only network
+traffic this app ever makes, in full:
+
+| What | When |
+|---|---|
+| Downloading the app | Install and upgrade |
+| The ~1 GB voice model from Hugging Face | Your first render |
+| Asking GitHub for the latest version number | Only when you run `ebook-audiobook update` or press **Check for updates** |
+
+The version check is off by default and never happens on a timer or at start-up.
+Turning on "check when this page loads" in Settings is the only way it happens
+without you pressing something, and it is opt-in. Nothing about you or your
+library is sent with it — it is a request for a version number.
+
+The failure log is local: it is written to your data folder, capped in size,
+deleted after two weeks, and never transmitted. `ebook-audiobook report` prints
+it for you to share if *you* choose to, with your home directory and book titles
+removed.
 
 **Security:** the web interface has **no authentication** and binds to
 `127.0.0.1` deliberately. It's a single-user local tool. Don't expose it to a

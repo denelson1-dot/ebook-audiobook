@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.1.3 — 2026-08-01
+
+Keeping your work safe, knowing when there's a new version, and being able to
+say what went wrong.
+
+**Backups that aren't mostly wasted space.** `ebook-audiobook backup` saves your
+books, chaptering, voice clips and settings. It leaves rendered audio out by
+default, and the difference is stark: on a machine with three books converted,
+the backup is **30.8 MB instead of 3.3 GB**, because a single finished book is
+3.3 GB of audio wrapped around 2.2 MB of actual work. That audio is
+content-addressed and re-renders identically, so storing it buys nothing a
+re-render doesn't recreate.
+
+Three profiles (`settings`, `projects`, `full`) plus per-category switches,
+`--max-size` to refuse anything bigger than you meant, and `--dry-run` to see
+the breakdown before writing. The installed virtualenv — 7.6 GB, and living
+inside the data folder — is never included at any setting. `restore` won't
+overwrite existing files unless you pass `--force`.
+
+**Update checking, on your terms.** `ebook-audiobook update` asks GitHub for the
+latest version; `--apply` re-runs the official installer to upgrade in place, so
+upgrading is the same code path as installing rather than a less-tested parallel
+one. There is no timer and no start-up poll: the check happens when you ask for
+it. Settings has an opt-in for checking on page load, off by default. The README
+now lists every network request the app can make, in full.
+
+**A failure log worth reading.** When something fails, one line of JSON records
+the version, OS, Python, GPU, operation and traceback. It rotates at ~750 KB
+total and deletes itself after two weeks. `ebook-audiobook report` turns the
+recent entries into a Markdown bug report — with your home directory replaced by
+`~` and book titles removed, so filing a bug doesn't publish your reading
+history.
+
+Also in this release:
+
+- **Measuring a backup got 36× faster** (3.2s → 0.09s). The scan walked the
+  whole data folder and discarded the virtualenv afterwards — 48,242 of the
+  52,915 files there. It now never descends into it.
+- **The version number is right in a source checkout.** It came from installed
+  package metadata, which goes stale in a working copy, so a checkout reported
+  whatever version was last installed — the number that ends up in bug reports
+  and backup manifests. In a checkout, `pyproject.toml` now wins.
+- **CI proves Metal acceleration works on Apple Silicon.** The installer matrix
+  ran with `--no-tts`, so nothing verified the engine on a Mac. A new job
+  installs it for real on an arm64 runner and fails the build unless PyTorch has
+  the Metal backend, Metal is available, the app selects it, and a tensor
+  actually computes on the GPU — a silent fall back to the CPU is a
+  several-times-slower render that nothing else would have caught. M1 through M5
+  are all arm64 and take this same path.
+
 ## 1.1.2 — 2026-08-01
 
 Books that Calibre choked on now import.

@@ -17,8 +17,30 @@ from .device import enable_mps_fallback
 enable_mps_fallback()
 
 
+def _source_version() -> str | None:
+    """The version in pyproject.toml, when running from a source checkout.
+
+    Installed metadata goes stale in a working copy: an editable install records
+    the version as it was at install time, so a checkout that has since bumped
+    reports the old number — and that is the number that ends up in a bug report
+    and in a backup manifest. In a checkout, pyproject.toml is the truth.
+    """
+    try:
+        import tomllib
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        pyproject = root / "pyproject.toml"
+        if not (pyproject.is_file() and (root / "ebook_audiobook").is_dir()):
+            return None  # installed copy: site-packages has no pyproject.toml
+        version = tomllib.loads(pyproject.read_text("utf-8")).get("project", {}).get("version")
+        return str(version) if version else None
+    except Exception:  # noqa: BLE001 - a version string is never worth crashing over
+        return None
+
+
 def _installed_version() -> str:
-    """Version from the installed package metadata.
+    """Version from pyproject.toml in a checkout, else the package metadata.
 
     Read rather than hard-coded: a literal here has to be bumped in lockstep with
     pyproject.toml, and when that was missed this reported 0.1.0 for a 1.0.x
@@ -26,6 +48,9 @@ def _installed_version() -> str:
     """
     from importlib.metadata import PackageNotFoundError, version
 
+    from_source = _source_version()
+    if from_source:
+        return from_source
     try:
         return version("ebook-audiobook")
     except PackageNotFoundError:  # running from a source tree, never installed

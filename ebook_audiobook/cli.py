@@ -116,6 +116,191 @@ def cmd_paths(args) -> int:
     return 0
 
 
+def cmd_logs(args) -> int:
+    from . import errorlog
+
+    if args.clear:
+        n = errorlog.clear()
+        print(f"cleared {n} log file{'s' if n != 1 else ''}")
+        return 0
+    if args.path:
+        print(errorlog.log_path())
+        return 0
+
+    errorlog.prune()
+    found = errorlog.entries(limit=args.tail)
+    print(f"log file: {errorlog.log_path()}")
+    print(f"on disk:  {errorlog.total_bytes():,} bytes "
+          f"(capped at ~{errorlog.MAX_BYTES * (errorlog.BACKUP_COUNT + 1):,}, "
+          f"kept {errorlog.MAX_AGE_DAYS} days)")
+    if not found:
+        print("\nNo errors logged. That's the good outcome.")
+        return 0
+    print(f"\n{len(found)} most recent:")
+    for e in found:
+        job = f" job={e['job_id']}" if e.get("job_id") else ""
+        print(f"  {e.get('ts', '?')}  {e.get('op', '?')}{job}  "
+              f"{e.get('error', '?')}: {e.get('message', '')[:100]}")
+    print("\nFull detail, ready to paste into a bug report: ebook-audiobook report")
+    return 0
+
+
+def cmd_report(args) -> int:
+    """A Markdown failure report — the thing you or an assistant files upstream."""
+    from . import errorlog
+
+    text = errorlog.issue_report(limit=args.limit)
+    if args.output:
+        dest = errorlog.write_report(args.output, limit=args.limit)
+        print(f"wrote {dest}")
+        return 0
+    print(text)
+    return 0
+
+
+def cmd_update(args) -> int:
+    from . import update
+
+    if args.apply:
+        print("Re-running the official installer to upgrade in place.")
+        print(f"  {update.install_command()}\n")
+        try:
+            return update.apply_update(yes=args.yes)
+        except update.UpdateError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
+    print(f"installed: {update.current_version()}")
+    print(f"this machine would install: {update.platform_hint()}")
+    print("checking GitHub for a newer release...")
+    available, release, message = update.status()
+    print(message)
+    if available and release:
+        print(f"\nRelease notes: {release.notes_url}")
+        print("Upgrade with:  ebook-audiobook update --apply")
+        return 0
+    return 0 if release else 1
+
+
+def _selection_from_args(args):
+    from . import backup as bk
+
+    def tri(on: bool, off: bool):
+        """--include-x / --no-x -> True / False / None (leave the profile's choice)."""
+        if on:
+            return True
+        if off:
+            return False
+        return None
+
+    return bk.resolve_selection(
+        args.profile,
+        job_audio=tri(args.include_audio, args.no_audio),
+        imports=tri(args.include_imports, args.no_imports),
+        outputs=tri(args.include_outputs, False),
+        models=tri(args.include_models, False),
+    )
+
+
+def _print_estimate(est, selection) -> None:
+    from . import backup as bk
+
+    print("contents:")
+    for cat, label in bk.CATEGORY_LABELS.items():
+        count, nbytes = est.by_category.get(cat, (0, 0))
+        if not count:
+            continue
+        mark = "+" if getattr(selection, cat, False) else "-"
+        note = "" if getattr(selection, cat, False) else "  (excluded)"
+        print(f"  {mark} {label:<20} {count:>7,} files  "
+              f"{bk.human_bytes(nbytes):>10}{note}")
+    print(f"\n  backup size (uncompressed): {bk.human_bytes(est.selected_bytes)}"
+          f"  in {est.selected_files:,} files")
+    if est.excluded_bytes:
+        print(f"  left out:                   {bk.human_bytes(est.excluded_bytes)}")
+
+
+def cmd_backup(args) -> int:
+    from . import backup as bk
+
+    selection = _selection_from_args(args)
+    est = bk.estimate(selection)
+    _print_estimate(est, selection)
+
+    if args.dry_run:
+        print("\n(dry run — nothing written)")
+        return 0
+    if not args.dest:
+        print("\nerror: give a destination, e.g. "
+              "ebook-audiobook backup ~/ebab-backup.zip", file=sys.stderr)
+        return 2
+
+    max_bytes = _parse_size(args.max_size) if args.max_size else None
+    try:
+        dest = bk.create(args.dest, selection, max_bytes=max_bytes)
+    except bk.BackupError as e:
+        print(f"\nerror: {e}", file=sys.stderr)
+        return 1
+    print(f"\nwrote {dest}  ({bk.human_bytes(dest.stat().st_size)} on disk)")
+    return 0
+
+
+def cmd_restore(args) -> int:
+    from . import backup as bk
+
+    try:
+        manifest = bk.read_manifest(args.archive)
+    except bk.BackupError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"backup taken {manifest.get('created_at', '?')} "
+          f"by version {manifest.get('app_version', '?')}")
+    print(f"contains {manifest.get('files', '?')} files "
+          f"({bk.human_bytes(manifest.get('uncompressed_bytes', 0))} uncompressed)")
+    included = [k for k, v in (manifest.get("selection") or {}).items() if v]
+    print(f"categories: {', '.join(included) or 'none'}")
+
+    if args.dry_run:
+        print("\n(dry run — nothing written)")
+        return 0
+    try:
+        result = bk.restore(args.archive, into=args.into, force=args.force)
+    except bk.BackupError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"\nrestored {result.written} files into {result.root}")
+    if result.skipped:
+        print(f"skipped {result.skipped} that already existed "
+              "(use --force to overwrite)")
+    return 0
+
+
+def _parse_size(text: str) -> int:
+    """Accept 500MB / 2G / 1.5GB / a plain byte count."""
+    s = str(text).strip().upper().replace("IB", "B")
+    units = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+    for suffix in ("TB", "GB", "MB", "KB", "B"):
+        if s.endswith(suffix):
+            number = s[: -len(suffix)].strip()
+            try:
+                return int(float(number) * units[suffix])
+            except ValueError:
+                break
+    # Bare number, or a bare unit letter like "2G".
+    for suffix, mult in (("T", units["TB"]), ("G", units["GB"]),
+                         ("M", units["MB"]), ("K", units["KB"])):
+        if s.endswith(suffix):
+            try:
+                return int(float(s[:-1]) * mult)
+            except ValueError:
+                break
+    try:
+        return int(float(s))
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Couldn't read {text!r} as a size. Try 500MB, 2GB, or a byte count.")
+
+
 def cmd_convert(args) -> int:
     job_id = worker.import_ebook(args.source, engine=args.engine)
     print(f"job: {job_id}")
@@ -284,7 +469,62 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("list", help="list jobs")
     c.set_defaults(func=cmd_list)
+
+    c = sub.add_parser("logs", help="show recent errors (self-limiting log)")
+    c.add_argument("--tail", type=int, default=10, help="how many to show (default 10)")
+    c.add_argument("--path", action="store_true", help="print the log file path only")
+    c.add_argument("--clear", action="store_true", help="delete the logs")
+    c.set_defaults(func=cmd_logs)
+
+    c = sub.add_parser("report", help="a Markdown bug report for the recent errors")
+    c.add_argument("--limit", type=int, default=3, help="how many errors to include")
+    c.add_argument("-o", "--output", help="write to a file instead of stdout")
+    c.set_defaults(func=cmd_report)
+
+    c = sub.add_parser("update", help="check for a newer release (contacts GitHub)")
+    c.add_argument("--apply", action="store_true",
+                   help="download and run the official installer to upgrade")
+    c.add_argument("-y", "--yes", action="store_true",
+                   help="with --apply, accept the installer's prompts")
+    c.set_defaults(func=cmd_update)
+
+    c = sub.add_parser(
+        "backup", help="save your books and settings to a zip",
+        description="Rendered audio is excluded by default: it is regenerable, and "
+                    "it is typically a thousand times larger than the work it "
+                    "surrounds. Use --profile full to keep it anyway.")
+    c.add_argument("dest", nargs="?", help="path to write, e.g. ~/ebab-backup.zip")
+    c.add_argument("--profile", choices=list(_profiles()), default="projects",
+                   help="settings | projects (default) | full")
+    c.add_argument("--include-audio", action="store_true",
+                   help="keep rendered segments and chapter audio")
+    c.add_argument("--no-audio", action="store_true", help="drop rendered audio")
+    c.add_argument("--include-imports", action="store_true", help="keep source ebooks")
+    c.add_argument("--no-imports", action="store_true", help="drop source ebooks")
+    c.add_argument("--include-outputs", action="store_true",
+                   help="keep finished .m4b files")
+    c.add_argument("--include-models", action="store_true",
+                   help="keep the re-downloadable model cache")
+    c.add_argument("--max-size", help="refuse if larger, e.g. 500MB")
+    c.add_argument("-n", "--dry-run", action="store_true",
+                   help="show what would be included, write nothing")
+    c.set_defaults(func=cmd_backup)
+
+    c = sub.add_parser("restore", help="restore from a backup zip")
+    c.add_argument("archive", help="the .zip written by `backup`")
+    c.add_argument("--into", help="restore somewhere other than the data folder")
+    c.add_argument("--force", action="store_true",
+                   help="overwrite files that already exist")
+    c.add_argument("-n", "--dry-run", action="store_true",
+                   help="describe the backup, write nothing")
+    c.set_defaults(func=cmd_restore)
     return p
+
+
+def _profiles():
+    from .backup import PROFILES
+
+    return PROFILES
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -301,6 +541,11 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\ninterrupted (progress saved; rerun to resume)")
         return 130
+    except Exception as e:  # noqa: BLE001 - recorded, then re-raised unchanged
+        from . import errorlog
+
+        errorlog.record(e, op=getattr(args, "command", None) or "cli")
+        raise
 
 
 def main_gui() -> int:

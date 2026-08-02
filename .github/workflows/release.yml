@@ -151,9 +151,46 @@ jobs:
           & $py ci/assert_prereqs.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+  # The matrix above installs with --no-tts, which proves the app installs but
+  # never touches the engine — and the engine is what differs most by platform.
+  # This installs it for real on Apple Silicon and insists Metal actually works,
+  # because a silent fall back to the CPU is a several-times-slower render that
+  # nothing else would catch. M1 through M5 are all arm64 and take this same
+  # path, so one runner covers the family.
+  verify-apple-silicon:
+    name: verify Metal acceleration on Apple Silicon
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Confirm the runner really is Apple Silicon
+        run: |
+          arch="$(uname -m)"
+          echo "runner arch: $arch, macOS $(sw_vers -productVersion)"
+          test "$arch" = "arm64" || {
+            echo "::error::macos-latest is no longer arm64 — this job is not testing what it claims"
+            exit 1
+          }
+      - name: Install with the speech engine
+        run: bash install.sh --yes
+      - name: Assert Metal acceleration works
+        run: |
+          VENV_PY=$(sed -n 's#^exec "\(.*\)/ebook-audiobook".*#\1/python#p' \
+                    "$HOME/.local/bin/ebook-audiobook")
+          test -x "$VENV_PY" || { echo "couldn't locate the installed interpreter"; exit 1; }
+          "$VENV_PY" ci/assert_apple_silicon.py
+      - name: Assert the rest of the prerequisites
+        run: |
+          VENV_PY=$(sed -n 's#^exec "\(.*\)/ebook-audiobook".*#\1/python#p' \
+                    "$HOME/.local/bin/ebook-audiobook")
+          "$VENV_PY" ci/assert_prereqs.py
+
   publish:
     name: Publish the release
-    needs: [build, verify-installers]
+    needs: [build, verify-installers, verify-apple-silicon]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

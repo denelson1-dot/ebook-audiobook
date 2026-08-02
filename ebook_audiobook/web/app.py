@@ -24,6 +24,12 @@ from ..voices import AUDIO_EXTS, VoiceLibrary
 from .runner import runner
 
 
+def _app_version() -> str:
+    from .. import __version__
+
+    return __version__
+
+
 def _f(form, key, default):
     """Parse a float form field, falling back to the current value."""
     try:
@@ -190,6 +196,8 @@ def create_app() -> Flask:
                  "description": power.MODE_DESCRIPTIONS[m]}
                 for m in power.MODES
             ],
+            "check_for_updates": s.check_for_updates,
+            "app_version": _app_version(),
         }
 
     # ----- pages ------------------------------------------------------------
@@ -247,10 +255,132 @@ def create_app() -> Flask:
                 s.audiobooks_root = None  # explicitly cleared
         if request.form.get("power_mode") is not None:
             s.power_mode = power.normalize_mode(request.form.get("power_mode"))
+        if "check_for_updates" in request.form:
+            s.check_for_updates = request.form.get("check_for_updates") == "1"
         s.setup_dismissed = True  # user has engaged with setup either way
         app_settings.save_settings(s)
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
-                "power_mode": s.power_mode}
+                "power_mode": s.power_mode,
+                "check_for_updates": s.check_for_updates}
+
+    # ----- updates, backup, diagnostics -------------------------------------
+
+    @app.post("/updates/check")
+    def updates_check():
+        """Ask GitHub for the latest release.
+
+        POST, and only ever from a button: this is the one request in the app
+        that leaves the machine, so it happens when the user asks and at no
+        other time. There is no polling and nothing on page load.
+        """
+        from .. import update as update_mod
+
+        available, release, message = update_mod.status()
+        return {
+            "ok": True,
+            "available": available,
+            "message": message,
+            "current": update_mod.current_version(),
+            "latest": release.version if release else None,
+            "notes_url": release.notes_url if release else None,
+            "command": update_mod.install_command(),
+        }
+
+    @app.get("/backup/estimate")
+    def backup_estimate():
+        from .. import backup as backup_mod
+
+        profile = request.args.get("profile", backup_mod.DEFAULT_PROFILE)
+        try:
+            selection = backup_mod.resolve_selection(profile)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}, 400
+        est = backup_mod.estimate(selection)
+        return {
+            "ok": True,
+            "profile": profile,
+            "bytes": est.selected_bytes,
+            "files": est.selected_files,
+            "human": backup_mod.human_bytes(est.selected_bytes),
+            "excluded_human": backup_mod.human_bytes(est.excluded_bytes),
+            "categories": [
+                {"key": key, "label": label,
+                 "files": est.by_category.get(key, (0, 0))[0],
+                 "human": backup_mod.human_bytes(est.by_category.get(key, (0, 0))[1]),
+                 "included": getattr(selection, key, False)}
+                for key, label in backup_mod.CATEGORY_LABELS.items()
+                if est.by_category.get(key, (0, 0))[0]
+            ],
+        }
+
+    @app.post("/backup")
+    def backup_download():
+        """Build the archive in the data root's tmp/ and stream it back."""
+        from flask import after_this_request
+
+        from .. import backup as backup_mod
+
+        profile = request.form.get("profile", backup_mod.DEFAULT_PROFILE)
+        try:
+            selection = backup_mod.resolve_selection(profile)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}, 400
+
+        stamp = __import__("time").strftime("%Y%m%d-%H%M%S")
+        name = f"ebook-audiobook-{profile}-{stamp}.zip"
+        tmp_path = paths().ensure().tmp / name
+        try:
+            backup_mod.create(tmp_path, selection)
+        except backup_mod.BackupError as e:
+            return {"ok": False, "error": str(e)}, 400
+
+        @after_this_request
+        def _cleanup(response):
+            # The archive is a copy; keeping it would double the disk cost of
+            # every backup taken through the browser.
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return response
+
+        return send_file(tmp_path, as_attachment=True, download_name=name)
+
+    @app.get("/diagnostics")
+    def diagnostics():
+        from .. import errorlog
+
+        errorlog.prune()
+        found = errorlog.entries(limit=20)
+        return {
+            "ok": True,
+            "log_path": str(errorlog.log_path()),
+            "bytes": errorlog.total_bytes(),
+            "max_bytes": errorlog.MAX_BYTES * (errorlog.BACKUP_COUNT + 1),
+            "max_age_days": errorlog.MAX_AGE_DAYS,
+            "errors": [
+                {"ts": e.get("ts"), "op": e.get("op"), "job_id": e.get("job_id"),
+                 "error": e.get("error"), "message": e.get("message")}
+                for e in reversed(found)
+            ],
+        }
+
+    @app.get("/diagnostics/report")
+    def diagnostics_report():
+        """The Markdown bug report, as a download."""
+        from .. import errorlog
+
+        text = errorlog.issue_report(limit=int(request.args.get("limit", 5)))
+        return app.response_class(
+            text, mimetype="text/markdown",
+            headers={"Content-Disposition":
+                     'attachment; filename="ebook-audiobook-report.md"'})
+
+    @app.post("/diagnostics/clear")
+    def diagnostics_clear():
+        from .. import errorlog
+
+        return {"ok": True, "removed": errorlog.clear()}
 
     @app.post("/settings/dismiss-setup")
     def settings_dismiss():

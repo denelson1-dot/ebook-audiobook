@@ -28,6 +28,14 @@ class Settings:
     # Default render intensity for new jobs: "full", "balanced" or "quiet".
     # See ebook_audiobook.power. A job may override it.
     power_mode: str = "full"
+    # Whether the UI may ask GitHub whether a newer release exists.
+    #
+    # Off by default, and deliberately so: the app's promise is that nothing
+    # leaves this machine, and a version check is a request to a third party
+    # carrying your IP address. Opting in is a choice the user makes, not a
+    # default they discover. `ebook-audiobook update` always works regardless —
+    # running it *is* the consent.
+    check_for_updates: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)

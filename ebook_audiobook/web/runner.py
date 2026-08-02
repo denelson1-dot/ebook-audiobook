@@ -85,8 +85,12 @@ class Runner:
             self.current = f"{task.job_id}:{task.kind}"
             try:
                 self._run(task)
-            except Exception:  # noqa: BLE001 - error is recorded on job state
-                pass
+            except Exception as e:  # noqa: BLE001 - error is recorded on job state
+                # The job page shows the message; the log keeps the traceback,
+                # which is the only thing that makes a report actionable.
+                from .. import errorlog
+
+                errorlog.record(e, op=task.kind, job_id=task.job_id)
             finally:
                 self.current = None
                 with self._lock:
