@@ -111,7 +111,9 @@ python -m venv /tmp/fresh && /tmp/fresh/bin/pip install dist/*.whl
 
 1. Bump `version` in `pyproject.toml`.
 2. Update `CHANGELOG.md`.
-3. Commit, then tag and push:
+3. Run the [macOS pre-flight](#macos-pre-flight-the-part-ci-cannot-do) if the
+   desktop shell, the icons or the installer changed.
+4. Commit, then tag and push:
    ```bash
    git tag v1.2.3 && git push origin main --tags
    ```
@@ -123,6 +125,41 @@ Release with the installers stamped with that version.
 
 A tag that disagrees with `pyproject.toml` fails the build rather than
 publishing a release whose installer points at a wheel that doesn't exist.
+
+### macOS pre-flight: the part CI cannot do
+
+CI runs the test suite, the wheel smoke test and `bash -n install.sh` on
+`macos-latest`. It does **not** run `install.sh`, so the `.app` bundle, the
+`.icns` and the Dock behaviour have no automated coverage at all. Ten minutes on
+a real Mac before tagging, once per release that touches any of it:
+
+```bash
+curl -fsSL .../install-macos-linux.sh | bash     # or: bash install.sh from a checkout
+```
+
+| # | Check | What "wrong" looks like |
+|---|---|---|
+| 1 | `~/Applications/ebook-audiobook.app` exists and shows **our** icon in Finder | Generic blank-document icon → `icon.icns` missing or malformed |
+| 2 | Icon looks right in Finder's **list and column views**, not just the large grid | Scrambled pixels at small sizes → an `icp4`/`icp5`/`icp6` PNG slot crept back into `ICNS_TYPES` |
+| 3 | Double-click it. A chromeless window opens | Falls back to a Safari tab → no Chromium-family browser found |
+| 4 | Menu-bar icon appears, with **Open** and **Quit** | No icon → pyobjc missing, or `_macos_has_gui_session()` said no |
+| 5 | **No Dock tile appears**, and ⌘-Tab does not list "Python" | A Python rocket in the Dock → `setActivationPolicy_` didn't take |
+| 6 | Close the window. Server keeps running; menu-bar icon stays | Server dies → the tray isn't holding the main thread |
+| 7 | Launch the app again from Finder → reopens on the **same** server | Two processes, two ports → `runtime.json` probe failed |
+| 8 | Start a render, open the menu bar → Quit reads **"Quit — stops the running render"** | Plain "Quit" → the busy watcher isn't refreshing the menu |
+| 9 | Quit from the menu bar. Process, window and `runtime.json` all go | Window left showing "can't be reached" → `close_windows()` didn't get a live child |
+| 10 | With Homebrew ffmpeg installed, Settings → Diagnostics reports the **same** ffmpeg as `ebook-audiobook check` in Terminal | They disagree → a Finder launch isn't finding `/opt/homebrew/bin` |
+| 11 | `ebook-audiobook-uninstall`, then confirm the `.app` is gone | A surviving `.app` bounces once and dies forever |
+
+Known and accepted, so don't chase them:
+
+- **Ctrl-C from a terminal skips cleanup.** pystray's SIGINT handler calls
+  `NSApp.terminate_`, which never returns, so `serve()`'s `finally` doesn't run:
+  the window is orphaned and `runtime.json` is left behind (the next launch
+  clears it). Quit from the menu bar instead.
+- **The menu-bar icon is slightly soft on Retina**, and is coloured rather than a
+  monochrome template. pystray sizes it in pixels rather than points.
+- **App Nap** may throttle a long render when no window is open. Untested.
 
 ### If a release build fails
 
