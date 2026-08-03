@@ -8,6 +8,8 @@ that aren't tested stop being true.
 
 from __future__ import annotations
 
+import os
+import time
 import zipfile
 
 import pytest
@@ -72,9 +74,49 @@ def test_backup_downloads_a_real_archive(client, some_data, tmp_path):
 
 
 def test_the_temporary_archive_is_not_left_behind(client, some_data):
-    client.post("/backup", data={"profile": "projects"})
+    """The archive is a copy; leaving it doubles the disk cost of every backup.
+
+    Reading the body matters — cleanup is tied to the response being sent, the
+    way any real client consumes it. Deleting earlier than that is what broke on
+    Windows, which refuses to unlink a file that is still open.
+    """
+    r = client.post("/backup", data={"profile": "projects"})
+    assert len(r.data) > 0
     leftovers = list(paths().tmp.glob("*.zip"))
     assert leftovers == [], f"backup left {leftovers} on disk"
+
+
+def test_an_interrupted_download_still_cleans_up(client, some_data):
+    """A client that disconnects halfway must not strand a copy either.
+
+    Closing a partly-consumed response raises GeneratorExit through the same
+    `finally` that the completed path uses.
+    """
+    r = client.post("/backup", data={"profile": "projects"})
+    next(r.response)  # take the first chunk, then walk away
+    r.close()
+    assert list(paths().tmp.glob("*.zip")) == []
+
+
+def test_an_abandoned_archive_is_swept_up_later(client, some_data):
+    """A download killed mid-stream leaves a copy nothing else would remove,
+    silently doubling the disk cost of every backup after it."""
+    stale = paths().ensure().tmp / "ebook-audiobook-projects-19990101-000000.zip"
+    stale.write_bytes(b"not really a zip")
+    old = time.time() - 7200
+    os.utime(stale, (old, old))
+
+    client.post("/backup", data={"profile": "projects"})
+    assert not stale.exists()
+
+
+def test_a_fresh_archive_from_another_request_is_left_alone(client, some_data):
+    """Two backups running at once must not delete each other's work."""
+    inflight = paths().ensure().tmp / "ebook-audiobook-projects-20990101-000000.zip"
+    inflight.write_bytes(b"someone else is streaming this")
+
+    client.post("/backup", data={"profile": "projects"})
+    assert inflight.exists()
 
 
 def test_backup_rejects_an_unknown_profile(client, some_data):

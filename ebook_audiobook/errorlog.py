@@ -62,18 +62,56 @@ def _all_log_files() -> list[Path]:
     return sorted(p for p in d.glob("errors.log*") if p.is_file())
 
 
+def _close_handlers() -> None:
+    """Release the open file handles on the log, so its files can be deleted.
+
+    Two separate reasons this has to happen before any log file is unlinked:
+
+    * **Windows refuses to delete an open file.** The rotating handler holds
+      ``errors.log`` open, so the unlink raised ``PermissionError``, the
+      surrounding ``except OSError`` swallowed it, and prune/clear reported
+      having removed nothing while the log sat exactly where it was.
+    * **Dropping the ``_handlers`` entry was never enough, on any platform.**
+      ``logging`` keeps loggers in a global registry of its own, so forgetting
+      our reference left the handler attached and writing to a file with no
+      name — and because ``_logger`` then saw no cached entry, the next
+      ``record()`` attached a *second* handler to the same logger and every
+      line after that was written twice.
+    """
+    for log in _handlers.values():
+        for handler in list(log.handlers):
+            log.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:  # noqa: BLE001 - already closed, or a torn write
+                pass
+    _handlers.clear()
+
+
 def prune(max_age_days: int = MAX_AGE_DAYS) -> int:
     """Delete log files untouched for longer than the age limit.
 
     Rotation bounds total size; this bounds age. Returns how many were removed.
     """
     cutoff = time.time() - max_age_days * 86_400
-    removed = 0
+    stale = []
     for p in _all_log_files():
         try:
             if p.stat().st_mtime < cutoff:
-                p.unlink()
-                removed += 1
+                stale.append(p)
+        except OSError:
+            continue  # a log we cannot stat is not worth failing a render over
+    if not stale:
+        # The overwhelmingly common case — record() prunes on every write, and
+        # closing the handler each time would mean reopening the file for every
+        # single logged failure.
+        return 0
+    _close_handlers()
+    removed = 0
+    for p in stale:
+        try:
+            p.unlink()
+            removed += 1
         except OSError:
             pass  # a log we cannot tidy is not worth failing a render over
     return removed
@@ -96,6 +134,15 @@ def _logger() -> logging.Logger:
     log = logging.getLogger(f"ebook_audiobook.errorlog.{abs(hash(key))}")
     log.setLevel(logging.ERROR)
     log.propagate = False  # never echo into the clean launch window
+    # logging's registry hands back the same logger object every time, so one
+    # that was used before a clear() still has its old handler attached. Adding
+    # to it without this would write every subsequent line twice.
+    for previous in list(log.handlers):
+        log.removeHandler(previous)
+        try:
+            previous.close()
+        except Exception:  # noqa: BLE001
+            pass
     handler = logging.handlers.RotatingFileHandler(
         path, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT, encoding="utf-8",
     )
@@ -170,6 +217,7 @@ def entries(limit: int | None = None) -> list[dict]:
 
 def clear() -> int:
     """Delete every log file. Returns how many were removed."""
+    _close_handlers()  # before the unlink, or Windows refuses it outright
     removed = 0
     for p in _all_log_files():
         try:
@@ -177,7 +225,6 @@ def clear() -> int:
             removed += 1
         except OSError:
             pass
-    _handlers.clear()  # the open handles now point at deleted files
     return removed
 
 

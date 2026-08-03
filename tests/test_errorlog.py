@@ -103,6 +103,71 @@ def test_clear_removes_everything():
     assert errorlog.entries() == []
 
 
+# --- it lets go of its files --------------------------------------------------
+#
+# Windows is where this went wrong first — it refuses to unlink an open file, so
+# prune() and clear() reported removing nothing while the log stayed put. But
+# the leak underneath was never platform-specific, so these check the property
+# directly rather than waiting for a Windows runner to notice.
+
+def _open_handlers() -> list:
+    return [h for log in errorlog._handlers.values() for h in log.handlers]
+
+
+def _all_closed(handlers) -> bool:
+    """Whether every handler has actually let go of its file.
+
+    Deliberately asks the handler objects themselves rather than checking that
+    our ``_handlers`` dict is empty: the original code emptied that dict without
+    closing anything, so a test written against it would have passed while the
+    file stayed open — which is the entire bug.
+    """
+    return all(h.stream is None or h.stream.closed for h in handlers)
+
+
+def test_clear_closes_the_log_handles():
+    errorlog.record(_boom(), op="render")
+    handlers = _open_handlers()
+    assert handlers, "expected the record above to have opened the log"
+    errorlog.clear()
+    assert _all_closed(handlers)
+
+
+def test_pruning_an_old_log_closes_its_handle():
+    errorlog.record(_boom(), op="render")
+    handlers = _open_handlers()
+    ancient = time.time() - (errorlog.MAX_AGE_DAYS + 1) * 86_400
+    os.utime(errorlog.log_path(), (ancient, ancient))
+    errorlog.prune()
+    assert _all_closed(handlers)
+
+
+def test_pruning_nothing_leaves_the_handle_alone():
+    """record() prunes on every write. Closing and reopening the file each time
+    would turn one append into an open, a write and a close."""
+    errorlog.record(_boom(), op="render")
+    before = _open_handlers()
+    assert errorlog.prune() == 0
+    assert _open_handlers() == before
+
+
+def test_logging_after_a_clear_does_not_double_every_line():
+    """The leak that was hiding behind the Windows failure.
+
+    ``logging`` hands back the same logger object for a given name forever, so
+    clearing only our own dict left the old handler attached. The next record()
+    saw no cached entry, attached a second handler, and from then on every
+    failure was written to the file twice.
+    """
+    errorlog.record(_boom("first"), op="render")
+    errorlog.clear()
+    errorlog.record(_boom("second"), op="render")
+
+    assert len(_open_handlers()) == 1
+    messages = [e["message"] for e in errorlog.entries()]
+    assert messages == ["second"], f"expected one entry, got {messages}"
+
+
 # --- it stays private ---------------------------------------------------------
 
 def test_redacts_the_home_directory():
