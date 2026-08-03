@@ -26,6 +26,11 @@ import sys
 import threading
 from pathlib import Path
 
+# Decided once, at import — see the note in launcher.py on why tests must
+# override these rather than monkeypatch sys.platform.
+IS_MACOS = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
+
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 
 # The tray icon is drawn small; 64 px is the largest size any of the three
@@ -116,13 +121,13 @@ def available() -> bool:
         return False
     if not (ASSETS / ICON_FILE).is_file():
         return False
-    if sys.platform.startswith("linux"):
+    if IS_LINUX:
         # No display server means no tray, and pystray's Xorg backend blocks for
         # a while before admitting it.
         if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
             return False
         _reach_system_gi()
-    elif sys.platform == "darwin" and not _macos_has_gui_session():
+    elif IS_MACOS and not _macos_has_gui_session():
         return False
     # Ask the real question last: is the library actually installed? An install
     # done with --no-deps (which is how the TTS engine goes in) leaves the app
@@ -211,7 +216,7 @@ def _macos_hide_dock_icon() -> None:
     Accessory (policy 1) is what a menu-bar-only app uses. Best effort — a
     failure here is cosmetic and must not stop the tray appearing.
     """
-    if sys.platform != "darwin":
+    if not IS_MACOS:
         return
     try:
         import AppKit

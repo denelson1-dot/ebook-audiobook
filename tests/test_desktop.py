@@ -13,6 +13,7 @@ import json
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -139,8 +140,8 @@ def test_probe_is_none_with_no_record():
 # --- finding a browser -------------------------------------------------------
 
 def test_find_browser_prefers_the_first_listed(monkeypatch):
-    monkeypatch.setattr(launcher.sys, "platform", "linux")
-    monkeypatch.setattr(launcher.os, "name", "posix")
+    monkeypatch.setattr(launcher, "IS_MACOS", False)
+    monkeypatch.setattr(launcher, "IS_WINDOWS", False)
     present = {"brave-browser": "/usr/bin/brave-browser",
                "google-chrome": "/usr/bin/google-chrome"}
     monkeypatch.setattr(launcher.shutil, "which", lambda n: present.get(n))
@@ -148,8 +149,8 @@ def test_find_browser_prefers_the_first_listed(monkeypatch):
 
 
 def test_find_browser_falls_through_to_what_is_installed(monkeypatch):
-    monkeypatch.setattr(launcher.sys, "platform", "linux")
-    monkeypatch.setattr(launcher.os, "name", "posix")
+    monkeypatch.setattr(launcher, "IS_MACOS", False)
+    monkeypatch.setattr(launcher, "IS_WINDOWS", False)
     monkeypatch.setattr(launcher.shutil, "which",
                         lambda n: "/usr/bin/brave-browser" if n == "brave-browser" else None)
     assert launcher.find_browser() == "/usr/bin/brave-browser"
@@ -157,15 +158,15 @@ def test_find_browser_falls_through_to_what_is_installed(monkeypatch):
 
 def test_find_browser_is_none_when_there_is_no_chromium(monkeypatch):
     """Firefox-only machines exist, and must fall back to an ordinary tab."""
-    monkeypatch.setattr(launcher.sys, "platform", "linux")
-    monkeypatch.setattr(launcher.os, "name", "posix")
+    monkeypatch.setattr(launcher, "IS_MACOS", False)
+    monkeypatch.setattr(launcher, "IS_WINDOWS", False)
     monkeypatch.setattr(launcher.shutil, "which", lambda n: None)
     assert launcher.find_browser() is None
 
 
 def test_command_asks_for_an_app_window_and_its_own_profile(monkeypatch):
-    monkeypatch.setattr(launcher.sys, "platform", "linux")
-    monkeypatch.setattr(launcher.os, "name", "posix")
+    monkeypatch.setattr(launcher, "IS_MACOS", False)
+    monkeypatch.setattr(launcher, "IS_WINDOWS", False)
     cmd = launcher._command("/usr/bin/google-chrome", "http://127.0.0.1:5005")
     assert cmd[0] == "/usr/bin/google-chrome"
     assert "--app=http://127.0.0.1:5005" in cmd
@@ -180,7 +181,7 @@ def test_command_asks_for_an_app_window_and_its_own_profile(monkeypatch):
 def test_command_on_macos_runs_the_binary_not_open(monkeypatch):
     """`open` exits the instant it hands off, leaving close_windows() nothing to
     signal — so Quit would strand the window showing a connection error."""
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     exe = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     cmd = launcher._command(exe, "http://127.0.0.1:5005")
     assert cmd[0] == exe
@@ -193,18 +194,21 @@ def test_command_on_macos_runs_the_binary_not_open(monkeypatch):
 def test_macos_data_root_with_a_space_stays_one_argument(monkeypatch):
     """~/Library/Application Support/... has a space in it. Split across two
     argv entries, Chrome would write its profile somewhere unintended."""
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     monkeypatch.setenv("EBAB_DATA_ROOT",
                        "/Users/dave/Library/Application Support/ebook-audiobook")
     cmd = launcher._command("/Applications/Chromium.app/Contents/MacOS/Chromium",
                             "http://127.0.0.1:5005")
     profile = [c for c in cmd if c.startswith("--user-data-dir=")]
     assert len(profile) == 1
-    assert profile[0].endswith("/Library/Application Support/ebook-audiobook/browser-profile")
+    # Compare as path parts, not as a string: this test also runs on Windows,
+    # where the separator is a backslash.
+    parts = Path(profile[0].split("=", 1)[1]).parts
+    assert parts[-3:] == ("Application Support", "ebook-audiobook", "browser-profile")
 
 
 def test_find_browser_on_macos_returns_the_bundle_executable(monkeypatch, tmp_path):
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     bundle = tmp_path / "Applications" / "Brave Browser.app" / "Contents" / "MacOS"
     bundle.mkdir(parents=True)
     (bundle / "Brave Browser").write_text("#!/bin/sh\n")
@@ -215,7 +219,7 @@ def test_find_browser_on_macos_returns_the_bundle_executable(monkeypatch, tmp_pa
 def test_find_browser_on_macos_checks_the_per_user_folder(monkeypatch, tmp_path):
     """Dragging a browser to ~/Applications instead of /Applications is normal,
     and must not silently demote the user to a plain browser tab."""
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     per_user = tmp_path / "home" / "Applications"
     exe = per_user / "Google Chrome.app" / "Contents" / "MacOS" / "Google Chrome"
     exe.parent.mkdir(parents=True)
@@ -226,7 +230,7 @@ def test_find_browser_on_macos_checks_the_per_user_folder(monkeypatch, tmp_path)
 
 
 def test_find_browser_on_macos_is_none_when_nothing_installed(monkeypatch, tmp_path):
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     monkeypatch.setattr(launcher, "MACOS_APP_DIRS", (str(tmp_path),))
     assert launcher.find_browser() is None
 
@@ -302,7 +306,8 @@ def test_tray_is_declined_when_switched_off(monkeypatch):
 def test_tray_is_declined_with_no_display(monkeypatch):
     """Headless boxes and SSH sessions. pystray's Xorg backend blocks for a
     while before admitting this, so it is checked before we get there."""
-    monkeypatch.setattr(tray.sys, "platform", "linux")
+    monkeypatch.setattr(tray, "IS_LINUX", True)
+    monkeypatch.setattr(tray, "IS_MACOS", False)
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     assert tray.available() is False
@@ -367,30 +372,47 @@ def test_tray_is_declined_when_pystray_is_missing(monkeypatch):
 def test_macos_tray_is_declined_without_a_window_server(monkeypatch):
     """Over SSH to a Mac, AppKit imports fine and only dies later — deep enough
     that it can abort the process instead of raising."""
-    monkeypatch.setattr(tray.sys, "platform", "darwin")
+    monkeypatch.setattr(tray, "IS_MACOS", True)
+    monkeypatch.setattr(tray, "IS_LINUX", False)
     monkeypatch.setattr(tray, "_macos_has_gui_session", lambda: False)
     assert tray.available() is False
 
 
 def test_macos_gui_session_check_is_false_without_quartz(monkeypatch):
-    """No pyobjc means we cannot ask, and 'no' is the safe answer."""
-    monkeypatch.setattr(tray.sys, "platform", "darwin")
-    assert tray._macos_has_gui_session() is False  # Quartz is absent on Linux
+    """No pyobjc means we cannot ask, and 'no' is the safe answer.
+
+    Written so it holds on a real Mac too, where Quartz *is* importable and a CI
+    runner may well have a window server — the first version of this asserted
+    the Linux answer and duly failed on macOS.
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_quartz(name, *args, **kwargs):
+        if name == "Quartz":
+            raise ImportError("no pyobjc here")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_quartz)
+    assert tray._macos_has_gui_session() is False
 
 
 def test_macos_activation_is_skipped_off_darwin(monkeypatch):
     calls = []
     monkeypatch.setattr(launcher.subprocess, "Popen", lambda *a, **k: calls.append(a))
-    monkeypatch.setattr(launcher.sys, "platform", "linux")
+    monkeypatch.setattr(launcher, "IS_MACOS", False)
     launcher._macos_activate("/usr/bin/google-chrome")
     assert calls == []
 
 
 def test_macos_activation_targets_the_bundle(monkeypatch):
+    """Bundle paths are POSIX even when the test runs on Windows, which is why
+    _macos_activate uses PurePosixPath rather than the local flavour."""
     calls = []
     monkeypatch.setattr(launcher.subprocess, "Popen",
                         lambda cmd, **k: calls.append(cmd))
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher, "IS_MACOS", True)
     launcher._macos_activate(
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
     assert calls == [["open", "-a", "/Applications/Google Chrome.app"]]

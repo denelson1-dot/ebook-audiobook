@@ -19,9 +19,17 @@ import shutil
 import subprocess
 import sys
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ..config import data_root
+
+# Decided once, at import, the same way tools.py does it. Tests select a
+# platform by overriding these rather than by reaching into `sys` or `os`:
+# monkeypatching `os.name` mutates the os module for the whole interpreter, and
+# pathlib reads it to choose between WindowsPath and PosixPath — so a test that
+# does that turns every subsequent Path() into a NotImplementedError.
+IS_MACOS = sys.platform == "darwin"
+IS_WINDOWS = os.name == "nt"
 
 # Windows we opened ourselves, so quitting can close them. Only ever holds
 # processes we spawned into our own profile — never the user's real browser,
@@ -97,14 +105,14 @@ def find_browser() -> str | None:
     On macOS this deliberately returns the executable *inside* the bundle rather
     than a name to hand to ``open``. See :func:`_command` for why.
     """
-    if sys.platform == "darwin":
+    if IS_MACOS:
         for directory in MACOS_APP_DIRS:
             for name in MACOS_BROWSERS:
                 exe = Path(directory) / f"{name}.app" / "Contents" / "MacOS" / name
                 if exe.is_file():
                     return str(exe)
         return None
-    if os.name == "nt":
+    if IS_WINDOWS:
         for candidate in _windows_candidates():
             if Path(candidate).is_file():
                 return candidate
@@ -127,7 +135,7 @@ def _command(browser: str, url: str) -> list[str]:
         "--no-first-run",
         "--no-default-browser-check",
     ]
-    if sys.platform == "darwin":
+    if IS_MACOS:
         # Deliberately NOT `open -na "Google Chrome" --args …`. `open` hands the
         # request to LaunchServices and exits immediately, so the process we get
         # back is already dead and close_windows() has nothing to signal — which
@@ -137,7 +145,7 @@ def _command(browser: str, url: str) -> list[str]:
         # --user-data-dir is what guarantees a distinct instance, so `open -n`
         # was never buying anything here.
         return [browser, *flags]
-    if os.name != "nt":
+    if not IS_WINDOWS:
         # X11 only; harmless (ignored) under Wayland, where the compositor uses
         # the app-id from the .desktop file instead.
         flags.append(f"--class={WM_CLASS}")
@@ -166,7 +174,7 @@ def open_app_window(url: str) -> bool:
             stdin=subprocess.DEVNULL,
             # Detach from our process group so a Ctrl-C in the terminal that
             # started the server doesn't also kill the user's window.
-            start_new_session=(os.name != "nt"),
+            start_new_session=not IS_WINDOWS,
         )
     except (OSError, ValueError):
         return False
@@ -189,10 +197,12 @@ def _macos_activate(browser: str) -> None:
     ``open -a`` on the bundle activates the instance that already exists rather
     than starting another. Best effort; failing to focus is not worth an error.
     """
-    if sys.platform != "darwin":
+    if not IS_MACOS:
         return
-    # …/Foo.app/Contents/MacOS/Foo -> …/Foo.app
-    bundle = Path(browser).parent.parent.parent
+    # …/Foo.app/Contents/MacOS/Foo -> …/Foo.app. PurePosixPath, not Path: this is
+    # macOS-only code handling macOS-only paths, and going through the local
+    # flavour would produce backslashes anywhere else.
+    bundle = PurePosixPath(browser).parent.parent.parent
     if bundle.suffix != ".app":
         return
     try:
