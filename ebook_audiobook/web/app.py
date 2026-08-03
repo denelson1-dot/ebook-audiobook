@@ -11,7 +11,8 @@ import re
 import uuid
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
+from flask import (Flask, Response, abort, jsonify, redirect, render_template,
+                   request, send_file, url_for)
 from werkzeug.utils import secure_filename
 
 from .. import checks, config, power, settings as app_settings, tools, worker
@@ -313,11 +314,31 @@ def create_app() -> Flask:
             ],
         }
 
+    # A backup this old is not being downloaded any more; whatever request built
+    # it is long gone.
+    _STALE_ARCHIVE_SECONDS = 3600
+
+    def _sweep_stale_archives() -> None:
+        """Clear out archives a previous request failed to clean up.
+
+        Belt and braces for the cleanup below: if a download is abandoned
+        halfway, or the process is killed mid-stream, nothing else would ever
+        remove the copy. Left alone that silently doubles the disk cost of every
+        backup, which is the one thing this feature must not do.
+        """
+        import time as _time
+
+        cutoff = _time.time() - _STALE_ARCHIVE_SECONDS
+        for old in paths().tmp.glob("ebook-audiobook-*.zip"):
+            try:
+                if old.stat().st_mtime < cutoff:
+                    old.unlink()
+            except OSError:
+                pass
+
     @app.post("/backup")
     def backup_download():
         """Build the archive in the data root's tmp/ and stream it back."""
-        from flask import after_this_request
-
         from .. import backup as backup_mod
 
         profile = request.form.get("profile", backup_mod.DEFAULT_PROFILE)
@@ -328,23 +349,49 @@ def create_app() -> Flask:
 
         stamp = __import__("time").strftime("%Y%m%d-%H%M%S")
         name = f"ebook-audiobook-{profile}-{stamp}.zip"
-        tmp_path = paths().ensure().tmp / name
+        paths().ensure()
+        _sweep_stale_archives()
+        tmp_path = paths().tmp / name
         try:
             backup_mod.create(tmp_path, selection)
         except backup_mod.BackupError as e:
             return {"ok": False, "error": str(e)}, 400
 
-        @after_this_request
-        def _cleanup(response):
-            # The archive is a copy; keeping it would double the disk cost of
-            # every backup taken through the browser.
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            return response
+        # Stream it ourselves rather than handing the path to send_file.
+        #
+        # The archive is a copy, so it has to be deleted once it has been sent
+        # or keeping it would double the disk cost of every backup. Doing that
+        # from after_this_request — as this used to — runs the delete while
+        # send_file still holds the file open, and Windows refuses to unlink an
+        # open file, so the error was swallowed and the copy stayed. call_on_close
+        # is the documented alternative and does not fire under Flask's test
+        # client at all, which would have made this untestable.
+        #
+        # A generator settles it: the `with` closes the handle before the
+        # `finally` deletes, in that order, on every platform. It also covers the
+        # client that disconnects halfway, because closing a partly-consumed
+        # generator raises GeneratorExit through the same `finally`.
+        size = tmp_path.stat().st_size
 
-        return send_file(tmp_path, as_attachment=True, download_name=name)
+        def _stream_and_delete():
+            try:
+                with open(tmp_path, "rb") as fh:
+                    while chunk := fh.read(256 * 1024):
+                        yield chunk
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        return Response(
+            _stream_and_delete(),
+            mimetype="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{name}"',
+                "Content-Length": str(size),
+            },
+        )
 
     @app.get("/diagnostics")
     def diagnostics():
