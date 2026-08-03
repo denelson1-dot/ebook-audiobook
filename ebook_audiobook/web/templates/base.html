@@ -9,7 +9,13 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand"><span class="logo">🎧</span> ebook·audiobook</div>
+      {# The version rides under the wordmark on every page: the first question when
+         a bug report comes in is which build was running, and Settings is one
+         click too far to be the only place that answers it. #}
+      <div class="brand">
+        <span class="logo">🎧</span>
+        <span class="brand-text">ebook·audiobook<span class="brand-version">v{{ app_version }}</span></span>
+      </div>
       <nav class="nav">
         <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}"><span class="ic">📚</span> Library</a>
         <a href="{{ url_for('new_page') }}" class="{{ 'active' if nav=='new' }}"><span class="ic">＋</span> New conversion</a>

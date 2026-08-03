@@ -60,6 +60,8 @@ a:hover { text-decoration: underline; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700;
   font-size: 15px; letter-spacing: .2px; padding: 6px 10px 22px; }
 .brand .logo { font-size: 21px; filter: drop-shadow(0 2px 6px rgba(124,140,248,.4)); }
+.brand-text { display: flex; flex-direction: column; gap: 1px; }
+.brand-version { font-size: 11px; font-weight: 500; letter-spacing: .3px; color: var(--faint); }
 .nav a {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 12px; border-radius: var(--radius-sm);
