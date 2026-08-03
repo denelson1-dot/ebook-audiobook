@@ -90,13 +90,38 @@ def _bundled_ffmpeg() -> Path | None:
     return exe
 
 
+def _on_path_or_in_usual_places(name: str) -> Path | None:
+    """Find a command, looking beyond PATH where PATH can't be trusted.
+
+    A macOS app launched from the Dock inherits launchd's PATH — just
+    ``/usr/bin:/bin:/usr/sbin:/sbin`` — never the user's shell PATH. So
+    Homebrew's ffmpeg is invisible to a double-clicked app while being right
+    there for the same user in Terminal. That divergence is worse than simply
+    not finding it: ``ebook-audiobook check`` in a terminal would report a
+    different toolchain than the app is actually running with.
+
+    Calibre already gets this treatment (see :func:`_calibre_candidates`); this
+    extends it to the ffmpeg pair, which mattered less when there was no way to
+    launch the app from Finder.
+    """
+    found = shutil.which(name)
+    if found:
+        return Path(found)
+    if IS_MACOS:
+        for prefix in ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"):
+            candidate = Path(prefix) / name
+            try:
+                if candidate.is_file():
+                    return candidate
+            except OSError:
+                continue
+    return None
+
+
 @lru_cache(maxsize=1)
 def ffmpeg_path() -> Path | None:
     """Path to an ffmpeg we can run, preferring one the user installed."""
-    found = shutil.which("ffmpeg")
-    if found:
-        return Path(found)
-    return _bundled_ffmpeg()
+    return _on_path_or_in_usual_places("ffmpeg") or _bundled_ffmpeg()
 
 
 @lru_cache(maxsize=1)
@@ -107,8 +132,7 @@ def ffprobe_path() -> Path | None:
     ffprobe. Everything that uses it degrades gracefully (see
     :mod:`ebook_audiobook.audio.validate`), so its absence is never fatal.
     """
-    found = shutil.which("ffprobe")
-    return Path(found) if found else None
+    return _on_path_or_in_usual_places("ffprobe")
 
 
 def require_ffmpeg() -> Path:
@@ -124,8 +148,9 @@ def require_ffmpeg() -> Path:
 
 
 def ffmpeg_is_bundled() -> bool:
-    """True when we're falling back to the wheel's ffmpeg (nothing on PATH)."""
-    return shutil.which("ffmpeg") is None and _bundled_ffmpeg() is not None
+    """True when we're falling back to the wheel's ffmpeg (no system one found)."""
+    return (_on_path_or_in_usual_places("ffmpeg") is None
+            and _bundled_ffmpeg() is not None)
 
 
 # --- Calibre (ebook-convert) -------------------------------------------------

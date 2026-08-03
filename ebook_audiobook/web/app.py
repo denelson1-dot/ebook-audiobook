@@ -8,16 +8,18 @@ browser polls ``/job/<id>/status`` and ``/api/status``.
 from __future__ import annotations
 
 import re
+import threading
 import uuid
 from pathlib import Path
 
-from flask import (Flask, Response, abort, jsonify, redirect, render_template,
-                   request, send_file, url_for)
+from flask import (Flask, Response, abort, current_app, jsonify, redirect,
+                   render_template, request, send_file, url_for)
 from werkzeug.utils import secure_filename
 
 from .. import checks, config, power, settings as app_settings, tools, worker
 from ..audio import estimate
 from ..config import VoiceSettings, paths
+from ..desktop import runtime
 from ..jobs.models import Stage
 from ..jobs.store import JobStore
 from ..pipeline import extract as extract_mod, layout
@@ -191,6 +193,10 @@ def create_app() -> Flask:
             "audiobooks_root": s.audiobooks_root,
             # First-run nudge: no library folder chosen and not yet dismissed.
             "setup_needed": not s.audiobooks_root and not s.setup_dismissed,
+            # True only when there is a real server to shut down, so the Quit
+            # control doesn't appear under `flask run` or in tests, where it
+            # could not work. Read at render time, after serve() sets it.
+            "can_quit": bool(current_app.config.get("EBAB_SHUTDOWN")),
             "power_mode": s.power_mode,
             "power_modes": [
                 {"id": m, "label": power.MODE_LABELS[m],
@@ -824,7 +830,45 @@ def create_app() -> Flask:
 
     @app.get("/api/status")
     def api_status():
-        return {"busy": runner.is_busy(), "current": runner.current}
+        return {
+            # An open port proves something is listening, not that it is us.
+            # A second launch identifies the instance recorded in runtime.json
+            # by this marker before handing the user its window.
+            "app": runtime.APP_ID,
+            "busy": runner.is_busy(),
+            "current": runner.current,
+            # "render" | "preview" | "extract" | "voice_test" | None — the Quit
+            # control words its warning differently for a six-hour render than
+            # for a ten-second voice sample.
+            "kind": runner.current_kind(),
+        }
+
+    @app.post("/quit")
+    def quit_app():
+        """Shut the whole application down.
+
+        Refuses while work is in flight unless asked twice. The window is a
+        browser window and the server outlives it, so this is the only
+        deliberate way out other than the tray — and it is reachable by a stray
+        click, which a multi-hour render should survive.
+        """
+        shutdown = current_app.config.get("EBAB_SHUTDOWN")
+        if shutdown is None:
+            # Running under the test client or a dev server, where there is no
+            # server object to stop.
+            return {"ok": False, "error": "not running as an application"}, 501
+
+        kind = runner.current_kind()
+        force = request.args.get("force") == "1"
+        if runner.is_busy() and not force:
+            return {"ok": False, "busy": True, "kind": kind}, 409
+
+        if runner.current:
+            runner.cancel(runner.current.split(":", 1)[0])
+        # Answer before stopping, or the browser sees a dropped connection and
+        # shows its own error page in what is supposed to be our app window.
+        threading.Timer(0.25, shutdown).start()
+        return {"ok": True}
 
     # Every page asks for this on load, and answering means running
     # `ffmpeg -version` and `ebook-convert --version` as subprocesses. Process

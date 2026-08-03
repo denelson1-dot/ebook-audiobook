@@ -73,6 +73,28 @@ a:hover { text-decoration: underline; }
 }
 .nav a .ic { width: 18px; text-align: center; opacity: .9; }
 
+/* Quit sits apart from the nav and at the bottom of the sidebar: it is the one
+   control here that ends the session rather than moving between pages. Only
+   rendered when the app is running as an application (see base.html). */
+.sidebar { display: flex; flex-direction: column; }
+.nav-foot { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+.nav-quit {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: none; border: 0; cursor: pointer;
+  color: var(--faint); font: inherit; font-weight: 500; text-align: left;
+  transition: background .14s, color .14s;
+}
+.nav-quit:hover { background: rgba(251,113,133,.10); color: var(--danger); }
+.nav-quit .ic { width: 18px; text-align: center; opacity: .9; }
+
+.quit-screen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; height: 100vh; text-align: center; color: var(--muted);
+}
+.quit-screen h1 { font-size: 20px; font-weight: 650; color: var(--text); margin: 0; }
+.quit-screen p { margin: 0; font-size: 14px; }
+
 .main { padding: 38px 44px 96px; max-width: 1020px; }
 .page-title { font-size: 27px; font-weight: 750; letter-spacing: -.4px; margin: 0 0 5px; }
 .page-sub { color: var(--muted); margin: 0 0 26px; }

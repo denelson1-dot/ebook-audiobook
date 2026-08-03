@@ -1,9 +1,13 @@
-"""Keeping the launch window clean.
+"""Keeping the launch output clean.
 
-The app tells the user to leave a terminal window open while it runs, so
-anything printed there is read as ours. Two separate sources of other people's
-noise have to stay suppressed: the engine libraries' import-time warnings, and
-the browser we spawn at startup.
+Anything printed on the terminal that started the app is read as ours. Two
+separate sources of other people's noise have to stay suppressed: the engine
+libraries' import-time warnings, and the browser we spawn at startup.
+
+The browser half only applies to the fallback path now. When a Chromium-family
+browser is found, launcher.open_app_window spawns it itself and redirects the
+child's streams directly; detached_std_fds is what covers webbrowser.open, which
+hands us no control over the Popen.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ import sys
 import warnings
 
 from ebook_audiobook import quiet
-from ebook_audiobook.web.server import _detached_std_fds
+from ebook_audiobook.desktop.launcher import detached_std_fds
 
 PERTH_WARNING = (
     "pkg_resources is deprecated as an API. See "
@@ -65,7 +69,7 @@ def test_checks_registers_the_filters_before_importing_the_engine():
 
 def test_detached_std_fds_swallows_a_child_process():
     """Chrome writes GPU and updater errors to the stderr it inherits from us."""
-    with _detached_std_fds():
+    with detached_std_fds():
         done = subprocess.run(
             [sys.executable, "-c",
              "import sys; sys.stderr.write('CHILD NOISE'); sys.stderr.flush()"],
@@ -77,7 +81,7 @@ def test_detached_std_fds_swallows_a_child_process():
 def test_detached_std_fds_restores_our_own_descriptors(capfd):
     before = (os.dup(1), os.dup(2))
     try:
-        with _detached_std_fds():
+        with detached_std_fds():
             pass
         print("visible again", flush=True)
         assert "visible again" in capfd.readouterr().out
@@ -88,7 +92,7 @@ def test_detached_std_fds_restores_our_own_descriptors(capfd):
 
 def test_detached_std_fds_restores_even_when_the_body_raises():
     try:
-        with _detached_std_fds():
+        with detached_std_fds():
             raise RuntimeError("browser blew up")
     except RuntimeError:
         pass

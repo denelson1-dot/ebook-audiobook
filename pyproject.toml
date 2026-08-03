@@ -40,6 +40,18 @@ dependencies = [
     # install one. A system ffmpeg on PATH is always preferred when present (it
     # also brings ffprobe, which this wheel does not include).
     "imageio-ffmpeg>=0.5",
+    # The tray icon, so a render that outlives its window is still visible and
+    # can be quit on purpose. Every import of these is guarded: the app runs
+    # trayless (see ebook_audiobook.desktop) wherever they don't work, which
+    # includes headless boxes, SSH sessions, and GNOME/Wayland.
+    "pystray>=0.19",
+    "pillow>=10.0",          # pystray loads the icon through it
+    # pystray already declares the per-platform bindings it needs (Quartz on
+    # macOS, python-xlib on Linux), so those are NOT repeated here. Quartz is
+    # named explicitly only because we import it ourselves, in
+    # desktop/tray.py, to ask whether there is a window server at all before
+    # letting AppKit near a headless process.
+    "pyobjc-framework-Quartz>=7.0 ; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
@@ -89,8 +101,11 @@ include = ["ebook_audiobook*"]
 
 # Jinja templates and static assets are not .py files, so they must be declared
 # explicitly or the built wheel serves a UI with no templates (every page 500s).
+# The icons are the same hazard one step quieter: a wheel without them starts
+# fine and simply has no tray icon and a generic window, which nothing notices.
 [tool.setuptools.package-data]
 "ebook_audiobook.web" = ["templates/*.html", "static/*"]
+"ebook_audiobook" = ["assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

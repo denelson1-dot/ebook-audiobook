@@ -96,6 +96,10 @@ if ($Uninstall) {
     if (Test-Path $startMenu) { Remove-Item -Force $startMenu }
     $desktopLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "ebook-audiobook.lnk"
     if (Test-Path $desktopLnk) { Remove-Item -Force $desktopLnk }
+    # The app window's own browser profile. Regenerated on next launch; holds no
+    # books, settings or audiobooks, only Chromium's window-size cache.
+    $profileDir = Join-Path $DataDir "browser-profile"
+    if (Test-Path $profileDir) { Remove-Item -Recurse -Force $profileDir }
 
     # Take our entry back out of the user PATH, leaving everything else alone.
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -453,6 +457,20 @@ if ($userPath.Split(';') -notcontains $BinDir) {
 # browser.
 $guiExe = Join-Path $VenvDir "Scripts\ebook-audiobook-gui.exe"
 $targetExe = if (Test-Path $guiExe) { $guiExe } else { Join-Path $VenvDir "Scripts\ebook-audiobook.exe" }
+
+# The app's own icon, shipped inside the wheel. Without this the shortcut shows
+# the generic console-application icon that setuptools stamps into every
+# entry-point .exe, which is the same icon as every other Python tool installed.
+$iconPath = ""
+try {
+    $assets = & (Join-Path $VenvDir "Scripts\python.exe") -c `
+        "import ebook_audiobook, pathlib; print(pathlib.Path(ebook_audiobook.__file__).parent / 'assets')"
+    $candidate = Join-Path $assets "icon.ico"
+    if (Test-Path $candidate) { $iconPath = $candidate }
+} catch {
+    # Non-fatal: a shortcut with the default icon still launches the app.
+}
+
 try {
     $shell = New-Object -ComObject WScript.Shell
     $startMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
@@ -461,6 +479,7 @@ try {
     $lnk.TargetPath = $targetExe
     $lnk.WorkingDirectory = $DataDir
     $lnk.Description = "Turn ebooks you own into narrated audiobooks"
+    if ($iconPath) { $lnk.IconLocation = "$iconPath,0" }
     $lnk.Save()
     Write-Ok "Start Menu shortcut"
 
@@ -470,6 +489,7 @@ try {
         $dlnk.TargetPath = $targetExe
         $dlnk.WorkingDirectory = $DataDir
         $dlnk.Description = "Turn ebooks you own into narrated audiobooks"
+        if ($iconPath) { $dlnk.IconLocation = "$iconPath,0" }
         $dlnk.Save()
         Write-Ok "Desktop shortcut"
     }

@@ -43,10 +43,24 @@ def get(url: str, timeout: float = 20.0) -> tuple[int, str]:
         return 0, f"{type(e).__name__}: {e}"
 
 
+def post(url: str, timeout: float = 20.0) -> tuple[int, str]:
+    req = urllib.request.Request(url, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:  # noqa: BLE001
+        return 0, f"{type(e).__name__}: {e}"
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ebab-web-"))
     os.environ["EBAB_DATA_ROOT"] = str(tmp / "data")
     os.environ["EBAB_NO_BROWSER"] = "1"
+    # CI has no display and no tray. This is also the path a headless install
+    # takes, so exercising it here is the point, not a workaround.
+    os.environ["EBAB_NO_TRAY"] = "1"
 
     from ebook_audiobook.web.server import serve
 
@@ -99,6 +113,37 @@ def main() -> int:
     print("\n404s behave")
     code, _ = get(base + "/job/does-not-exist")
     check(code == 404, f"unknown job -> {code}")
+
+    print("\nthe icons a desktop launcher needs are in the wheel")
+    from ebook_audiobook.desktop import tray
+
+    check(tray.ASSETS.is_dir(), f"assets directory installed at {tray.ASSETS}")
+    for name in (tray.ICON_FILE, "icon.ico", "icon.icns", "icon-256.png"):
+        check((tray.ASSETS / name).is_file(), f"{name} packaged")
+
+    print("\nthe running instance is discoverable")
+    # Without this a second launch starts a second server over the same job
+    # store, with two workers writing the same files.
+    from ebook_audiobook.desktop import runtime
+
+    record = runtime.read()
+    check(bool(record) and record.get("port") == port,
+          f"runtime.json records the live port ({record})")
+    check(runtime.probe() == base, "probe() finds the running instance")
+
+    print("\nquit stops the server")
+    code, body = post(base + "/quit")
+    check(code == 200, f"POST /quit -> {code} {body[:80]}")
+
+    stopped = False
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if get(f"{base}/", timeout=2)[0] == 0:
+            stopped = True
+            break
+        time.sleep(0.4)
+    check(stopped, "server stopped answering after /quit")
+    check(runtime.read() is None, "runtime.json removed on the way out")
 
     return report()
 

@@ -91,9 +91,27 @@ def cmd_check(args) -> int:
 
 def cmd_web(args) -> int:
     """Start the local web UI (the way almost everyone uses this)."""
-    from .web.server import serve
+    from .desktop import runtime
+    from .web.server import open_window, serve
 
-    serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+    # Launching again while an instance is running means "show me the window",
+    # not "start a second copy". Starting a second copy is actively harmful: it
+    # would bind a different port and run its own worker over the same JobStore,
+    # so two processes would write state for the same job with no lock between
+    # them, each believing it owned the GPU.
+    #
+    # Skipped when --host or --port is given, since asking for a specific
+    # address is asking for a specific server.
+    if not (args.host or args.port):
+        existing = runtime.probe()
+        if existing:
+            if not args.no_browser:
+                open_window(existing)
+            print(f"ebook-audiobook is already running at {existing}", file=sys.stderr)
+            return 0
+
+    serve(host=args.host, port=args.port, open_browser=not args.no_browser,
+          use_tray=not args.no_tray)
     return 0
 
 
@@ -415,10 +433,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command")
 
-    c = sub.add_parser("web", help="open the web interface (default)")
+    c = sub.add_parser("web", help="open the app window (default)")
     c.add_argument("--host", default=None, help="bind address (default 127.0.0.1)")
     c.add_argument("--port", type=int, default=None, help="port (default: first free from 5005)")
-    c.add_argument("--no-browser", action="store_true", help="don't open a browser window")
+    c.add_argument("--no-browser", action="store_true", help="don't open a window")
+    c.add_argument("--no-tray", action="store_true",
+                   help="don't show a tray icon; stop with Ctrl-C instead")
     c.set_defaults(func=cmd_web)
 
     c = sub.add_parser("paths", help="show where books, jobs, and settings are stored")
