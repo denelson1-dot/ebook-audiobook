@@ -11,37 +11,35 @@ import pytest
 
 from ebook_audiobook.desktop import runtime
 from ebook_audiobook.web import create_app
-from ebook_audiobook.web.runner import runner
-
-
-@pytest.fixture
-def app():
-    """An app wired up the way serve() wires it: with something to shut down."""
-    app = create_app()
-    app.config["EBAB_SHUTDOWN"] = lambda: calls.append("shutdown")
-    return app
-
+from ebook_audiobook.web import app as app_module
+from ebook_audiobook.web.runner import Runner
 
 calls: list[str] = []
 
 
-@pytest.fixture(autouse=True)
-def clean():
-    """``runner`` is a module-level singleton shared by the whole test session.
+@pytest.fixture
+def runner(monkeypatch):
+    """A Runner of this test's own, in place of the module-level singleton.
 
-    Resetting ``current`` alone is not enough: ``is_busy()`` counts *queued* work
-    as busy too, so a job another test submitted and never drained leaves
-    ``_pending`` populated and every quit here answers 409.
+    The singleton is shared by the whole session and has a live worker thread
+    behind it, so tests elsewhere can flip it to busy at any moment — which made
+    every quit here answer 409 depending only on how the suite happened to be
+    ordered. Resetting its fields between tests was not enough; the fix is not
+    to touch it. The routes look the global up by name at call time, so
+    rebinding it here is all it takes.
     """
-    def reset():
-        calls.clear()
-        runner.current = None
-        runner._pending.clear()
-        runner._cancel.clear()
+    fresh = Runner()
+    monkeypatch.setattr(app_module, "runner", fresh)
+    return fresh
 
-    reset()
-    yield
-    reset()
+
+@pytest.fixture
+def app(runner):
+    """An app wired up the way serve() wires it: with something to shut down."""
+    calls.clear()
+    app = create_app()
+    app.config["EBAB_SHUTDOWN"] = lambda: calls.append("shutdown")
+    return app
 
 
 def test_status_identifies_the_app(app):
@@ -50,7 +48,7 @@ def test_status_identifies_the_app(app):
     assert body["app"] == runtime.APP_ID
 
 
-def test_status_reports_the_running_kind(app):
+def test_status_reports_the_running_kind(app, runner):
     runner.current = "job123:render"
     body = app.test_client().get("/api/status").get_json()
     assert body["kind"] == "render"
@@ -70,7 +68,7 @@ def test_quit_when_idle_shuts_down(app):
     assert calls == ["shutdown"]
 
 
-def test_quit_refuses_mid_render(app):
+def test_quit_refuses_mid_render(app, runner):
     """The regression that matters: one click must not bin a six-hour render."""
     runner.current = "job123:render"
     r = app.test_client().post("/quit")
@@ -84,7 +82,7 @@ def test_quit_refuses_mid_render(app):
     assert calls == []
 
 
-def test_quit_mid_render_proceeds_when_forced(app):
+def test_quit_mid_render_proceeds_when_forced(app, runner):
     runner.current = "job123:render"
     r = app.test_client().post("/quit?force=1")
     assert r.status_code == 200
@@ -92,7 +90,7 @@ def test_quit_mid_render_proceeds_when_forced(app):
     assert calls == ["shutdown"]
 
 
-def test_forced_quit_cancels_the_running_job(app):
+def test_forced_quit_cancels_the_running_job(app, runner):
     """Ask the worker to stop at its next checkpoint rather than just exiting,
     so the job's own state is left consistent on disk."""
     runner.current = "job123:render"
