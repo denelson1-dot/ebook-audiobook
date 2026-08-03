@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.2.0 — 2026-08-02
+
+It launches like an application now, instead of like a web server you have to
+leave a terminal open for.
+
+**A window of its own.** Starting the app used to park a terminal on screen
+telling you to leave it open, and the interface arrived as one more tab in
+whatever browser you already had — no dedicated window, no taskbar identity, a
+stock system icon. Now you get a chromeless window with its own icon and its own
+taskbar entry, and no terminal at all. It borrows a Chromium-family browser you
+already have (Chrome, Edge, Brave, Chromium) in `--app` mode, so there is no
+bundled runtime to download and no second GUI toolkit sitting next to PyTorch.
+If you have no Chromium, it falls back to an ordinary tab exactly as before.
+
+**Closing the window no longer stops a render.** The app keeps running in the
+system tray, so an overnight conversion finishes on its own. Open the window
+again from the tray, or just launch the app a second time. To stop it properly
+there is a **Quit** in the tray menu and at the bottom of the sidebar — and both
+warn you first if a render is still going, wording the warning differently for a
+six-hour render than for a ten-second voice sample.
+
+**macOS gets a launcher at all.** Previously there was only the command line: no
+Dock icon, no Spotlight entry, no way to start it without opening Terminal
+first. There is now an `ebook-audiobook.app` in your Applications folder.
+
+Also in this release:
+
+- **Launching twice could corrupt a book's state.** The second launch found port
+  5005 taken, quietly bound a different one, and ran a *second* background
+  worker over the same job folder — two processes writing state for the same
+  job, each believing it owned the GPU. Launching again now finds the running
+  instance and opens a window onto it.
+- **The diagnostic log never actually deleted anything on Windows**, which
+  refuses to unlink a file that is still open. Underneath that was a leak on
+  every platform: clearing the log left the old handler attached, so the next
+  failure was written **twice**, and every failure after that too.
+- **Backups taken through the browser left a full copy behind on Windows**,
+  silently doubling the disk cost of the one feature whose whole point is not
+  doing that. Archives are also swept if a download is interrupted.
+- **Render progress no longer floods the system log.** It printed to stderr
+  unconditionally; with no terminal attached that is thousands of lines per
+  render into the journal. It now checks whether anyone is actually watching.
+- Homebrew's ffmpeg is found when the app is launched from the Dock. macOS gives
+  a GUI-launched app a bare `PATH`, so it had been silently falling back to the
+  bundled copy — and reporting a different toolchain than the same user saw in
+  Terminal.
+
+**Known limitation:** GNOME removed the system tray and needs a user-installed
+shell extension to get one back. No library works around that. On GNOME the app
+still runs after you close the window; you reopen it by launching the app again,
+and quit from the sidebar.
+
 ## 1.1.3 — 2026-08-01
 
 Keeping your work safe, knowing when there's a new version, and being able to
