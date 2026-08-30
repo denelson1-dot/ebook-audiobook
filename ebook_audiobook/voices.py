@@ -24,6 +24,32 @@ from .config import paths
 
 DEFAULT_VOICE_ID = "default"
 _INDEX = "voices.json"
+
+# Reference clips shipped with the application, so a new install has usable
+# voices without anyone having to find or record one. Read from the package
+# rather than copied into the user's library: they cannot then be deleted by
+# accident, and an upgrade that improves a clip improves it for everyone.
+#
+# ``pacing`` and ``expressiveness`` are this clip's suggested settings, applied
+# when the voice is picked. They are starting points tuned by ear, not
+# constraints — both sliders still win, and moving one is visible.
+BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "voices"
+
+BUNDLED = (
+    {"id": "male-north-american", "name": "Male, North American",
+     "file": "male-north-american.flac", "pacing": 0.50, "expressiveness": 0.60},
+    {"id": "male-north-american-alt", "name": "Male, North American (alt)",
+     "file": "male-north-american-alt.flac", "pacing": 0.42},
+    {"id": "female-north-american", "name": "Female, North American",
+     "file": "female-north-american.flac", "pacing": 0.42},
+    {"id": "male-british", "name": "Male, British",
+     "file": "male-british.flac", "pacing": 0.42},
+    {"id": "female-british", "name": "Female, British",
+     "file": "female-british.flac", "pacing": 0.42},
+)
+
+# Which voice a newly imported book starts with.
+DEFAULT_BUNDLED_ID = "male-north-american"
 # Accepted upload/import formats. Anything that isn't already a WAV is transcoded
 # to WAV via ffmpeg on import (see VoiceLibrary.add), so container/AAC formats
 # like .mp4/.m4a — which librosa can't reliably decode — work regardless.
@@ -34,15 +60,29 @@ AUDIO_EXTS = {".wav", ".mp3", ".flac", ".m4a", ".mp4", ".ogg", ".opus", ".aac", 
 class Voice:
     id: str
     name: str
-    clip_filename: str | None  # None => built-in default voice
+    clip_filename: str | None  # None => the engine's own default voice
+    # Shipped with the app rather than added by the user. Its clip lives in the
+    # package, so it is neither stored in nor deletable from the user's library.
+    bundled: bool = False
+    # Suggested settings for this clip, or None to leave that slider alone.
+    pacing: float | None = None
+    expressiveness: float | None = None
 
     @property
     def is_default(self) -> bool:
-        return self.clip_filename is None
+        """The engine's own voice — no reference clip at all."""
+        return self.clip_filename is None and not self.bundled
+
+    @property
+    def removable(self) -> bool:
+        """Only voices the user added can be deleted."""
+        return not (self.is_default or self.bundled)
 
     def to_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "clip_filename": self.clip_filename,
-                "is_default": self.is_default}
+                "is_default": self.is_default, "bundled": self.bundled,
+                "removable": self.removable, "pacing": self.pacing,
+                "expressiveness": self.expressiveness}
 
 
 def _slug(name: str, default: str = "voice") -> str:
@@ -87,10 +127,21 @@ class VoiceLibrary:
     def _default() -> Voice:
         return Voice(DEFAULT_VOICE_ID, "Default narrator", None)
 
+    @staticmethod
+    def _bundled() -> list[Voice]:
+        """The shipped voices, in the order they appear in the picker."""
+        return [Voice(b["id"], b["name"], b["file"], bundled=True,
+                      pacing=b.get("pacing"), expressiveness=b.get("expressiveness"))
+                for b in BUNDLED if (BUNDLED_DIR / b["file"]).is_file()]
+
     def list(self) -> list[Voice]:
-        voices = [self._default()]
+        # Shipped voices first: a new install should meet a usable narrator
+        # before it meets the engine's raw default.
+        voices = self._bundled()
+        voices.append(self._default())
+        bundled_ids = {v.id for v in voices}
         for d in self._load_index():
-            if d.get("id") and d["id"] != DEFAULT_VOICE_ID:
+            if d.get("id") and d["id"] not in bundled_ids:
                 voices.append(Voice(d["id"], d.get("name", d["id"]), d.get("clip_filename")))
         return voices
 
@@ -98,10 +149,13 @@ class VoiceLibrary:
         return next((v for v in self.list() if v.id == voice_id), None)
 
     def clip_path(self, voice_id: str) -> Path | None:
+        """Where this voice's reference clip actually lives, or None for the
+        engine's own voice. Bundled clips resolve into the package."""
         v = self.get(voice_id)
         if not v or not v.clip_filename:
             return None
-        return self.dir / v.clip_filename
+        path = (BUNDLED_DIR if v.bundled else self.dir) / v.clip_filename
+        return path if path.is_file() else None
 
     def add(self, name: str, src_path: str | None = None, file_storage=None,
             orig_filename: str | None = None) -> Voice:
@@ -119,7 +173,8 @@ class VoiceLibrary:
             raise ValueError(f"unsupported audio format: {ext or '(none)'}")
 
         items = self._load_index()
-        taken = {d["id"] for d in items} | {DEFAULT_VOICE_ID}
+        taken = ({d["id"] for d in items} | {DEFAULT_VOICE_ID}
+                 | {b["id"] for b in BUNDLED})
         vid = base = _slug(name)
         n = 2
         while vid in taken:
@@ -172,7 +227,10 @@ class VoiceLibrary:
             raise ValueError(f"could not decode audio: {(proc.stderr or '')[-300:]}")
 
     def delete(self, voice_id: str) -> bool:
-        if voice_id == DEFAULT_VOICE_ID:
+        # The engine's own voice and the shipped ones have nothing in the user's
+        # library to remove; refusing here means a hand-made request cannot
+        # corrupt the index either.
+        if voice_id == DEFAULT_VOICE_ID or any(b["id"] == voice_id for b in BUNDLED):
             return False
         items = self._load_index()
         kept, removed = [], None
@@ -188,3 +246,22 @@ class VoiceLibrary:
         (self.dir / f"_sample_{voice_id}.wav").unlink(missing_ok=True)  # audition clip
         self._save_index(kept)
         return True
+
+
+def default_voice_id() -> str:
+    """The voice a newly imported book starts with.
+
+    The user's choice if they have made one and it still exists, otherwise the
+    shipped default. Falls back to the engine's own voice if the bundled clips
+    are missing — a source checkout without them should still work.
+    """
+    from . import settings as app_settings
+
+    lib = VoiceLibrary()
+    available = {v.id for v in lib.list()}
+    chosen = app_settings.load_settings().default_voice_id
+    if chosen and chosen in available:
+        return chosen
+    if DEFAULT_BUNDLED_ID in available:
+        return DEFAULT_BUNDLED_ID
+    return DEFAULT_VOICE_ID

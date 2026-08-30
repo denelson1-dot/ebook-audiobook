@@ -114,6 +114,19 @@ def main() -> int:
     code, _ = get(base + "/job/does-not-exist")
     check(code == 404, f"unknown job -> {code}")
 
+    print("\nthe narrator voices are in the wheel")
+    from ebook_audiobook.voices import BUNDLED, BUNDLED_DIR, VoiceLibrary
+    check(BUNDLED_DIR.is_dir(), f"voices directory installed at {BUNDLED_DIR}")
+    for b in BUNDLED:
+        clip = BUNDLED_DIR / b["file"]
+        size = clip.stat().st_size if clip.is_file() else 0
+        check(size > 100_000, f"{b['file']} packaged ({size:,} bytes)")
+    # A package-data glob does not cross a directory boundary, so "assets/*"
+    # alone ships the icons and silently drops every voice — leaving a picker
+    # that points at clips which are not there.
+    ids = {v.id for v in VoiceLibrary().list()}
+    check(all(b["id"] in ids for b in BUNDLED), "every shipped voice appears in the picker")
+
     print("\nthe icons a desktop launcher needs are in the wheel")
     from ebook_audiobook.desktop import tray
 

@@ -103,9 +103,11 @@ include = ["ebook_audiobook*"]
 # explicitly or the built wheel serves a UI with no templates (every page 500s).
 # The icons are the same hazard one step quieter: a wheel without them starts
 # fine and simply has no tray icon and a generic window, which nothing notices.
+# assets/voices/* is listed separately because a glob does not cross a directory
+# boundary — "assets/*" alone ships the icons and silently drops every narrator.
 [tool.setuptools.package-data]
 "ebook_audiobook.web" = ["templates/*.html", "static/*"]
-"ebook_audiobook" = ["assets/*"]
+"ebook_audiobook" = ["assets/*", "assets/voices/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

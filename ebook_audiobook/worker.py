@@ -189,7 +189,24 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
         shutil.copy2(src, imported)
 
     store.save_book(Book(job_id=job_id, source_path=str(imported), source_hash=job_id))
-    store.save_voice(VoiceSettings(engine=engine))
+
+    # A new book starts with the shipped narrator rather than the engine's raw
+    # default, so the first thing anyone hears is a voice that was chosen.
+    from .voices import VoiceLibrary, default_voice_id
+
+    voice = VoiceSettings(engine=engine)
+    lib = VoiceLibrary()
+    vid = default_voice_id()
+    clip = lib.clip_path(vid)
+    if clip:
+        voice.reference_clip = str(clip)
+        chosen = lib.get(vid)
+        if chosen and chosen.pacing is not None:
+            voice.cfg_weight = chosen.pacing
+        if chosen and chosen.expressiveness is not None:
+            voice.exaggeration = chosen.expressiveness
+    voice.extra["voice_id"] = vid
+    store.save_voice(voice)
     store.save_state(JobState(job_id=job_id, stage=Stage.IMPORTED.value, created_at=_now_iso()))
     return job_id
 
