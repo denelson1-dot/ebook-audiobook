@@ -173,6 +173,18 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
+def _offerable_voices(current_id: str | None = None) -> list[dict]:
+    """The voices a person may pick from.
+
+    The engine's own untuned voice is deliberately not among them: it exists as
+    a fallback, not as a choice, and the shipped narrators are better in every
+    case. It is still shown when a job already uses it, because silently
+    swapping a book's voice would silently re-render the book.
+    """
+    return [v.to_dict() for v in VoiceLibrary().list()
+            if not v.is_default or v.id == current_id]
+
+
 def _busy_job_id() -> str | None:
     """Which job the single worker is on, if any. ``runner.current`` is
     "<job_id>:<kind>"; everywhere outside the runner only the id matters."""
@@ -247,6 +259,7 @@ def create_app() -> Flask:
             ],
             "check_for_updates": s.check_for_updates,
             "auto_free_working_files": s.auto_free_working_files,
+            "autoplay_preview": s.autoplay_preview,
             "app_version": _app_version(),
         }
 
@@ -299,7 +312,7 @@ def create_app() -> Flask:
     def voices_page():
         return render_template(
             "voices.html",
-            voices=[v.to_dict() for v in VoiceLibrary().list()],
+            voices=_offerable_voices(),
             start=str(Path.home()),
         )
 
@@ -367,6 +380,8 @@ def create_app() -> Flask:
             s.power_mode = power.normalize_mode(request.form.get("power_mode"))
         if "check_for_updates" in request.form:
             s.check_for_updates = request.form.get("check_for_updates") == "1"
+        if "autoplay_preview" in request.form:
+            s.autoplay_preview = request.form.get("autoplay_preview") == "1"
         if "auto_free_working_files" in request.form:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
         s.setup_dismissed = True  # user has engaged with setup either way
@@ -374,7 +389,9 @@ def create_app() -> Flask:
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
                 "power_mode": s.power_mode,
                 "check_for_updates": s.check_for_updates,
-                "auto_free_working_files": s.auto_free_working_files}
+                "auto_free_working_files": s.auto_free_working_files,
+            "autoplay_preview": s.autoplay_preview,
+                "autoplay_preview": s.autoplay_preview}
 
     # ----- updates, backup, diagnostics -------------------------------------
 
@@ -580,7 +597,7 @@ def create_app() -> Flask:
             stage_labels=STAGE_LABELS,
             chapters=chapters,
             voice=voice,
-            voices=[v.to_dict() for v in VoiceLibrary().list()],
+            voices=_offerable_voices(voice.extra.get("voice_id")),
             selected_voice_id=voice.extra.get("voice_id", "default"),
             default_chapter_id=default_ch,
             bitrate=bitrate,

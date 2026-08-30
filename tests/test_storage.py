@@ -408,3 +408,49 @@ def test_tools_reveal_refuses_a_path_that_is_not_a_folder(tmp_path):
     f.write_text("x")
     assert tools.reveal(f) is False
     assert tools.reveal(tmp_path / "nope") is False
+
+
+# --- playing a preview when it is ready -------------------------------------
+
+def test_previews_play_themselves_by_default():
+    from ebook_audiobook import settings as app_settings
+
+    assert app_settings.Settings().autoplay_preview is True
+
+
+def test_the_autoplay_preference_can_be_turned_off_and_on(client):
+    from ebook_audiobook import settings as app_settings
+
+    assert client.post("/settings", data={"autoplay_preview": "0"}).get_json()[
+        "autoplay_preview"] is False
+    assert app_settings.load_settings().autoplay_preview is False
+
+    assert client.post("/settings", data={"autoplay_preview": "1"}).get_json()[
+        "autoplay_preview"] is True
+
+
+def test_saving_something_else_leaves_autoplay_alone(client):
+    from ebook_audiobook import settings as app_settings
+
+    client.post("/settings", data={"autoplay_preview": "0"})
+    client.post("/settings", data={"power_mode": "quiet"})
+    assert app_settings.load_settings().autoplay_preview is False
+
+
+def test_the_job_page_is_told_what_the_preference_is(client):
+    from ebook_audiobook import settings as app_settings
+
+    make_job("previewjob", stage=Stage.EXTRACTED.value, title="A Book")
+    JobStore("previewjob").save_chapters([])
+
+    assert b"AUTOPLAY_PREVIEW = true" in client.get("/job/previewjob").data
+    s = app_settings.load_settings()
+    s.autoplay_preview = False
+    app_settings.save_settings(s)
+    assert b"AUTOPLAY_PREVIEW = false" in client.get("/job/previewjob").data
+
+
+def test_the_settings_page_shows_the_toggle(client):
+    body = client.get("/settings").data
+    assert b"autoplayCheck" in body
+    assert b"Play a preview as soon as it is ready" in body

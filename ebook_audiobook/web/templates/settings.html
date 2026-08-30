@@ -88,6 +88,20 @@
 
   <div class="stack">
     <section class="panel">
+      <div class="panel-head"><h3>Previews</h3></div>
+      <div class="panel-body">
+        <label class="switch">
+          <input type="checkbox" id="autoplayCheck" {% if autoplay_preview %}checked{% endif %}>
+          <span style="flex:1">
+            <b>Play a preview as soon as it is ready</b>
+            <span>Generating one takes a while, so this saves pressing play after the wait.
+              Turn it off if you would rather choose the moment it starts.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3>Back up your work</h3></div>
       <div class="panel-body">
         <div class="field">
@@ -295,6 +309,11 @@ document.getElementById("autoFreeCheck").addEventListener("change", async (e) =>
   toast(e.target.checked
     ? "Finished books will clean up after themselves."
     : "Working files will be kept until you say otherwise.");
+});
+
+document.getElementById("autoplayCheck").addEventListener("change", async (e) => {
+  await postForm("/settings", { autoplay_preview: e.target.checked ? "1" : "0" });
+  toast(e.target.checked ? "Previews will play themselves." : "Previews will wait for you.");
 });
 </script>
 {% endblock %}

@@ -95,8 +95,10 @@
             <label for="voiceSelect">Voice</label>
             <select name="voice_id" id="voiceSelect">
               {% for v in voices %}
-                <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}>
-                  {{ v.name }}{{ ' — built in' if v.is_default }}</option>
+                <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}
+                        data-pacing="{{ v.pacing if v.pacing is not none }}"
+                        data-expressiveness="{{ v.expressiveness if v.expressiveness is not none }}">
+                  {{ v.name }}{{ ' — engine default' if v.is_default }}</option>
               {% endfor %}
             </select>
           </div>
@@ -107,8 +109,7 @@
               <input type="range" name="exaggeration" min="0" max="1" step="0.05" value="{{ voice.exaggeration }}">
               <span class="val"></span>
             </div>
-            <p class="hint">How much colour the narrator puts into it. The engine calls this
-              <em>exaggeration</em>.</p>
+            <p class="hint">How much colour the narrator puts into it.</p>
           </div>
           <div class="field">
             <label>Pacing <span class="dim">— measured to hurried</span></label>
@@ -116,8 +117,8 @@
               <input type="range" name="cfg_weight" min="0" max="1" step="0.05" value="{{ voice.cfg_weight }}">
               <span class="val"></span>
             </div>
-            <p class="hint">How closely it sticks to the reference clip's rhythm. Lower reads faster and
-              looser; higher is more deliberate. The engine calls this <em>cfg_weight</em>.</p>
+            <p class="hint">How closely it sticks to the reference clip's rhythm. Lower reads faster
+              and looser; higher is more deliberate.</p>
           </div>
 
           <details class="advanced">
@@ -198,12 +199,10 @@ NASA = Nassa</div>
             </ul>
           </details>
 
-          <div class="note info" id="staleNote" hidden style="margin-top:14px">
-            {{ ic.icon('info', 15) }}
-            <span>These settings change how fast the narrator reads, so the length and
-              size below are still based on the old ones.
-              <button type="button" class="linkbtn" id="staleMeasure">Update the estimates</button> —
-              about half a minute, and the audio it makes is kept for the real render.</span>
+          <div class="note info" id="staleNote" hidden style="margin-top:12px;padding:8px 11px">
+            {{ ic.icon('info', 14) }}
+            <span>Estimates are out of date.
+              <button type="button" class="linkbtn" id="staleMeasure">Update them</button> (~30s)</span>
           </div>
 
           <div class="btn-row" style="margin-top:14px">
@@ -335,6 +334,7 @@ let audioRate = {{ audio_rate|tojson }};
 // Whether the figures above were measured with the settings currently on screen.
 let measuredHere = {{ measured_here|tojson }};
 const DEFAULT_CHARS_PER_AUDIO_SECOND = {{ chars_per_audio_second|tojson }};
+const AUTOPLAY_PREVIEW = {{ autoplay_preview|tojson }};
 const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
                    repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
 const form = document.getElementById("settingsForm");
@@ -588,7 +588,26 @@ form.addEventListener("input", (e) => {
   if (measuredHere) { measuredHere = false; computeEstimate(); }
 });
 form.addEventListener("change", (e) => {
-  if (e.target.name === "voice_id" && measuredHere) { measuredHere = false; computeEstimate(); }
+  if (e.target.name !== "voice_id") return;
+  // Each shipped clip has a pacing that suits it — they all read a little
+  // deliberately at the engine default. Moving the slider rather than applying
+  // it invisibly means the change is something you can see and undo.
+  const opt = e.target.selectedOptions[0];
+  let moved = false;
+  for (const [attr, field] of [["pacing", "cfg_weight"], ["expressiveness", "exaggeration"]]) {
+    const want = parseFloat(opt && opt.dataset[attr]);
+    const slider = form.querySelector(`input[name="${field}"]`);
+    if (slider && Number.isFinite(want) && +slider.value !== want) {
+      slider.value = want;
+      moved = true;
+    }
+  }
+  if (moved) {
+    syncRanges();
+    toast("Settings adjusted to suit this voice");
+  }
+  if (measuredHere) { measuredHere = false; }
+  computeEstimate();
 });
 
 async function stop() { await postForm(`/job/${jobId}/cancel`, {}); toast("Stopping…"); bump(); }
@@ -798,6 +817,9 @@ const WORKING = new Set(["extracting", "preparing", "previewing", "rendering", "
 let lastStage = null;
 let lastPreviewAt = "";
 let lastWorking = false;
+// Only a preview that finished *while this page was open* plays by itself.
+// Without this, opening a book that already has one would start playing at you.
+let previewRanHere = false;
 
 // "Time remaining" during a full render. Honest, not optimistic: it projects
 // from the average pace since the render began (which includes the slow model
@@ -884,8 +906,16 @@ async function poll() {
     lastPreviewAt = "";
   } else {
     if (s.preview_at !== lastPreviewAt) {
+      const isNew = lastPreviewAt !== "" || previewRanHere;
       lastPreviewAt = s.preview_at;
       a.src = `/job/${jobId}/preview.wav?t=${encodeURIComponent(s.preview_at)}`;
+      if (isNew && previewRanHere && AUTOPLAY_PREVIEW) {
+        // Generating one was an explicit request to hear it. The browser may
+        // still refuse; the click that started the render usually counts as the
+        // gesture that permits this, and if not the controls are right there.
+        a.play().catch(() => {});
+      }
+      previewRanHere = false;
     }
     a.style.display = "block";
   }
@@ -893,6 +923,8 @@ async function poll() {
   // Any time work just finished (render OR preview), storage changed on disk —
   // previews add cached segments, a full render adds the .m4b. Refresh so the
   // "reclaimable" figure and the Free-up-space button stay accurate.
+  if (s.stage === "previewing") previewRanHere = true;
+
   if (lastWorking && !working) refreshStorage();
   lastWorking = working;
   lastStage = s.stage;

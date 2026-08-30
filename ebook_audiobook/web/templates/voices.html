@@ -56,10 +56,11 @@
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <h3 style="font-size:14px;font-weight:600">{{ v.name }}</h3>
-            {% if v.is_default %}<span class="tag">built in</span>{% endif %}
+            {% if v.bundled %}<span class="tag">shipped</span>{% elif v.is_default %}<span class="tag">engine default</span>{% endif %}
           </div>
           <p class="dim mono" style="font-size:11px;margin-top:3px">
-            {{ v.clip_filename or 'ships with the app — no clip needed' }}</p>
+            {{ 'ships with the app · public domain' if v.bundled
+               else (v.clip_filename or 'the engine’s own voice — no clip') }}</p>
         </div>
       </div>
 
@@ -74,7 +75,7 @@
 
       <div class="btn-row" style="margin-top:auto">
         <button class="btn sm test-btn" data-vid="{{ v.id }}" style="flex:1">{{ ic.icon('play', 12) }} Audition</button>
-        {% if not v.is_default %}
+        {% if v.removable %}
         <form method="post" action="{{ url_for('voices_delete', voice_id=v.id) }}"
               onsubmit="return confirm('Delete “{{ v.name }}”? Books already narrated with it are unaffected.')">
           <button class="btn sm danger" type="submit">{{ ic.icon('trash', 13) }}</button>

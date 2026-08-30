@@ -28,6 +28,19 @@ class Settings:
     # Default render intensity for new jobs: "full", "balanced" or "quiet".
     # See ebook_audiobook.power. A job may override it.
     power_mode: str = "full"
+    # Play a preview as soon as it finishes rendering.
+    #
+    # On by default: generating one is an explicit request to hear something, and
+    # making someone press play again after a thirty-second wait they already
+    # asked for is a step with no purpose. Off for anyone who would rather
+    # decide when it starts — a shared office, headphones not in yet.
+    autoplay_preview: bool = True
+
+    # Which narrator a newly imported book starts with. Empty means the shipped
+    # default. Existing books are never touched by this — their voice is part of
+    # their own settings, and changing it would re-render them.
+    default_voice_id: str = ""
+
     # Where the app window was last time, as {"x","y","width","height"}.
     #
     # Reported by the page itself rather than read off the desktop: this is a
