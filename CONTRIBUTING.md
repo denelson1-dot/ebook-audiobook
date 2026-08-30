@@ -103,6 +103,14 @@ python -m venv /tmp/fresh && /tmp/fresh/bin/pip install dist/*.whl
 - `tts/adapter.py` is the engine seam. An engine's `engine_version` participates
   in each segment's content hash, so upgrading one correctly invalidates cached
   audio.
+- `storage.py` classifies before it deletes. `JobStore.cleanup_intermediates`
+  cannot tell a finished book's leftovers from a stopped render's resume cache —
+  they are the same files on disk — so anything that frees space in bulk goes
+  through `storage.survey()`/`storage.free()`, which can. **Don't call
+  `cleanup_intermediates` from a loop.**
+- Stage wording lives in `jobs/models.STAGE_LABELS`, and nothing renders a raw
+  stage name. The web UI, the job page's client-side poller and `cli list` all
+  read the same table so they cannot drift apart.
 - Anything that changes rendered audio belongs in `VoiceSettings._RENDER_FIELDS`;
   anything that only affects the container (bitrate, etc.) belongs in `extra`, so
   that changing it never triggers a re-render.

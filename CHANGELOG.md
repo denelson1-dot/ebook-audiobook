@@ -1,5 +1,58 @@
 # Changelog
 
+## Unreleased
+
+The interface, rebuilt around the two facts the old one never acknowledged: a
+render takes hours, and the leftovers are enormous.
+
+**A render is never more than a glance away.** Progress used to live on one page;
+navigate away and a three-hour job vanished. The sidebar now carries it on every
+screen — which book, which chapter, how much longer, and a way to stop it. Only
+one book is narrated at a time, and the app finally says so.
+
+**Working files stopped being a secret.** The raw narration audio is around 85%
+of everything stored here and, until now, the only way to reclaim it was a
+per-book button you had to already know about. There is a running total in the
+sidebar on every screen, a **Free up** button beside the disk figure on the
+library page, and a new **Storage** page that breaks the whole folder down and
+frees it in bulk.
+
+Crucially, it knows the difference between two things that look identical on
+disk. A *finished* book's working files buy nothing you can hear. A *stopped*
+render's working files **are** the resume — deleting them costs hours of
+narration — so those are held back, unticked, with the price written into the
+row. A blunt "delete temporary files" would have destroyed them silently.
+
+**Or never think about it again:** turn on *Free them when a book finishes* and
+each book cleans up after itself. Off by default, and it honours the same
+setting from the command line.
+
+**The library looks like a library.** Books are shown by their covers — which
+were always extracted and never displayed — with how long each one plays and
+what it costs on disk. Books with no cover art get their title set on a tinted
+ground rather than a grey box.
+
+**The book page is one screen, not six stacked cards.** What gets narrated on the
+left, who narrates it on the right, and a bar pinned along the bottom that always
+shows what you are about to commit to: length, time to narrate, final size, and
+the temporary gigabytes nobody used to warn you about until the confirm dialog.
+The engine's own vocabulary — `cfg_weight`, `min_p`, `top_p` — is still there,
+one disclosure down, under names you can act on.
+
+**Eleven internal stages, eleven plain sentences.** `cancelled` now reads
+"Stopped by you — 34% narrated and kept". The wording lives in one place, so the
+sidebar, the library card and `ebook-audiobook list` can no longer describe the
+same moment three different ways.
+
+Also in this release:
+
+- The interface follows your system's light or dark setting.
+- Emoji are gone from the interface — every icon is drawn, so it scales and
+  takes the colour of the text beside it instead of whatever the platform felt
+  like rendering.
+- First launch is a checklist that says what is missing, what is already handled,
+  and what your hardware means for how long a book will take.
+
 ## 1.2.0 — 2026-08-02
 
 It launches like an application now, instead of like a web server you have to

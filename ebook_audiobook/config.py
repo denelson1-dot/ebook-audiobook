@@ -139,6 +139,16 @@ SIZE_WARN_BYTES = 1_288_490_188  # 1.2 GB soft target from the plan.
 # second). ~15 chars/s ≈ 150 wpm. Refined empirically after a preview render.
 CHARS_PER_AUDIO_SECOND = 15.0
 
+# Calibration: how much real audio to make before trusting a measurement.
+#
+# Long enough to average out sentence-length variation, short enough that
+# pressing "update estimates" is a wait rather than an errand. The first
+# freshly-rendered segment is always discarded — the engine's first generation
+# after a model load is markedly slower, and counting it would make every
+# machine look worse than it is.
+MEASURE_TARGET_AUDIO_SECONDS = 25.0
+MEASURE_MAX_SEGMENTS = 12
+
 
 # Chatterbox generate() defaults (from chatterbox-tts 0.1.7). These are the full
 # set of tunable knobs; there is no seed/top_k/speed in the engine API (we apply

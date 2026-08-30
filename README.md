@@ -413,18 +413,38 @@ here. Override the whole location with `EBAB_DATA_ROOT=/some/path`.
 
 ### Keeping disk usage down
 
-The **Library** tab shows every conversion with its footprint and a running
-total. Two cleanup actions:
+Narrating a book leaves behind the raw audio of every sentence — several
+gigabytes per book, and typically **around 85% of everything this app stores.**
+It is kept because it makes a re-render after a settings change take minutes
+instead of hours. Once a book sounds right, it is dead weight.
 
-- **Free up space** — deletes the big regenerable artifacts (segment and chapter
-  WAVs, the normalized EPUB, the preview) but keeps the finished `.m4b` and its
-  metadata, so the entry stays in your history. Those intermediates are the bulk
-  of the space; the `.m4b` is small by comparison.
-- **Delete** — removes the whole conversion, `.m4b` included.
+So the figure follows you around. The sidebar carries a running total of what
+can safely go, on every screen, and **Storage** breaks it down book by book:
 
-Previews don't pile up: there's only ever one per book, and it's deleted
-automatically once a full render finishes. Neither action is available while a
-job is rendering.
+```
+7.5 GB   working files you can free
+0.8 GB   working files holding a resume
+1.4 GB   finished audiobooks
+ 48 MB   your ebooks, voices and choices
+```
+
+The distinction in the first two lines is the one that matters. For a **finished**
+book those files buy nothing you can hear, so they are ticked by default. For a
+book whose render **stopped part-way**, they *are* the resume — deleting them
+means narrating those chapters again — so they are held back, unticked, and the
+row tells you what it would cost.
+
+Or stop thinking about it: turn on **Free them when a book finishes** (in
+Storage, or in Settings) and each book cleans up after itself the moment its
+`.m4b` is written. It is off by default — nothing here deletes anything you
+didn't ask it to.
+
+Whatever you free, you keep the finished audiobook, your ebook, your voices and
+your section choices, and you can always narrate the book again from scratch.
+**Delete** is the other action, and it removes the whole conversion, `.m4b`
+included. Previews don't pile up: there's only ever one per book, deleted
+automatically once a full render finishes. Nothing can be freed while a book is
+being narrated.
 
 ---
 
