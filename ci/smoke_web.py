@@ -86,7 +86,7 @@ def main() -> int:
     base = f"http://127.0.0.1:{port}"
 
     print("\npages render (this is what a missing-templates wheel breaks)")
-    for path in ("/", "/new", "/voices", "/settings"):
+    for path in ("/", "/new", "/voices", "/settings", "/storage"):
         code, body = get(base + path)
         check(code == 200, f"GET {path} -> {code}")
         # A 200 from an error handler isn't good enough: check for real markup.
@@ -101,7 +101,7 @@ def main() -> int:
     print("\nJSON endpoints")
     import json
 
-    for path in ("/api/status", "/api/voices", "/api/prereqs", "/api/space"):
+    for path in ("/api/status", "/api/voices", "/api/prereqs", "/api/space", "/api/storage"):
         code, body = get(base + path)
         check(code == 200, f"GET {path} -> {code}")
         try:

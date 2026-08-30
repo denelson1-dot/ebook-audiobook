@@ -16,6 +16,36 @@ def isolated_data_root(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def drain_background_worker(isolated_data_root):
+    """Let the single background worker finish before the data root is restored.
+
+    The web layer's ``runner`` is a module-level singleton with a long-lived
+    thread. A test that submits work and then returns leaves that thread to run
+    *after* monkeypatch has put ``EBAB_DATA_ROOT`` back — at which point it
+    resolves paths against the developer's real data folder, fails to find the
+    job, and writes the traceback into their actual error log. Which it did, for
+    every run of this suite, until someone noticed their own bug reports were
+    full of a test job called "powerjob".
+
+    Depending on ``isolated_data_root`` fixes the ordering: this tears down
+    first, while the environment is still patched.
+    """
+    # Imported here rather than after the yield: a test is free to monkeypatch
+    # sys.platform, and that patch is still in force during this fixture's
+    # teardown — importing Flask's dependency chain under a fake "win32" asks
+    # the interpreter for msvcrt and blows up in an unrelated test.
+    import time
+
+    from ebook_audiobook.web.runner import runner
+
+    yield
+
+    deadline = time.monotonic() + 15
+    while runner.is_busy() and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
 def _xhtml(title: str, paragraphs: list[str]) -> bytes:
     body = "".join(f"<p>{p}</p>" for p in paragraphs)
     return (
