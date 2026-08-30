@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-08-30
 
 The interface, rebuilt around the two facts the old one never acknowledged: a
 render takes hours, and the leftovers are enormous.
@@ -43,6 +43,34 @@ one disclosure down, under names you can act on.
 "Stopped by you — 34% narrated and kept". The wording lives in one place, so the
 sidebar, the library card and `ebook-audiobook list` can no longer describe the
 same moment three different ways.
+
+**Five narrators, ready to use.** A new install used to meet the engine's own
+untuned voice and a page explaining how to record your own. It now ships five
+public-domain reference clips — two North American male, one female, one of each
+British — with one chosen as the default and settings tuned to suit it. The
+engine's raw voice is no longer offered as a choice, though a book already using
+it keeps it.
+
+Preparing those clips is in `tools/prepare_voices.py` rather than anyone's
+memory, because it turned out to matter more than choosing them: the engine
+takes timbre from a clip's first ten seconds and prosody from its first six, so
+where a clip starts decides most of what you hear. One recording was dropped
+outright — its noise sat *under* the speech rather than between the words, and a
+cloned voice reproduces that faithfully.
+
+**Previews play when they are ready**, rather than waiting to be pressed after a
+wait you already asked for. There is a toggle in Settings.
+
+**Estimates are measured, not assumed.** "Time to narrate" and "length of audio"
+came from a fixed speaking rate that ignored the pacing setting, the voice and
+the reference clip — so the panel could tell you lower pacing reads faster and
+then report an unchanged duration. A button beside the figures narrates a few
+seconds with the current settings and measures the real rates, excluding the
+model load, the slow first segment and any cached audio. Nothing is wasted: what
+it renders is reused by the full render.
+
+**The window reopens where you left it**, and paths in the interface open the
+folder they name.
 
 Also in this release:
 
