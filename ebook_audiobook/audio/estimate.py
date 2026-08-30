@@ -12,8 +12,18 @@ from dataclasses import dataclass
 from .. import config
 
 
-def estimate_audio_seconds(total_chars: int) -> float:
-    return total_chars / config.CHARS_PER_AUDIO_SECOND
+def estimate_audio_seconds(total_chars: int, chars_per_audio_second: float | None = None) -> float:
+    """How long the finished audiobook plays.
+
+    The default rate is a generic guess. It takes no account of the pacing
+    setting, the voice, or the reference clip — all of which change how fast the
+    narrator actually reads — so a measurement from real audio is used whenever
+    one is available.
+    """
+    rate = chars_per_audio_second or config.CHARS_PER_AUDIO_SECOND
+    if rate <= 0:
+        rate = config.CHARS_PER_AUDIO_SECOND
+    return total_chars / rate
 
 
 def estimate_size_bytes(audio_seconds: float, bitrate_kbps: int) -> int:
@@ -67,8 +77,9 @@ class Estimate:
         return " | ".join(parts)
 
 
-def estimate(total_chars: int, bitrate_kbps: int, chars_per_render_second: float | None = None) -> Estimate:
-    audio = estimate_audio_seconds(total_chars)
+def estimate(total_chars: int, bitrate_kbps: int, chars_per_render_second: float | None = None,
+             chars_per_audio_second: float | None = None) -> Estimate:
+    audio = estimate_audio_seconds(total_chars, chars_per_audio_second)
     size = estimate_size_bytes(audio, bitrate_kbps)
     return Estimate(
         total_chars=total_chars,

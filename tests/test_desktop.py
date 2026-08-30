@@ -478,3 +478,71 @@ def test_an_explicit_port_always_starts_its_own_server(monkeypatch):
 def _web_args(**overrides):
     return SimpleNamespace(**{"host": None, "port": None, "no_browser": True,
                               "no_tray": True, **overrides})
+
+
+# --- remembering where the window was ---------------------------------------
+
+def test_window_flags_are_absent_until_there_is_something_to_remember():
+    from ebook_audiobook.desktop import launcher
+
+    assert launcher._saved_window_flags() == []
+
+
+def test_window_flags_reopen_the_window_where_it_was():
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.desktop import launcher
+
+    s = app_settings.load_settings()
+    s.window_geometry = {"x": 1431, "y": 137, "width": 1705, "height": 1197}
+    app_settings.save_settings(s)
+
+    flags = launcher._saved_window_flags()
+    assert "--window-size=1705,1197" in flags
+    assert "--window-position=1431,137" in flags
+    # and they actually reach the browser command line
+    cmd = launcher._command("/usr/bin/chromium", "http://127.0.0.1:5005/")
+    assert "--window-size=1705,1197" in cmd
+
+
+@pytest.mark.parametrize("geometry", [
+    {"x": 0, "y": 0, "width": 10, "height": 10},          # absurdly small
+    {"x": 0, "y": 0, "width": 99999, "height": 900},      # absurdly wide
+    {"x": 0, "y": 0, "width": 1400},                      # incomplete
+    {"nonsense": True},
+    "not even a mapping",
+])
+def test_a_nonsense_geometry_is_ignored_rather_than_reopening_off_screen(geometry):
+    """A window remembered at 12000px — a monitor unplugged since — would reopen
+    somewhere the user cannot reach, with no obvious way back."""
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.desktop import launcher
+
+    s = app_settings.load_settings()
+    s.window_geometry = geometry
+    app_settings.save_settings(s)
+    assert launcher._saved_window_flags() == []
+
+
+def test_the_page_can_report_its_geometry():
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.web import create_app
+
+    c = create_app().test_client()
+    assert c.post("/api/window", data={"x": 100, "y": 60, "width": 1400, "height": 900}).status_code == 200
+    assert app_settings.load_settings().window_geometry == {
+        "x": 100, "y": 60, "width": 1400, "height": 900}
+
+
+@pytest.mark.parametrize("payload", [
+    {"x": 0, "y": 0, "width": 10, "height": 10},           # a minimised window
+    {"x": 99999, "y": 0, "width": 1400, "height": 900},    # off in space
+    {"x": "a", "y": 0, "width": 1400, "height": 900},      # junk
+    {"x": 0, "y": 0},                                      # incomplete
+])
+def test_implausible_geometry_is_refused_not_stored(payload):
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.web import create_app
+
+    c = create_app().test_client()
+    assert c.post("/api/window", data=payload).status_code == 400
+    assert app_settings.load_settings().window_geometry is None

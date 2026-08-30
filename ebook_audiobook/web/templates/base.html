@@ -6,54 +6,121 @@
   <title>{% block title %}ebook · audiobook{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
+{% import "_icons.html" as ic %}
 <body>
   <div class="app">
     <aside class="sidebar">
       {# The version rides under the wordmark on every page: the first question when
          a bug report comes in is which build was running, and Settings is one
          click too far to be the only place that answers it. #}
-      <div class="brand">
-        <span class="logo">🎧</span>
-        <span class="brand-text">ebook·audiobook<span class="brand-version">v{{ app_version }}</span></span>
-      </div>
+      <a class="brand" href="{{ url_for('index') }}">
+        <span class="logo">{{ ic.icon('wordmark', 15) }}</span>
+        <span class="brand-text">
+          <span class="brand-name">ebook·audiobook</span>
+          <span class="brand-version mono">{{ app_version }}</span>
+        </span>
+      </a>
+
+      {# Importing a book is an action, not a place, so it is a button rather than
+         a fourth nav item competing with the three real destinations. #}
+      <a class="btn primary block" href="{{ url_for('new_page') }}" style="margin-bottom:18px">
+        {{ ic.icon('plus', 15) }} Add a book
+      </a>
+
       <nav class="nav">
-        <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}"><span class="ic">📚</span> Library</a>
-        <a href="{{ url_for('new_page') }}" class="{{ 'active' if nav=='new' }}"><span class="ic">＋</span> New conversion</a>
-        <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}"><span class="ic">🗣</span> Voices</a>
-        <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}"><span class="ic">⚙</span> Settings</a>
+        <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}">
+          {{ ic.icon('library') }} Library <span class="nav-count" id="navBookCount"></span>
+        </a>
+        <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}">
+          {{ ic.icon('voices') }} Voices
+        </a>
+        <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}">
+          {{ ic.icon('settings') }} Settings
+        </a>
       </nav>
-      {% if can_quit %}
+
+      {# Working files are ~85% of what this app puts on disk and the most
+         disposable part of it, so the figure lives here rather than behind a
+         per-book button you have to already know about. Filled in by app.js from
+         /api/storage — surveying every job walks its whole tree, which is not
+         something a page render should wait for. Hidden until there is enough to
+         be worth mentioning, and reduced to one quiet line while a render is
+         running, because that is exactly when those files are in use. #}
+      <a class="diskstrip {{ 'active' if nav=='storage' }}" id="diskStrip"
+         href="{{ url_for('storage_page') }}" hidden>
+        <span class="eyebrow" style="display:block;margin-bottom:5px">Working files</span>
+        <span style="display:flex;align-items:baseline;gap:6px">
+          <span class="big" id="diskBig">—</span>
+          <span class="dim" style="font-size:11px">can go</span>
+        </span>
+        <span class="bar" style="display:block;margin:9px 0 8px;height:5px">
+          <i id="diskBar" style="width:0;background:var(--warn)"></i>
+        </span>
+        <p id="diskWhy">Left behind by books you have already finished.</p>
+      </a>
+      <a class="diskline" id="diskLine" href="{{ url_for('storage_page') }}" hidden>
+        <span class="pip"></span>
+        <span style="flex:1" id="diskLineText"></span>
+        {{ ic.icon('chevron-right', 13) }}
+      </a>
+
+      {# A render runs for hours and only one can run at a time, so its progress
+         follows you onto every page instead of living on the job page alone. #}
+      <a class="dock" id="renderDock" href="#" hidden>
+        <span class="chip live"><span class="dot pulse"></span><span id="dockStage">Narrating</span></span>
+        <span class="dock-title" id="dockTitle"></span>
+        <span class="dim mono" id="dockDetail" style="font-size:11px"></span>
+        <span class="bar" style="display:block;margin:11px 0 9px"><i id="dockBar" style="width:0"></i></span>
+        <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span class="mono" id="dockLeft" style="font-size:12.5px"></span>
+          <span class="btn sm ghost" id="dockStop" style="color:var(--danger)">Stop</span>
+        </span>
+      </a>
+      <div class="dock-idle" id="dockIdle">
+        <b>Nothing rendering</b>
+        <p>One book is narrated at a time, so the machine only ever has one job.</p>
+      </div>
+
       {# Closing the window only closes the window — the server keeps running so
          an overnight render survives. This is the way out that actually stops
          it, for people who never look at the tray. #}
       <div class="nav-foot">
-        <button type="button" class="nav-quit" id="quitBtn"><span class="ic">⏻</span> Quit</button>
+        {% if can_quit %}
+        <p class="dim" style="font-size:10.5px;line-height:1.4">Closing this window keeps the app running in your menu bar.</p>
+        <button type="button" class="nav-quit" id="quitBtn">{{ ic.icon('power', 14) }} Quit</button>
+        {% endif %}
       </div>
-      {% endif %}
     </aside>
+
     <main class="main">
-      {# Missing prerequisites are shown before anything else: without Calibre
-         every import fails, and finding that out at import time is a worse
-         first experience than being told up front. Filled in by app.js from
-         /api/prereqs so a page load is never blocked on probing subprocesses. #}
-      <div id="prereqBanner" class="card alert-error" hidden>
-        <h3>⚠ Something needed is missing</h3>
-        <div id="prereqBody"></div>
-      </div>
-      {% if setup_needed %}
-      <div class="card setup-banner">
-        <h3>📁 Where should finished audiobooks go?</h3>
-        <p class="meta">Pick your <strong>audiobooks library folder</strong> (the one Plex watches). New conversions are filed into it as a Plex-ready
-          <code>Author / Title (Year) / Title.m4b</code> tree. You can change this any time in Settings.</p>
-        <div class="btn-row">
-          <button type="button" class="btn primary" id="setupChooseBtn">📂 Choose library folder…</button>
-          <button type="button" class="btn ghost" id="setupSkipBtn">Skip for now</button>
+      {% block head %}{% endblock %}
+      <div class="page">
+        {# Missing prerequisites are shown before anything else: without Calibre
+           every import fails, and finding that out at import time is a worse
+           first experience than being told up front. Filled in by app.js from
+           /api/prereqs so a page load is never blocked on probing subprocesses. #}
+        <div id="prereqBanner" class="card alert-error" hidden>
+          <h3>Something this needs is missing</h3>
+          <div id="prereqBody"></div>
         </div>
+        {% if setup_needed and (nav != 'library' or jobs) %}
+        <div class="card setup-banner">
+          <h3>Where should finished audiobooks go?</h3>
+          <p class="meta" style="margin-top:4px">Choose your audiobooks library folder — the one Plex watches.
+            Books are filed into it as <code>Author / Title (Year) / Title.m4b</code>. You can change it any
+            time in Settings.</p>
+          <div class="btn-row" style="margin-top:12px">
+            <button type="button" class="btn primary" id="setupChooseBtn">{{ ic.icon('folder', 15) }} Choose library folder…</button>
+            <button type="button" class="btn ghost" id="setupSkipBtn">Skip for now</button>
+          </div>
+        </div>
+        {% endif %}
+        {% block body %}{% endblock %}
       </div>
-      {% endif %}
-      {% block body %}{% endblock %}
+      {% block commit %}{% endblock %}
     </main>
   </div>
+
   <script src="{{ url_for('static', filename='app.js') }}"></script>
   <script>
   // Check prerequisites in the background on every page, so a tool that gets
@@ -68,7 +135,7 @@
         <p><strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.detail)}</p>
         ${c.fix ? `<pre class="fix">${escapeHtml(c.fix)}</pre>` : ""}`).join("");
       document.getElementById("prereqBody").innerHTML =
-        body + `<p class="meta">After installing, restart ebook-audiobook.</p>`;
+        body + `<p class="meta" style="margin-top:8px">After installing, restart ebook-audiobook.</p>`;
       document.getElementById("prereqBanner").hidden = false;
     } catch (e) { /* offline or shutting down: not worth surfacing */ }
   })();
@@ -76,7 +143,10 @@
     return String(s ?? "").replace(/[&<>"']/g, c => (
       {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
+  const homeDir = {{ home_dir|tojson }};
+  startSidebar();
   </script>
+
   {% if can_quit %}
   <script>
   // What a given background task costs to interrupt. Everything here is
@@ -85,7 +155,7 @@
   const QUIT_WARNINGS = {
     render:  ["A render is still going", "Quitting stops it. Finished chapters are kept, so re-rendering later picks up where this left off rather than starting over."],
     preview: ["A preview is still rendering", "Quitting stops it. You can render another one any time."],
-    extract: ["A book is still being extracted", "Quitting stops it. The book stays imported and you can extract it again."],
+    extract: ["A book is still being read", "Quitting stops it. The book stays imported and you can read it again."],
     voice_test: ["A voice sample is still rendering", "Quitting stops it. It only takes a few seconds to redo."],
   };
 
@@ -109,29 +179,27 @@
     // before it stops precisely so there is time to swap this in, rather than
     // letting the browser race it and show its own error page.
     document.body.innerHTML =
-      '<div class="quit-screen"><h1>ebook-audiobook has stopped</h1>' +
-      '<p>You can close this window.</p></div>';
+      '<div class="quit-screen"><h1>ebook·audiobook has stopped</h1>' +
+      '<p class="meta">You can close this window.</p></div>';
   });
   </script>
   {% endif %}
-  {% if setup_needed %}
+
+  {% if setup_needed and (nav != 'library' or jobs) %}
   <script>
-  const homeDir = {{ home_dir|tojson }};
   document.getElementById("setupChooseBtn").addEventListener("click", () => {
-    openFsBrowser({
-      start: homeDir, accept: "dir",
-      onPick: async (path) => {
-        await postForm("/settings", { audiobooks_root: path });
-        location.reload();
-      }
-    });
+    openFsBrowser({ start: homeDir, accept: "dir", onPick: async (path) => {
+      const r = await postForm("/settings", { audiobooks_root: path });
+      if (r && r.ok) location.reload(); else toast((r && r.error) || "Couldn't use that folder");
+    }});
   });
   document.getElementById("setupSkipBtn").addEventListener("click", async () => {
-    await postForm("/settings/dismiss-setup", {});
+    await fetch("/settings/dismiss-setup", { method: "POST" });
     location.reload();
   });
   </script>
   {% endif %}
+
   {% block script %}{% endblock %}
 </body>
 </html>

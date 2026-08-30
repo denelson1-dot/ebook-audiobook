@@ -253,3 +253,108 @@ def test_gui_entry_point_is_exported():
     from ebook_audiobook import cli
 
     assert callable(cli.main_gui)
+
+
+# --- the interface must work the same on all three desktops -----------------
+
+def test_the_ui_never_reaches_out_to_the_network():
+    """The app's promise is that the update check is the only thing that talks
+    to a server without being asked. A webfont in the stylesheet, or any other
+    remote asset, quietly breaks that on every page load — and leaves the
+    interface looking wrong on a machine with no connection."""
+    import re
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parent.parent / "ebook_audiobook" / "web"
+    for f in list((web / "static").iterdir()) + list((web / "templates").iterdir()):
+        if not f.is_file():
+            continue
+        found = re.findall(r'(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}', f.read_text("utf-8"), re.I)
+        # A bare "//" in a JS comment or a doubled slash in a path is not a host.
+        remote = [u for u in found if not u.startswith("//" + "/")]
+        assert not remote, f"{f.name} references {remote}"
+
+
+def test_fonts_come_from_the_operating_system():
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parent.parent / "ebook_audiobook" / "web"
+           / "static" / "app.css").read_text("utf-8")
+    assert "@font-face" not in css, "a bundled webfont would need shipping and licensing"
+    assert "@import" not in css
+    # Each stack has to name something that exists on every desktop.
+    assert "Segoe UI" in css, "no Windows UI font in the stack"
+    assert "-apple-system" in css or "system-ui" in css, "no macOS UI font in the stack"
+    assert "Georgia" in css, "no serif fallback that Windows and Linux both have"
+
+
+@pytest.mark.parametrize("platform, is_windows, expected", [
+    ("darwin", False, "open"),
+    ("win32", True, "explorer"),
+    ("linux", False, "xdg-open"),
+])
+def test_reveal_uses_each_desktop_s_own_file_manager(platform, is_windows, expected,
+                                                     monkeypatch, tmp_path):
+    """One code path per desktop, and none of them may block: a file manager is a
+    window that stays open, so waiting on it would hang the request."""
+    import subprocess as sp
+
+    from ebook_audiobook import tools
+
+    calls = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            calls["cmd"], calls["kw"] = cmd, kw
+
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(tools, "IS_WINDOWS", is_windows)
+    monkeypatch.setattr(tools.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(tools.shutil, "which", lambda n: f"/usr/bin/{n}")
+
+    assert tools.reveal(tmp_path) is True
+    assert expected in calls["cmd"][0]
+    assert str(tmp_path) in calls["cmd"]
+    # never inherits stdin, never blocks, never flashes a console
+    assert calls["kw"]["stdin"] is sp.DEVNULL
+    assert calls["kw"]["stdout"] is sp.DEVNULL
+
+
+def test_reveal_gives_up_gracefully_on_a_desktop_without_xdg_open(monkeypatch, tmp_path):
+    from ebook_audiobook import tools
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(tools, "IS_WINDOWS", False)
+    monkeypatch.setattr(tools.shutil, "which", lambda n: None)
+    assert tools.reveal(tmp_path) is False
+
+
+def test_reveal_survives_an_operating_system_that_refuses(monkeypatch, tmp_path):
+    from ebook_audiobook import tools
+
+    def boom(*a, **k):
+        raise OSError("no")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(tools, "IS_WINDOWS", False)
+    monkeypatch.setattr(tools.shutil, "which", lambda n: "/usr/bin/xdg-open")
+    monkeypatch.setattr(tools.subprocess, "Popen", boom)
+    assert tools.reveal(tmp_path) is False
+
+
+def test_window_geometry_flags_are_the_same_everywhere():
+    """--window-size and --window-position are Chromium flags, not OS calls, so
+    the same two reach the browser on every platform. Wayland ignores the
+    position (a client cannot place itself there); that is the compositor's
+    call and not something for this code to work around."""
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.desktop import launcher
+
+    s = app_settings.load_settings()
+    s.window_geometry = {"x": 40, "y": 50, "width": 1280, "height": 860}
+    app_settings.save_settings(s)
+    for browser in ("/usr/bin/chromium", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe"):
+        cmd = launcher._command(browser, "http://127.0.0.1:5005/")
+        assert "--window-size=1280,860" in cmd
+        assert "--window-position=40,50" in cmd

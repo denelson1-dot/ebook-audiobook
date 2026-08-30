@@ -1,218 +1,319 @@
 {% extends "base.html" %}
 {% set nav = 'library' %}
+{% import "_icons.html" as ic %}
 {% block title %}{{ book.title }} · ebook·audiobook{% endblock %}
+
+{% block head %}
+<header class="page-head" style="align-items:flex-start;flex-direction:column;gap:9px">
+  <a class="meta" href="{{ url_for('index') }}" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-3)">
+    {{ ic.icon('arrow-left', 13) }} Library
+  </a>
+  <div style="display:flex;align-items:flex-end;gap:16px;width:100%;flex-wrap:wrap">
+    {{ ic.cover({'has_cover': has_cover, 'id': job_id, 'book': book, 'tint': tint}, '6.5px', 'job-cover') }}
+    <div style="min-width:0">
+      <h1 class="serif" id="pageTitle" style="font-size:30px;line-height:1.1">{{ book.title }}</h1>
+      <p class="meta" style="margin-top:2px"><span id="pageAuthor">{{ book.author }}</span>{% if book.year %} · {{ book.year }}{% endif %}</p>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <span class="badge {{ state.stage }}" id="stageBadge"><span id="stageText">{{ state.stage|stage }}</span></span>
+      <span class="chip" id="sectionChip">{{ chapters|length }} section{{ 's' if chapters|length != 1 }}</span>
+    </div>
+  </div>
+</header>
+{% endblock %}
+
 {% block body %}
 
-<div class="job-head">
-  <a href="{{ url_for('index') }}" class="back-link">← Library</a>
-  <h1 class="page-title" id="pageTitle">{{ book.title }}</h1>
-  <p class="page-sub"><span id="pageAuthor">{{ book.author }}</span> · <code>{{ job_id }}</code></p>
-</div>
-
-<!-- Progress -->
-<div class="card progress-card">
-  <div class="btn-row" style="justify-content:space-between">
-    <span class="badge {{ state.stage }}" id="stageBadge"><span class="dot"></span><span id="stageText">{{ state.stage }}</span></span>
-    <span class="meta mono" id="countText">{{ state.rendered_segments }}/{{ state.total_segments }}</span>
+{# The progress readout. Present on every stage, but it only earns its space
+   while something is happening or once there is a finished file to collect. #}
+<section class="panel" id="progressCard" style="padding:16px 18px;margin-bottom:18px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="steps" id="stageSteps">
+      <span class="step" data-step="extracted"><i>{{ ic.icon('check', 9) }}</i>Read the book</span>
+      <span class="step-line"></span>
+      <span class="step" data-step="rendering"><i></i>Narrate</span>
+      <span class="step-line"></span>
+      <span class="step" data-step="assembling"><i></i>Stitch chapters</span>
+      <span class="step-line"></span>
+      <span class="step" data-step="packaging"><i></i>Package</span>
+    </div>
+    <span class="meta mono" id="countText" style="margin-left:auto">{{ state.rendered_segments }}/{{ state.total_segments }}</span>
   </div>
-  <div class="progress" style="margin-top:14px"><span id="bar"></span></div>
-  <div class="meta remaining" id="remainingText" style="display:none;margin-top:10px"></div>
-  <div class="meta" id="finishedText" style="margin-top:6px">{% if state.finished_at %}Exported {{ state.finished_at|dt }} · {{ state.output_bytes|humanbytes }}{% endif %}</div>
+  <div class="progress tall" style="margin-top:14px"><span id="bar"></span></div>
+  <div class="meta" id="remainingText" style="display:none;margin-top:10px"></div>
+  <div class="meta" id="finishedText" style="margin-top:8px">{% if state.finished_at %}Finished {{ state.finished_at|dt }} · {{ state.output_bytes|humanbytes }}{% endif %}</div>
   <div id="errorText" class="meta" style="color:var(--danger);margin-top:8px">{% if state.error %}{{ state.error }}{% endif %}</div>
   <div id="resultLinks" style="margin-top:14px"></div>
-</div>
+</section>
 
-<!-- Voice & settings -->
-<div class="card">
-  <h3>Voice &amp; settings</h3>
-  <form id="settingsForm">
-    <div class="field" style="max-width:340px">
-      <label>Voice</label>
-      <select name="voice_id" id="voiceSelect">
-        {% for v in voices %}
-          <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}>{{ v.name }}</option>
-        {% endfor %}
-      </select>
-      <div class="hint"><a href="{{ url_for('voices_page') }}">Manage voices →</a></div>
+<div class="cols">
+
+  {# ── what gets narrated ─────────────────────────────────────────────── #}
+  <section class="panel">
+    <div class="panel-head">
+      <h3>What gets narrated</h3>
+      <span class="meta mono" id="includeSummary"></span>
+      <label class="btn sm quiet" style="margin-left:auto;gap:7px">
+        <input type="checkbox" id="selectAllCh"> All
+      </label>
     </div>
 
-    <div class="field-row">
-      <div class="field">
-        <label>Expressiveness (exaggeration)</label>
-        <div class="range"><input type="range" name="exaggeration" min="0" max="1" step="0.05" value="{{ voice.exaggeration }}"><span class="val"></span></div>
-        <div class="hint">How animated and emotional the delivery is. Higher = more dramatic; lower = calmer, flatter. ~0.5 is natural.</div>
-      </div>
-      <div class="field">
-        <label>Pacing (CFG weight)</label>
-        <div class="range"><input type="range" name="cfg_weight" min="0" max="1" step="0.05" value="{{ voice.cfg_weight }}"><span class="val"></span></div>
-        <div class="hint">How tightly it follows the reference voice's rhythm. Lower = more natural, flowing narration; higher = tighter but can sound clipped.</div>
+    <div style="padding:12px 14px 0">
+      <div class="note info">
+        {{ ic.icon('info', 15) }}
+        <span>Copyright pages, contents and acknowledgements are switched off to begin with — nobody
+          wants four minutes of ISBN read aloud. Click a title to read its first lines and decide for yourself.</span>
       </div>
     </div>
 
-    <details class="advanced">
-      <summary>Advanced generation settings</summary>
-      <p class="hint" style="margin:2px 0 14px">Defaults are good for most books. Nudge these only if a preview has a specific problem.</p>
-      <div class="field-row">
-        <div class="field">
-          <label>Temperature</label>
-          <div class="range"><input type="range" name="temperature" min="0.05" max="1.5" step="0.05" value="{{ voice.temperature }}"><span class="val"></span></div>
-          <div class="hint">Variation from take to take. Higher = more expressive but less predictable; lower = steadier and more consistent. Default 0.8.</div>
+    <div id="chaptersBody" style="margin-top:10px">
+      {% for c in chapters %}
+        <div class="chrow {{ '' if c.include else 'excluded' }}">
+          <input type="checkbox" class="ch-include" data-ch="{{ c.chapter_id }}" data-chars="{{ c.char_count }}" {{ 'checked' if c.include }}>
+          <span class="mono dim" style="font-size:11.5px">{{ '%02d' % c.sequence }}</span>
+          <button type="button" class="ttl ch-peek" data-ch="{{ c.chapter_id }}">{{ c.title }}</button>
+          {% if c.chapter_id == 'intro' or c.chapter_id == 'outro' %}
+            <span class="tag">added by the app</span>
+          {% else %}<span></span>{% endif %}
+          {% set mins = (c.char_count / chars_per_audio_second / 60)|round|int %}
+          <span class="mins">{{ '<1 min' if mins < 1 else mins ~ ' min' }}</span>
         </div>
-        <div class="field">
-          <label>Repetition penalty</label>
-          <div class="range"><input type="range" name="repetition_penalty" min="1" max="2" step="0.05" value="{{ voice.repetition_penalty }}"><span class="val"></span></div>
-          <div class="hint">Discourages stutters and repeated sounds. Raise slightly if you hear the voice repeat or stumble. Default 1.2.</div>
+      {% endfor %}
+    </div>
+    <div class="empty" id="chaptersPending" style="{{ 'display:none' if chapters else '' }}">
+      <span class="spinner"></span> Reading the book…
+    </div>
+  </section>
+
+  {# ── who reads it, and what it will sound like ──────────────────────── #}
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h3>Narrator</h3></div>
+      <div class="panel-body">
+        <form id="settingsForm">
+          <div class="field">
+            <label for="voiceSelect">Voice</label>
+            <select name="voice_id" id="voiceSelect">
+              {% for v in voices %}
+                <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}>
+                  {{ v.name }}{{ ' — built in' if v.is_default }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Expressiveness <span class="dim">— flat to theatrical</span></label>
+            <div class="range">
+              <input type="range" name="exaggeration" min="0" max="1" step="0.05" value="{{ voice.exaggeration }}">
+              <span class="val"></span>
+            </div>
+            <p class="hint">How much colour the narrator puts into it. The engine calls this
+              <em>exaggeration</em>.</p>
+          </div>
+          <div class="field">
+            <label>Pacing <span class="dim">— measured to hurried</span></label>
+            <div class="range">
+              <input type="range" name="cfg_weight" min="0" max="1" step="0.05" value="{{ voice.cfg_weight }}">
+              <span class="val"></span>
+            </div>
+            <p class="hint">How closely it sticks to the reference clip's rhythm. Lower reads faster and
+              looser; higher is more deliberate. The engine calls this <em>cfg_weight</em>.</p>
+          </div>
+
+          <details class="advanced">
+            <summary>Engine settings <span class="dim">— temperature, seed, bitrate…</span></summary>
+            {# These are the engine's own knobs under its own names. They are worth
+               explaining rather than hiding: someone who opened this disclosure has
+               already asked for the detail, so putting it behind a hover would be
+               asking twice. One line each, about what you would actually hear. #}
+            <p class="hint" style="margin:10px 0 4px">The defaults are what the engine ships with, and most
+              books never need them touched. Generate a preview after changing one — the difference is
+              usually easier to hear than to predict.</p>
+            <div style="margin-top:12px">
+              <div class="field">
+                <label>Temperature</label>
+                <div class="range"><input type="range" name="temperature" min="0.05" max="1.5" step="0.05" value="{{ voice.temperature }}"><span class="val"></span></div>
+                <p class="hint">How much the delivery varies. Lower is steadier and flatter; higher is
+                  livelier but likelier to mispronounce something or wander.</p>
+              </div>
+              <div class="field">
+                <label>Repetition penalty</label>
+                <div class="range"><input type="range" name="repetition_penalty" min="1" max="2" step="0.05" value="{{ voice.repetition_penalty }}"><span class="val"></span></div>
+                <p class="hint">Stops the voice getting stuck. Raise it if you hear a stutter or a syllable
+                  looping; too high and it can clip words the book genuinely repeats.</p>
+              </div>
+              <div class="field">
+                <label>min_p <span class="dim">— least likely sounds</span></label>
+                <div class="range"><input type="range" name="min_p" min="0" max="0.5" step="0.01" value="{{ voice.min_p }}"><span class="val"></span></div>
+                <p class="hint">Discards the least plausible sounds before choosing. Higher keeps delivery
+                  safe and even; lower lets it take more risks.</p>
+              </div>
+              <div class="field">
+                <label>top_p <span class="dim">— how wide a choice</span></label>
+                <div class="range"><input type="range" name="top_p" min="0.1" max="1" step="0.05" value="{{ voice.top_p }}"><span class="val"></span></div>
+                <p class="hint">Narrows each choice to the likeliest options. 1.00 leaves it open; lower is
+                  steadier and duller.</p>
+              </div>
+              <div class="field">
+                <label>Seed</label>
+                <input type="number" name="seed" value="{{ voice.seed }}">
+                <p class="hint">Fixes the randomness so the same text narrates identically every time.
+                  <strong>0 means don't fix it</strong> — each render then sounds slightly different.</p>
+              </div>
+              <div class="field">
+                <label>Output bitrate (kbps)</label>
+                <input type="number" name="bitrate" id="bitrateInput" value="{{ bitrate }}">
+                <p class="hint">Quality of the finished file, not of the narration. 64 is ample for speech;
+                  higher only makes the <code>.m4b</code> bigger.</p>
+              </div>
+            </div>
+            <p class="hint">Changing any of these re-narrates only the sections it affects. Bitrate changes
+              nothing — it is applied when the file is packaged.</p>
+          </details>
+
+          {# Its own disclosure rather than the last field of the engine drawer:
+             it is the one setting here about *this book* rather than about the
+             engine, and it is the one nobody can guess the syntax of. #}
+          <details class="advanced">
+            <summary>Pronunciation fixes <span class="dim">— words the narrator says wrong</span></summary>
+            <p class="hint" style="margin:10px 0 8px">Narrators mispronounce names and invented words, and often
+              read an acronym as separate letters — “en ay ess ay” instead of “nassa”. Write the word as the book
+              spells it, then how it should sound — one per line:</p>
+            <div class="tree" style="background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin-bottom:10px">Ryland = Rye-land
+Xenonite = Zee-non-ite
+NASA = Nassa</div>
+            <div class="field">
+              <label for="pronBox" class="sr">Pronunciation fixes</label>
+              <textarea id="pronBox" name="pron" rows="4" placeholder="Ryland = Rye-land">{{ pron_text }}</textarea>
+            </div>
+            <ul class="hint" style="padding-left:16px;margin-top:8px;display:flex;flex-direction:column;gap:5px">
+              <li>Spell the right-hand side <strong>how it sounds</strong>, not how it is spelled. Hyphens
+                between syllables help; the narrator reads it as ordinary words.</li>
+              <li>Whole words only — <code>Grace</code> never changes <code>Graceful</code>.</li>
+              <li><strong>Typed exactly, capitals and all.</strong> A fix written <code>NASA</code> changes
+                <code>NASA</code> and leaves <code>nasa</code> alone — so fixing an acronym never touches an
+                ordinary word spelled the same way.</li>
+              <li>Only the sections containing that word are narrated again, so a fix costs minutes, not hours.</li>
+              <li>Generate a preview of a section that uses the word to hear whether it worked.</li>
+            </ul>
+          </details>
+
+          <div class="note info" id="staleNote" hidden style="margin-top:14px">
+            {{ ic.icon('info', 15) }}
+            <span>These settings change how fast the narrator reads, so the length and
+              size below are still based on the old ones.
+              <button type="button" class="linkbtn" id="staleMeasure">Update the estimates</button> —
+              about half a minute, and the audio it makes is kept for the real render.</span>
+          </div>
+
+          <div class="btn-row" style="margin-top:14px">
+            <button type="button" class="btn" id="saveBtn">Save settings</button>
+            <button type="button" class="btn ghost" id="resetBtn">Reset to defaults</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Hear it first</h3>
+        <span class="dim" style="margin-left:auto;font-size:11px">same engine as the full render</span>
+      </div>
+      <div class="panel-body">
+        <div class="field-row">
+          <div class="field">
+            <label for="previewChapter">Section</label>
+            <select id="previewChapter">
+              {% for c in chapters %}
+                <option value="{{ c.chapter_id }}" {{ 'selected' if c.chapter_id == default_chapter_id }}>{{ c.sequence }} · {{ c.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="previewSeconds">Length (seconds)</label>
+            <input type="number" id="previewSeconds" value="30" min="5" max="120">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn primary" id="previewBtn">{{ ic.icon('play', 13) }} Generate a preview</button>
+          <button type="button" class="btn danger" id="previewStop" style="display:none">{{ ic.icon('stop', 13) }} Stop preview</button>
+        </div>
+        <audio id="previewAudio" controls style="display:none;width:100%;margin-top:12px"></audio>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>This book on disk</h3></div>
+      <div class="panel-body">
+        <p class="meta">Using <strong id="diskBytes" class="mono">{{ disk_bytes|humanbytes }}</strong><span id="interWrap"
+           style="{{ '' if intermediate_bytes else 'display:none' }}"> — <strong id="interBytes" class="mono">{{ intermediate_bytes|humanbytes }}</strong>
+           of that is raw narration audio you can reclaim once the book sounds right</span>.</p>
+        <div class="btn-row" style="margin-top:12px">
+          <button type="button" class="btn warn" id="cleanupBtn" {{ 'disabled' if not intermediate_bytes }}>
+            {{ ic.icon('sparkle', 14) }} Free up space
+          </button>
+          <button type="button" class="btn sm" id="revealOutput" hidden>
+            {{ ic.icon('folder', 13) }} Show in folder
+          </button>
+          <a class="btn ghost sm" href="{{ url_for('storage_page') }}">All books…</a>
+          <form method="post" action="{{ url_for('delete_job', job_id=job_id) }}" style="margin-left:auto"
+                onsubmit="return confirm('Delete “{{ book.title }}” and everything belonging to it?')">
+            <button class="btn danger sm" type="submit">{{ ic.icon('trash', 13) }} Delete</button>
+          </form>
         </div>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>min_p</label>
-          <div class="range"><input type="range" name="min_p" min="0" max="0.5" step="0.01" value="{{ voice.min_p }}"><span class="val"></span></div>
-          <div class="hint">Filters out unlikely sounds. Higher = cleaner and safer but less variety. Default 0.05.</div>
-        </div>
-        <div class="field">
-          <label>top_p</label>
-          <div class="range"><input type="range" name="top_p" min="0.1" max="1" step="0.05" value="{{ voice.top_p }}"><span class="val"></span></div>
-          <div class="hint">How much of the voice's range it draws from. Lower = more focused and consistent; 1.0 = full range. Default 1.0.</div>
-        </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{# ── the commitment: always in view, always showing what it costs ───────── #}
+{% block commit %}
+<footer class="commit">
+  <button type="button" class="btn remeasure" id="remeasureBtn"
+          title="Narrate a few seconds to measure this voice, then update these figures">
+    {{ ic.icon('redo', 16) }}
+  </button>
+  <div class="stats" style="gap:26px">
+    <div class="stat"><span class="v" id="estAudio">—</span><span class="k">of audio</span></div>
+    <div class="stat"><span class="v" id="estRender">—</span><span class="k">to narrate</span></div>
+    <div class="stat"><span class="v" id="estSize">—</span><span class="k">final .m4b</span></div>
+    <div class="stat"><span class="v" id="estTemp" style="color:var(--text-2)">—</span><span class="k">working files, freed later</span></div>
+  </div>
+  <div class="hint" id="estBasis" style="margin:0;flex-basis:100%;order:9"></div>
+
+  <div style="margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="text-align:right">
+      <div class="seg" id="modeToggle" role="tablist" style="margin-bottom:5px">
+        <button type="button" class="seg-btn {{ 'on' if output_mode != 'folder' }}" data-mode="library">Plex library</button>
+        <button type="button" class="seg-btn {{ 'on' if output_mode == 'folder' }}" data-mode="folder">A folder</button>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Seed</label>
-          <input type="number" name="seed" value="{{ voice.seed }}">
-          <div class="hint">0 = a fresh random take each render. Set a fixed number to reproduce the exact same take.</div>
-        </div>
-        <div class="field">
-          <label>Output bitrate (kbps)</label>
-          <input type="number" name="bitrate" id="bitrateInput" value="{{ bitrate }}">
-          <div class="hint">Audio quality of the final .m4b. 64 is plenty for narration; higher = larger file. Doesn't require re-rendering.</div>
-        </div>
+      <div id="libraryPane" style="{{ 'display:none' if output_mode == 'folder' }}">
+        {% if library_target %}
+          <button type="button" class="pathlink meta mono" id="revealLibrary" style="font-size:11px"
+                  title="Open this folder">
+            {{ ic.icon('folder', 13) }}<span id="libraryTarget">{{ library_target }}</span>
+          </button>
+        {% else %}
+          <div class="meta" id="libraryTarget" style="font-size:11px">
+            <a href="{{ url_for('settings_page') }}">Choose a library folder</a> — or save to a folder instead
+          </div>
+        {% endif %}
       </div>
-      <div class="field">
-        <label>Pronunciation fixes</label>
-        <textarea name="pron" rows="3" placeholder="LOG=log&#10;JPL=J P L&#10;Dr=Doctor">{{ pron_text }}</textarea>
-        <div class="hint">One per line, <code>WORD=how to say it</code>. Case-sensitive, whole-word — use this when the voice mis-reads a term (e.g. spells out an all-caps word like <code>LOG</code>). Changing a fix re-renders only the affected parts.</div>
+      <div id="folderPane" style="{{ 'display:none' if output_mode != 'folder' }}">
+        <button type="button" class="btn sm quiet" id="outDirBtn">{{ ic.icon('folder', 13) }} Choose…</button>
+        <button type="button" class="pathlink meta mono" id="revealFolderBtn" style="font-size:11px"
+                title="Open this folder">
+          {{ ic.icon('folder', 13) }}<span id="outDirText">{{ folder_dir }}</span>
+        </button>
+        <input type="hidden" id="outputDir" value="{{ folder_dir }}">
       </div>
-    </details>
-
-    <div class="btn-row" style="margin-top:8px">
-      <button type="button" class="btn" id="saveBtn">Save settings</button>
-      <button type="button" class="btn ghost" id="resetBtn">Reset to defaults</button>
+      <div class="sr" id="outFilename">{{ output_filename }}</div>
     </div>
-  </form>
-</div>
-
-<!-- Preview -->
-<div class="card">
-  <h3>Preview</h3>
-  <p class="meta">Hear a short excerpt rendered with the <strong>exact</strong> engine and settings above.</p>
-  <div class="field-row" style="max-width:640px">
-    <div class="field">
-      <label>Chapter</label>
-      <select id="previewChapter">
-        {% for c in chapters %}
-          <option value="{{ c.chapter_id }}" {{ 'selected' if c.chapter_id == default_chapter_id }}>{{ c.sequence }} · {{ c.title }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field">
-      <label>Length (seconds)</label>
-      <input type="number" id="previewSeconds" value="30" min="5" max="120">
-    </div>
+    <button type="button" class="btn primary lg" id="renderBtn">{{ ic.icon('play', 15) }} Narrate the book</button>
+    <button type="button" class="btn danger lg" id="renderStop" style="display:none">{{ ic.icon('stop', 14) }} Stop</button>
   </div>
-  <div class="btn-row">
-    <button type="button" class="btn primary" id="previewBtn">Generate preview</button>
-    <button type="button" class="btn danger" id="previewStop" style="display:none">■ Stop preview</button>
-  </div>
-  <audio id="previewAudio" controls style="display:none"></audio>
-</div>
-
-<!-- Chapters -->
-<div class="card">
-  <div class="card-head">
-    <h3>Chapters <span class="count-chip" id="chapterCount">{{ chapters|length }}</span></h3>
-    <span class="meta mono" id="includeSummary"></span>
-  </div>
-  <p class="meta">Click a chapter title to read its opening lines — a fast way to spot front matter or junk.
-    Uncheck any section you don't want narrated. Copyright, contents, dedications and acknowledgements are skipped by default.</p>
-  <table class="chapters-table">
-    <thead><tr>
-      <th class="pick"><input type="checkbox" id="selectAllCh" title="Select / deselect all"></th>
-      <th>#</th><th>Title</th><th style="text-align:right">Characters</th>
-    </tr></thead>
-    <tbody id="chaptersBody">
-    {% for c in chapters %}
-      <tr class="{{ '' if c.include else 'excluded' }}">
-        <td class="pick"><input type="checkbox" class="ch-include" data-ch="{{ c.chapter_id }}" data-chars="{{ c.char_count }}" {{ 'checked' if c.include }}></td>
-        <td class="mono">{{ c.sequence }}</td>
-        <td class="title"><button type="button" class="ch-peek" data-ch="{{ c.chapter_id }}">{{ c.title }}</button>{% if c.chapter_id == 'intro' %} <span class="meta">— title &amp; author intro</span>{% elif c.chapter_id == 'outro' %} <span class="meta">— closing outro</span>{% endif %}</td>
-        <td class="mono" style="text-align:right">{{ '{:,}'.format(c.char_count) }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <div class="meta" id="chaptersPending" style="{{ 'display:none' if chapters else '' }}">Waiting for extraction to finish…</div>
-</div>
-
-<!-- Render -->
-<div class="card render-card">
-  <h3>Render audiobook</h3>
-
-  <div class="estimate" id="estimatePanel">
-    <div class="est-item"><span class="est-val" id="estAudio">—</span><span class="est-label">Audio length</span></div>
-    <div class="est-item"><span class="est-val" id="estRender">—</span><span class="est-label">Time to render</span></div>
-    <div class="est-item"><span class="est-val" id="estSize">—</span><span class="est-label">Final .m4b size</span></div>
-    <div class="est-item temp"><span class="est-val" id="estTemp">—</span><span class="est-label">Temp working files</span></div>
-  </div>
-  <div class="hint est-note" id="estNote"></div>
-
-  <div class="field" style="max-width:680px;margin-top:18px">
-    <label>Save audiobook to</label>
-    <div class="seg" id="modeToggle" role="tablist">
-      <button type="button" class="seg-btn {{ 'on' if output_mode != 'folder' }}" data-mode="library">Plex library</button>
-      <button type="button" class="seg-btn {{ 'on' if output_mode == 'folder' }}" data-mode="folder">Specific folder</button>
-    </div>
-
-    <div id="libraryPane" style="{{ 'display:none' if output_mode == 'folder' }};margin-top:10px">
-      {% if library_target %}
-        <div class="meta">Filed into your Plex library as:</div>
-        <div class="meta mono" id="libraryTarget">{{ library_target }}</div>
-      {% else %}
-        <div class="meta">No library folder set yet — <a href="{{ url_for('settings_page') }}">choose one in Settings</a>, or switch to a specific folder.</div>
-      {% endif %}
-      <div class="hint">A Plex-ready <code>Author / Title (Year) / Title.m4b</code> tree, with a <code>cover.jpg</code> beside the book.</div>
-    </div>
-
-    <div id="folderPane" style="{{ '' if output_mode == 'folder' else 'display:none' }};margin-top:10px">
-      <div class="btn-row">
-        <button type="button" class="btn" id="outDirBtn">📂 Choose folder…</button>
-        <span class="meta mono" id="outDirText">{{ folder_dir }}</span>
-      </div>
-      <input type="hidden" id="outputDir" value="{{ folder_dir }}">
-      <div class="hint">One flat folder. The finished file <code id="outFilename">{{ output_filename }}</code> is written here.</div>
-    </div>
-    <div class="hint" style="margin-top:8px">The destination is checked for write access before the render starts.</div>
-  </div>
-  <div class="btn-row">
-    <button type="button" class="btn primary" id="renderBtn">Render full audiobook</button>
-    <button type="button" class="btn danger" id="renderStop" style="display:none">■ Stop</button>
-  </div>
-</div>
-
-<!-- Storage -->
-<div class="card">
-  <h3>Storage</h3>
-  <div class="meta">This conversion is using <strong id="diskBytes">{{ disk_bytes|humanbytes }}</strong> on disk<span id="interWrap" style="{{ '' if intermediate_bytes else 'display:none' }}"> · <strong id="interBytes">{{ intermediate_bytes|humanbytes }}</strong> of that is reclaimable working files</span>.</div>
-  <div class="btn-row" style="margin-top:14px">
-    <button type="button" class="btn" id="cleanupBtn" {{ 'disabled' if not intermediate_bytes }}>🧹 Free up space</button>
-    <form method="post" action="{{ url_for('delete_job', job_id=job_id) }}" style="margin-left:auto"
-          onsubmit="return confirm('Delete this conversion and all its files?')">
-      <button class="btn danger" type="submit">Delete conversion</button>
-    </form>
-  </div>
-  <div class="hint">The rendered segments are kept so you can tweak a setting and re-render in seconds instead of from scratch.
-    Once you're happy with the finished <code>.m4b</code>, “Free up space” removes those working files (the audiobook itself stays). Previews are cleared automatically when a full render finishes.</div>
-</div>
+</footer>
 {% endblock %}
 
 {% block script %}
@@ -226,7 +327,14 @@ const SIZE_WARN_BYTES = {{ size_warn_bytes|tojson }};
 const LIBRARY_TARGET_DIR = {{ (audiobooks_root or "")|tojson }};
 let powerMode = {{ job_power_mode|tojson }};
 const POWER_MODES = {{ power_modes|tojson }};
-let renderRate = {{ render_rate|tojson }};  // chars/sec, measured; may be null until a preview/render runs
+let renderRate = {{ render_rate|tojson }};  // chars/sec of work, measured; null until something has run
+// Characters per second of *audio*. Null until measured, in which case the
+// estimate falls back to a generic speaking rate that knows nothing about the
+// pacing setting or the voice.
+let audioRate = {{ audio_rate|tojson }};
+// Whether the figures above were measured with the settings currently on screen.
+let measuredHere = {{ measured_here|tojson }};
+const DEFAULT_CHARS_PER_AUDIO_SECOND = {{ chars_per_audio_second|tojson }};
 const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
                    repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
 const form = document.getElementById("settingsForm");
@@ -246,9 +354,11 @@ async function saveSettings() {
   await fetch(`/job/${jobId}/settings`, { method: "POST", body: formData() });
 }
 
-document.getElementById("saveBtn").addEventListener("click", async () => {
-  await saveSettings(); toast("Settings saved");
-});
+const saveBtn = document.getElementById("saveBtn");
+saveBtn.addEventListener("click", () => withBusy(saveBtn, "Saving…", async () => {
+  await saveSettings();
+  toast("Settings saved");
+}));
 document.getElementById("resetBtn").addEventListener("click", () => {
   for (const [k, v] of Object.entries(DEFAULTS)) {
     const el = form.querySelector(`[name=${k}]`); if (el) el.value = v;
@@ -262,14 +372,18 @@ document.getElementById("bitrateInput").addEventListener("input", computeEstimat
 let fast = 0;
 function bump() { fast = 8; }
 
-document.getElementById("previewBtn").addEventListener("click", async () => {
+const previewBtn = document.getElementById("previewBtn");
+previewBtn.addEventListener("click", () => withBusy(previewBtn, "Starting…", async () => {
   await saveSettings();
   await postForm(`/job/${jobId}/preview`, {
     seconds: document.getElementById("previewSeconds").value,
     chapter_id: document.getElementById("previewChapter").value,
   });
-  toast("Generating preview…"); bump();
-});
+  // The voice model has to load first, which is the slow part and produces no
+  // progress of its own for a while — so say that rather than just "started".
+  toast("Warming up the voice — the first preview takes a moment");
+  bump();
+}));
 const outDirInput = document.getElementById("outputDir");
 let outputMode = {{ output_mode|tojson }} === "folder" ? "folder" : "library";
 const libraryPane = document.getElementById("libraryPane");
@@ -279,9 +393,16 @@ document.querySelectorAll("#modeToggle .seg-btn").forEach(btn => {
     outputMode = btn.dataset.mode;
     document.querySelectorAll("#modeToggle .seg-btn").forEach(b => b.classList.toggle("on", b === btn));
     libraryPane.style.display = outputMode === "library" ? "" : "none";
-    folderPane.style.display = outputMode === "folder" ? "" : "none";
+    folderPane.style.display = outputMode === "folder" ? "flex" : "none";
   });
 });
+// Clicking a path opens the folder it names.
+const revealLibraryBtn = document.getElementById("revealLibrary");
+if (revealLibraryBtn) revealLibraryBtn.addEventListener("click", () => revealFolder({ what: "library" }));
+document.getElementById("revealFolderBtn").addEventListener("click", () => revealFolder({ job_id: jobId }));
+const revealOutputBtn = document.getElementById("revealOutput");
+revealOutputBtn.addEventListener("click", () => revealFolder({ job_id: jobId }));
+
 document.getElementById("outDirBtn").addEventListener("click", () => {
   openFsBrowser({
     start: outDirInput.value, accept: "dir",
@@ -307,10 +428,13 @@ function currentBitrate() {
 }
 // Recompute the "what this render will produce" panel from the current
 // selection + bitrate. Pure client-side math — no server round-trip.
+function effectiveAudioRate() {
+  return (measuredHere && audioRate > 0) ? audioRate : DEFAULT_CHARS_PER_AUDIO_SECOND;
+}
 function computeEstimate() {
   const { chars, count } = includedChars();
   const total = document.querySelectorAll(".ch-include").length;
-  const audioSecs = chars / CHARS_PER_AUDIO_SECOND;
+  const audioSecs = chars / effectiveAudioRate();
   const sizeBytes = audioSecs * (currentBitrate() * 1000 / 8);
   const tempBytes = audioSecs * WAV_BYTES_PER_AUDIO_SECOND * 2;  // segments + assembled chapters
   const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
@@ -320,14 +444,38 @@ function computeEstimate() {
   set("estTemp", chars ? humanBytes(tempBytes) : "—");
   if (!chars) { set("estRender", "—"); }
   else if (renderRate && renderRate > 0) { set("estRender", "~" + fmtDuration(chars / renderRate)); }
-  else { set("estRender", "run a preview"); }
+  else { set("estRender", "after a preview"); }
 
-  const note = document.getElementById("estNote");
-  const parts = [`${count} of ${total} sections selected`];
-  if (!renderRate) parts.push("render time is estimated after your first preview");
-  if (sizeBytes > SIZE_WARN_BYTES) parts.push("⚠ over 1.2 GB — consider a lower bitrate");
-  note.textContent = parts.join(" · ");
-  note.classList.toggle("warn", sizeBytes > SIZE_WARN_BYTES);
+  const sizeEl = document.getElementById("estSize");
+  if (sizeEl) sizeEl.style.color = sizeBytes > SIZE_WARN_BYTES ? "var(--warn)" : "";
+  paintEstimateBasis();
+  paintChapterMinutes();
+}
+
+// Say plainly whether these numbers were measured or guessed. An estimate that
+// does not admit which it is invites the user to trust it equally either way.
+function paintEstimateBasis() {
+  const el = document.getElementById("estBasis");
+  const btn = document.getElementById("remeasureBtn");
+  const note = document.getElementById("staleNote");
+  if (!el) return;
+  const measured = measuredHere && audioRate > 0;
+  el.textContent = measured
+    ? "Measured from this voice at these settings."
+    : "A rough guide — a generic reading speed that ignores the voice and pacing. Measure it for a real figure.";
+  if (btn) btn.classList.toggle("stale", !measured);
+  if (note) note.hidden = measured;
+}
+
+// Per-section minutes follow the same rate as the total, or the two disagree.
+function paintChapterMinutes() {
+  const rate = effectiveAudioRate();
+  document.querySelectorAll(".ch-include").forEach((box) => {
+    const cell = box.closest(".chrow")?.querySelector(".mins");
+    if (!cell) return;
+    const mins = Math.round((+box.dataset.chars || 0) / rate / 60);
+    cell.textContent = mins < 1 ? "<1 min" : mins + " min";
+  });
 }
 
 // ---- Render (with a disk-space / temp-files plan dialog) ----------------------
@@ -358,20 +506,20 @@ async function renderPlanBody() {
   const rows = `
     <div class="plan-row"><span>Sections to narrate</span><strong>${count}</strong></div>
     <div class="plan-row"><span>Audio length</span><strong>${chars ? fmtDuration(audioSecs) : "—"}</strong></div>
-    ${renderRate ? `<div class="plan-row"><span>Estimated render time</span><strong>~${fmtDuration(chars / renderRate)}</strong></div>` : ""}
-    <div class="plan-row highlight"><span>Temporary working files (peak)</span><strong>${humanBytes(tempBytes)}</strong></div>
-    <div class="plan-row"><span>Final audiobook file</span><strong>${humanBytes(sizeBytes)}</strong></div>
+    ${renderRate ? `<div class="plan-row"><span>Estimated time to narrate</span><strong>~${fmtDuration(chars / renderRate)}</strong></div>` : ""}
+    <div class="plan-row highlight"><span>Working files, at peak</span><strong>${humanBytes(tempBytes)}</strong></div>
+    <div class="plan-row"><span>Final audiobook</span><strong>${humanBytes(sizeBytes)}</strong></div>
     <div class="plan-row"><span>Free space for working files</span><strong class="${workTight ? "bad" : ""}">${humanBytes(free)}</strong></div>
     ${destRow}`;
   const explain = `
-    <p class="plan-explain">While rendering, each piece of narration is saved as a large uncompressed
-    audio file — about <strong>${humanBytes(tempBytes)}</strong> in total. That's temporary: it lets you
-    tweak a setting and re-render in seconds instead of redoing the whole book. The finished audiobook is
-    only <strong>${humanBytes(sizeBytes)}</strong>.</p>
-    <p class="plan-explain">When you're happy with the result, come back to <strong>Storage → Free up space</strong>
-    to reclaim the working files.</p>`;
+    <p class="plan-explain">While it narrates, every piece is saved as raw uncompressed audio — about
+    <strong>${humanBytes(tempBytes)}</strong> in total. That is temporary: it lets you change a setting and
+    re-narrate in minutes instead of redoing the whole book. The finished audiobook is only
+    <strong>${humanBytes(sizeBytes)}</strong>.</p>
+    <p class="plan-explain">Reclaim the working files from <strong>Storage</strong> whenever the book sounds
+    right — or have it happen automatically.</p>`;
   const warn = tight
-    ? `<div class="plan-warn">⚠ You may not have enough free space for the working files. Free up some disk space first, or render fewer sections.</div>`
+    ? `<div class="plan-warn">You may not have enough free space for the working files. Free up some disk space first, or narrate fewer sections.</div>`
     : "";
   // Offered here rather than buried in Settings: this is the moment the user is
   // committing hours of machine time, so it's when the trade-off is relevant.
@@ -390,12 +538,12 @@ async function renderPlanBody() {
 
 document.getElementById("renderBtn").addEventListener("click", async () => {
   const { chars } = includedChars();
-  if (!chars) { toast("Select at least one section to render."); return; }
+  if (!chars) { toast("Choose at least one section to narrate."); return; }
   const plan = await renderPlanBody();
   const ok = await confirmDialog({
-    title: "Ready to render",
+    title: "Ready to narrate",
     bodyHtml: plan.bodyHtml,
-    confirmLabel: plan.tight ? "Render anyway" : "Start render",
+    confirmLabel: plan.tight ? "Narrate anyway" : "Start",
     danger: plan.tight,
   });
   if (!ok) return;
@@ -406,32 +554,62 @@ document.getElementById("renderBtn").addEventListener("click", async () => {
   if (outputMode === "folder") body.output_dir = outDirInput.value;
   const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
   if (!r.ok) {
-    let msg = "Couldn't start render";
+    let msg = "Couldn't start";
     try { msg = (await r.json()).error || msg; } catch {}
     toast(msg);
     return;
   }
-  toast("Rendering full audiobook…"); bump();
+  toast("Narrating…"); bump();
 });
+// Measuring: narrate a few seconds with the current settings and use the real
+// numbers. Cheap, and the audio it makes is kept for the full render.
+const remeasureBtn = document.getElementById("remeasureBtn");
+async function startMeasure(btn) {
+  await withBusy(btn || remeasureBtn, "Measuring…", async () => {
+    await saveSettings();  // measure what is on screen, not what was last saved
+    const r = await fetch(`/job/${jobId}/measure`, { method: "POST" });
+    if (!r.ok) {
+      let msg = "Couldn't measure just now";
+      try { msg = (await r.json()).error || msg; } catch {}
+      toast(msg);
+      return;
+    }
+    toast("Narrating a few seconds to measure this voice…");
+    bump();
+  });
+}
+remeasureBtn.addEventListener("click", () => startMeasure(remeasureBtn));
+document.getElementById("staleMeasure").addEventListener("click", () => startMeasure(remeasureBtn));
+
+// Changing anything that affects the audio makes the current figures stale, and
+// the offer to remeasure appears the moment it stops being true.
+form.addEventListener("input", (e) => {
+  if (e.target.name === "bitrate") return;  // encode-only: changes size, not length
+  if (measuredHere) { measuredHere = false; computeEstimate(); }
+});
+form.addEventListener("change", (e) => {
+  if (e.target.name === "voice_id" && measuredHere) { measuredHere = false; computeEstimate(); }
+});
+
 async function stop() { await postForm(`/job/${jobId}/cancel`, {}); toast("Stopping…"); bump(); }
 document.getElementById("previewStop").addEventListener("click", stop);
 document.getElementById("renderStop").addEventListener("click", stop);
 
-// Free up space (remove intermediates)
+// Free up this book's working files.
 const cleanupBtn = document.getElementById("cleanupBtn");
 if (cleanupBtn) cleanupBtn.addEventListener("click", async () => {
   cleanupBtn.disabled = true;
   try {
     const r = await fetch(`/job/${jobId}/cleanup`, { method: "POST" });
-    if (!r.ok) { toast("Can't clean up while working"); cleanupBtn.disabled = false; return; }
+    if (!r.ok) { toast("Can't reclaim those while it's working"); cleanupBtn.disabled = false; return; }
     const d = await r.json();
     toast("Freed " + humanBytes(d.freed_bytes));
     await refreshStorage();  // reflect the new (lower) usage immediately, no reload
-  } catch { toast("Cleanup failed"); cleanupBtn.disabled = false; }
+  } catch { toast("Couldn't free that up"); cleanupBtn.disabled = false; }
 });
 
 // Chapters are extracted in the background after import, so the page may load
-// before they exist. Fetch and populate the dropdown + table once available.
+// before they exist. Fetch and populate the list + dropdown once available.
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -452,21 +630,23 @@ async function ensureChapters() {
   if (!data.chapters.length) return;
   sel.innerHTML = data.chapters.map(c =>
     `<option value="${c.chapter_id}"${c.chapter_id === data.default_chapter_id ? " selected" : ""}>${c.sequence} · ${escapeHtml(c.title)}</option>`).join("");
-  document.getElementById("chapterCount").textContent = data.chapters.length;
+  document.getElementById("sectionChip").textContent =
+    data.chapters.length + " section" + (data.chapters.length === 1 ? "" : "s");
   document.getElementById("chaptersBody").innerHTML = data.chapters.map(chapterRowHtml).join("");
   document.getElementById("chaptersPending").style.display = "none";
   syncChapterUI();
 }
 
 function chapterRowHtml(c) {
-  const label = c.chapter_id === "intro" ? ` <span class="meta">— title &amp; author intro</span>`
-    : c.chapter_id === "outro" ? ` <span class="meta">— closing outro</span>` : "";
-  return `<tr class="${c.include ? "" : "excluded"}">
-    <td class="pick"><input type="checkbox" class="ch-include" data-ch="${c.chapter_id}" data-chars="${c.char_count}"${c.include ? " checked" : ""}></td>
-    <td class="mono">${c.sequence}</td>
-    <td class="title"><button type="button" class="ch-peek" data-ch="${c.chapter_id}">${escapeHtml(c.title)}</button>${label}</td>
-    <td class="mono" style="text-align:right">${c.char_count.toLocaleString()}</td>
-  </tr>`;
+  const synthetic = c.chapter_id === "intro" || c.chapter_id === "outro";
+  const mins = Math.round(c.char_count / CHARS_PER_AUDIO_SECOND / 60);
+  return `<div class="chrow ${c.include ? "" : "excluded"}">
+    <input type="checkbox" class="ch-include" data-ch="${c.chapter_id}" data-chars="${c.char_count}"${c.include ? " checked" : ""}>
+    <span class="mono dim" style="font-size:11.5px">${String(c.sequence).padStart(2, "0")}</span>
+    <button type="button" class="ttl ch-peek" data-ch="${c.chapter_id}">${escapeHtml(c.title)}</button>
+    ${synthetic ? '<span class="tag">added by the app</span>' : "<span></span>"}
+    <span class="mins">${mins < 1 ? "&lt;1 min" : mins + " min"}</span>
+  </div>`;
 }
 
 // Reflect the current checkbox state into the "N of M selected" summary and
@@ -478,19 +658,19 @@ function syncChapterUI() {
   all.checked = boxes.length > 0 && inc === boxes.length;
   all.indeterminate = inc > 0 && inc < boxes.length;
   document.getElementById("includeSummary").textContent =
-    boxes.length ? `${inc} of ${boxes.length} selected` : "";
+    boxes.length ? `${inc} of ${boxes.length} sections` : "";
   computeEstimate();
 }
 
 async function persistIncludes(map) {
   try { await postJSON(`/job/${jobId}/chapters/include`, { includes: map }); }
-  catch { toast("Couldn't save selection"); }
+  catch { toast("Couldn't save that choice"); }
 }
 
 async function onChapterToggle(e) {
   const box = e.target.closest(".ch-include");
   if (!box) return;
-  box.closest("tr").classList.toggle("excluded", !box.checked);
+  box.closest(".chrow").classList.toggle("excluded", !box.checked);
   syncChapterUI();
   await persistIncludes({ [box.dataset.ch]: box.checked });
 }
@@ -500,7 +680,7 @@ async function onSelectAll(e) {
   const map = {};
   document.querySelectorAll(".ch-include").forEach(b => {
     b.checked = on;
-    b.closest("tr").classList.toggle("excluded", !on);
+    b.closest(".chrow").classList.toggle("excluded", !on);
     map[b.dataset.ch] = on;
   });
   syncChapterUI();
@@ -512,34 +692,34 @@ async function peekChapter(chapterId) {
   const d = openDrawer({ title: "Loading…", loading: true });
   let data;
   try { data = await getJSON(`/job/${jobId}/chapter/${encodeURIComponent(chapterId)}/text`); }
-  catch { d.setTitle("Couldn't load chapter"); d.setBody(`<div class="empty">This section's text isn't available.</div>`); return; }
+  catch { d.setTitle("Couldn't load that section"); d.setBody(`<div class="empty">This section's text isn't available.</div>`); return; }
   d.setTitle(data.title || "(untitled)", `Section ${data.sequence} · ${data.char_count.toLocaleString()} characters`);
   const text = (data.excerpt || "").trim();
   if (!text) {
-    d.setBody(`<div class="empty">This section has no readable text — it's likely a cover, image, or blank page. A good candidate to uncheck.</div>`);
+    d.setBody(`<div class="empty">This section has no readable text — it's likely a cover, an image, or a blank page. A good one to switch off.</div>`);
   } else {
-    const tail = data.truncated ? `<div class="peek-more">… showing the opening ${data.excerpt.length.toLocaleString()} characters of ${data.char_count.toLocaleString()}.</div>` : "";
+    const tail = data.truncated ? `<p class="hint" style="margin-top:12px">… showing the opening ${data.excerpt.length.toLocaleString()} characters of ${data.char_count.toLocaleString()}.</p>` : "";
     d.setBody(`<div class="peek-text">${escapeHtml(text)}</div>${tail}`);
   }
   // Let the user include/exclude straight from the drawer.
   const box = document.querySelector(`.ch-include[data-ch="${CSS.escape(chapterId)}"]`);
   const foot = document.createElement("div");
-  foot.className = "drawer-foot-row";
+  foot.style.cssText = "display:flex;align-items:center;gap:12px;width:100%";
   const label = document.createElement("label");
-  label.className = "drawer-toggle";
+  label.style.cssText = "display:flex;align-items:center;gap:9px;font-size:12.5px;margin-right:auto;cursor:pointer";
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.checked = box ? box.checked : true;
   cb.disabled = !box || box.disabled;
   label.appendChild(cb);
-  label.appendChild(document.createTextNode(" Include this section in the audiobook"));
+  label.appendChild(document.createTextNode("Narrate this section"));
   cb.addEventListener("change", async () => {
     if (!box) return;
     box.checked = cb.checked;
-    box.closest("tr").classList.toggle("excluded", !cb.checked);
+    box.closest(".chrow").classList.toggle("excluded", !cb.checked);
     syncChapterUI();
     await persistIncludes({ [chapterId]: cb.checked });
-    toast(cb.checked ? "Section included" : "Section excluded");
+    toast(cb.checked ? "Will be narrated" : "Left out");
   });
   const closeBtn = document.createElement("button");
   closeBtn.className = "btn ghost";
@@ -574,24 +754,43 @@ async function refreshStorage() {
   } catch {}
 }
 
-// A clear, human-readable status for every stage.
+// The stage in this person's words, with the detail that makes it useful.
+const STAGE_DETAIL = {
+  extracting: () => "Reading the book…",
+  preparing:  () => "Warming up — loading the voice…",
+  assembling: () => "Stitching chapters together…",
+  packaging:  () => "Packaging the audiobook…",
+};
 function statusLabel(s) {
-  const n = s.rendered_segments, m = s.total_segments;
-  switch (s.stage) {
-    case "imported":   return "Imported";
-    case "extracting": return "Extracting book…";
-    case "extracted":  return "Ready to render";
-    case "preparing":  return "Preparing — loading voice model…";
-    case "previewing": return m ? `Generating preview… ${Math.round(100 * (s.preview_progress || 0))}%` : "Preparing preview — loading model…";
-    case "rendering":  return `Rendering… ${n}/${m}`;
-    case "assembling": return "Assembling chapters…";
-    case "packaging":  return "Packaging audiobook…";
-    case "done":       return "Done";
-    case "cancelled":  return "Stopped";
-    case "error":      return "Error";
-    default:           return s.stage;
+  const extra = STAGE_DETAIL[s.stage];
+  if (extra) return extra(s);
+  if (s.stage === "previewing") {
+    return s.preview_progress ? `Making a preview… ${Math.round(100 * s.preview_progress)}%` : "Making a preview…";
   }
+  if (s.stage === "rendering") return `Narrating — section ${s.rendered_segments} of ${s.total_segments}`;
+  if (s.stage === "cancelled" && s.total_segments) {
+    return `Stopped by you — ${Math.round(100 * s.rendered_segments / s.total_segments)}% narrated and kept`;
+  }
+  return STAGE_LABELS[s.stage] || s.stage;
 }
+const STAGE_LABELS = {{ stage_labels|tojson }};
+
+// Which of the four steps a stage belongs to, for the little stepper.
+const STEP_ORDER = ["extracted", "rendering", "assembling", "packaging"];
+const STEP_OF = {
+  imported: -1, extracting: -1, extracted: 0, preparing: 1, previewing: 0,
+  rendering: 1, assembling: 2, packaging: 3, done: 4, error: -1, cancelled: -1,
+};
+function paintSteps(stage) {
+  const at = STEP_OF[stage] === undefined ? -1 : STEP_OF[stage];
+  STEP_ORDER.forEach((name, i) => {
+    const el = document.querySelector(`.step[data-step="${name}"]`);
+    if (!el) return;
+    el.classList.toggle("done", at > i);
+    el.classList.toggle("now", at === i);
+  });
+}
+
 const SHOW_PROGRESS = new Set(["previewing", "rendering"]);
 const RENDER_STOPPABLE = new Set(["preparing", "rendering"]);
 const WORKING = new Set(["extracting", "preparing", "previewing", "rendering", "assembling", "packaging"]);
@@ -627,13 +826,19 @@ async function poll() {
   let s;
   try { s = await getJSON(`/job/${jobId}/status`); } catch { return schedule(4000); }
 
-  // Pick up a freshly-measured render rate so the estimate/plan populate.
+  // Pick up freshly-measured rates so the estimates and the plan dialog populate.
+  let ratesChanged = false;
   if (s.chars_per_render_second && s.chars_per_render_second !== renderRate) {
-    renderRate = s.chars_per_render_second; computeEstimate();
+    renderRate = s.chars_per_render_second; ratesChanged = true;
   }
+  if (s.chars_per_audio_second && s.chars_per_audio_second !== audioRate) {
+    audioRate = s.chars_per_audio_second; measuredHere = true; ratesChanged = true;
+  }
+  if (ratesChanged) computeEstimate();
 
   document.getElementById("stageText").textContent = statusLabel(s);
   document.getElementById("stageBadge").className = "badge " + s.stage;
+  paintSteps(s.stage);
   const working = s.busy || WORKING.has(s.stage);
   const isPreview = s.stage === "previewing";
   const frac = isPreview
@@ -645,13 +850,14 @@ async function poll() {
     !showBar ? "" : isPreview ? `${Math.round(100 * frac)}%` : `${s.rendered_segments}/${s.total_segments}`;
   const bar = document.getElementById("bar");
   const indeterminate = working && !determinate;
-  bar.parentElement.classList.toggle("indeterminate", indeterminate);
-  bar.style.width = determinate ? (100 * frac) + "%" : indeterminate ? "" : "0%";
+  bar.parentElement.classList.toggle("striped", indeterminate);
+  bar.style.width = determinate ? (100 * frac) + "%" : indeterminate ? "100%" : "0%";
   document.getElementById("errorText").textContent = s.error || "";
   updateRemaining(s);
 
   document.getElementById("previewStop").style.display = (s.stage === "previewing") ? "" : "none";
   document.getElementById("renderStop").style.display = RENDER_STOPPABLE.has(s.stage) ? "" : "none";
+  document.getElementById("renderBtn").style.display = RENDER_STOPPABLE.has(s.stage) ? "none" : "";
   document.getElementById("renderBtn").disabled = working;
   document.getElementById("previewBtn").disabled = working;
   document.getElementById("selectAllCh").disabled = working;
@@ -659,11 +865,12 @@ async function poll() {
 
   if (s.output_path && s.output_path.endsWith(".m4b")) {
     document.getElementById("resultLinks").innerHTML =
-      `<a class="btn primary" href="/job/${jobId}/download">⬇ Download .m4b</a>`;
+      `<a class="btn primary" href="/job/${jobId}/download">Save the .m4b</a>`;
+    revealOutputBtn.hidden = false;
   }
   if (s.finished_at) {
     document.getElementById("finishedText").textContent =
-      "Exported " + new Date(s.finished_at).toLocaleString() +
+      "Finished " + new Date(s.finished_at).toLocaleString() +
       (s.output_bytes ? " · " + humanBytes(s.output_bytes) : "");
   }
 

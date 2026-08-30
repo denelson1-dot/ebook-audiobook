@@ -149,6 +149,13 @@ class Runner:
                 should_cancel=cancelled,
                 progress=_terminal_progress(task.job_id),
             )
+        elif task.kind == "measure":
+            worker.measure_job(
+                task.job_id,
+                power_mode=task.kwargs.get("power_mode"),
+                should_cancel=cancelled,
+                progress=_terminal_progress(task.job_id),
+            )
         elif task.kind == "voice_test":
             worker.render_voice_sample(task.kwargs["voice_id"])
 

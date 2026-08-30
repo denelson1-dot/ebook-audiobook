@@ -1,46 +1,245 @@
 {% extends "base.html" %}
 {% set nav = 'library' %}
-{% block body %}
-<h1 class="page-title">Library</h1>
-<p class="page-sub">Your conversions — in progress, finished, and exported.</p>
+{% import "_icons.html" as ic %}
+{% block title %}Library · ebook·audiobook{% endblock %}
 
-<div class="btn-row" style="justify-content:space-between; margin-bottom:22px">
-  <a class="btn primary" href="{{ url_for('new_page') }}">＋ New conversion</a>
-  {% if jobs %}<span class="meta">Storage used: <strong>{{ total_bytes|humanbytes }}</strong> across {{ jobs|length }} book{{ 's' if jobs|length != 1 }}</span>{% endif %}
+{% macro shelf(items) %}
+<div class="shelf">
+  {% for j in items %}
+    <a class="book" href="{{ url_for('job_page', job_id=j.id) }}">
+      <span class="thumb">
+        {{ ic.cover(j) }}
+        <span class="acts">
+          {% if j.state.output_path and j.state.output_path.endswith('.m4b') %}
+            <span class="btn" onclick="event.preventDefault();location.href='{{ url_for('download', job_id=j.id) }}'">
+              {{ ic.icon('download', 12) }} Save
+            </span>
+          {% else %}
+            <span class="btn">Open</span>
+          {% endif %}
+        </span>
+      </span>
+      <h3>{{ j.book.title }}</h3>
+      <div class="by">{{ j.book.author }}</div>
+      <div class="foot">
+        {% if j.state.stage == 'done' %}
+          {% if j.duration %}<span class="mono">{{ j.duration }}</span><span class="dim">·</span>{% endif %}
+          <span class="mono">{{ j.bytes|humanbytes }}</span>
+        {% elif j.state.stage in ('cancelled', 'error') %}
+          <span class="badge {{ j.state.stage }}">{{ j.state.stage|stage }}{% if j.state.total_segments %}
+            at {{ (100 * j.state.rendered_segments / j.state.total_segments)|round|int }}%{% endif %}</span>
+        {% else %}
+          <span class="badge">{{ j.state.stage|stage }}</span>
+        {% endif %}
+      </div>
+    </a>
+  {% endfor %}
 </div>
+{% endmacro %}
+
+{% block head %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Library</h1>
+    <p class="page-sub" id="libraryMeta">
+      {% if jobs %}{{ jobs|length }} book{{ 's' if jobs|length != 1 }} ·
+        <span class="mono">{{ total_bytes|humanbytes }}</span> on disk{% endif %}
+    </p>
+  </div>
+  <div class="head-actions">
+    <a class="btn warn" id="libraryFree" href="{{ url_for('storage_page') }}" hidden>
+      {{ ic.icon('sparkle', 13) }} <span id="libraryFreeText"></span>
+    </a>
+    <a class="btn primary" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} Add a book</a>
+  </div>
+</header>
+{% endblock %}
+
+{% block body %}
 
 {% if not jobs %}
-  <div class="card"><div class="empty">
-    No books yet. <a href="{{ url_for('new_page') }}">Start a conversion →</a>
-  </div></div>
-{% else %}
-  <div class="grid">
-    {% for j in jobs %}
-      <div class="card job-card">
-        <a class="title" href="{{ url_for('job_page', job_id=j.id) }}">{{ j.book.title }}</a>
-        <div class="author">{{ j.book.author }}</div>
-        <div style="margin:10px 0">
-          <span class="badge {{ j.state.stage }}"><span class="dot"></span>{{ j.state.stage }}</span>
-          {% if j.state.stage not in ('done','cancelled','error') and j.state.total_segments %}
-            <span class="meta mono"> · {{ j.state.rendered_segments }}/{{ j.state.total_segments }}</span>
-          {% endif %}
-        </div>
-        <div class="meta" style="font-size:12px">
-          {% if j.state.finished_at %}exported {{ j.state.finished_at|dt }}{% elif j.state.created_at %}started {{ j.state.created_at|dt }}{% endif %}
-          · {{ j.bytes|humanbytes }}
-        </div>
-        <div class="btn-row" style="margin-top:12px">
-          <a class="btn sm" href="{{ url_for('job_page', job_id=j.id) }}">Open</a>
-          {% if j.state.output_path and j.state.output_path.endswith('.m4b') %}
-            <a class="btn sm" href="{{ url_for('download', job_id=j.id) }}">⬇ .m4b</a>
-          {% endif %}
-          <form method="post" action="{{ url_for('delete_job', job_id=j.id) }}" style="margin-left:auto"
-                onsubmit="return confirm('Delete “{{ j.book.title }}” and all its files?')">
-            <button class="btn sm danger" type="submit">Delete</button>
-          </form>
+  {# First run. Not a banner over an empty grid: the two things standing between
+     this person and an audiobook are the only things on screen. #}
+  <div class="welcome">
+    <div style="text-align:center;margin-bottom:30px">
+      <h1 class="serif" style="font-size:40px;line-height:1.1;max-width:15ch;margin:0 auto">A book you own, read aloud to you</h1>
+      <p class="meta" style="margin-top:12px;font-size:14px;max-width:52ch;margin-left:auto;margin-right:auto">
+        Point it at a DRM-free ebook and it produces a chaptered <code>.m4b</code>, tagged and filed for Plex.
+        It all happens on this computer — no account, no cloud, nothing uploaded.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Before your first book</h3>
+        <span class="meta" style="margin-left:auto" id="setupCount"></span>
+      </div>
+      <div id="setupList">
+        <div class="setup-row">
+          <span class="setup-mark"></span>
+          <div style="flex:1">
+            <b style="font-size:13.5px;font-weight:600">Checking what's installed…</b>
+          </div>
         </div>
       </div>
-    {% endfor %}
+      <div class="setup-row">
+        <span class="setup-mark {{ 'ok' if audiobooks_root else '' }}">{% if audiobooks_root %}{{ ic.icon('check', 12) }}{% endif %}</span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:9px">
+            <b style="font-size:13.5px;font-weight:600">Choose where finished books go</b>
+            {% if not audiobooks_root %}<span class="chip">can wait</span>{% endif %}
+          </div>
+          {% if audiobooks_root %}
+            <p class="meta" style="margin-top:3px"><span class="mono">{{ audiobooks_root }}</span></p>
+          {% else %}
+            <p class="meta" style="margin-top:3px;line-height:1.5">Usually the folder Plex already watches. Books are filed into it like this:</p>
+            <div class="tree" style="margin-top:8px;font-size:11px">Ursula K. Le Guin/
+  The Left Hand of Darkness (1969)/
+    The Left Hand of Darkness.m4b
+    cover.jpg</div>
+          {% endif %}
+        </div>
+        <div>
+          <button type="button" class="btn" id="welcomeFolder">{{ ic.icon('folder', 14) }} {{ 'Change' if audiobooks_root else 'Choose folder' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:20px">
+      <a class="btn primary lg" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} Add your first book</a>
+      <span class="meta">Nothing here talks to the internet unless you ask it to.</span>
+    </div>
   </div>
+
+{% else %}
+
+  {% if running %}
+    {# The most important thing on the machine right now, given the top of the page. #}
+    {% set j = running[0] %}
+    <section class="panel" style="padding:17px;display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:20px;align-items:center;border-color:var(--accent-line);margin-bottom:24px">
+      {{ ic.cover(j, '9.5px', 'hero-cover') }}
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px;flex-wrap:wrap">
+          <span class="chip live"><span class="dot pulse"></span><span id="heroStage">{{ j.state.stage|stage }}</span></span>
+          <span class="eyebrow" id="heroDetail"></span>
+        </div>
+        <h2 class="serif" style="font-size:25px;line-height:1.12">{{ j.book.title }}</h2>
+        <p class="meta" style="margin:1px 0 13px">{{ j.book.author }}</p>
+        <div class="progress tall"><span id="heroBar" style="width:0"></span></div>
+        <div class="stats" style="margin-top:14px">
+          <div class="stat"><span class="v" id="heroPct" style="color:var(--accent)">—</span><span class="k">done</span></div>
+          <div class="stat"><span class="v" id="heroElapsed">—</span><span class="k">elapsed</span></div>
+          <div class="stat"><span class="v" id="heroLeft">—</span><span class="k">remaining</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a class="btn" href="{{ url_for('job_page', job_id=j.id) }}">Open</a>
+        <button type="button" class="btn danger" id="heroStop">{{ ic.icon('stop', 13) }} Stop</button>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if finished %}
+    <section style="margin-bottom:26px">
+      <div class="sectionbar"><h2>Finished</h2><span class="mono dim" style="font-size:11.5px">{{ finished|length }}</span><span class="rule"></span></div>
+      {{ shelf(finished) }}
+    </section>
+  {% endif %}
+
+  {% if waiting %}
+    <section>
+      <div class="sectionbar"><h2>Waiting on you</h2><span class="mono dim" style="font-size:11.5px">{{ waiting|length }}</span><span class="rule"></span></div>
+      {{ shelf(waiting) }}
+    </section>
+  {% endif %}
+
 {% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+
+// The header's "free up" button is the same figure as the sidebar's, put where
+// someone looking at their library will read it: next to the disk total.
+(async () => {
+  try {
+    const d = await getJSON("/api/storage");
+    const meta = document.getElementById("libraryMeta");
+    if (meta && d.total_bytes) {
+      const n = d.books.length;
+      meta.innerHTML = `${n} book${n === 1 ? "" : "s"} · <span class="mono">${humanBytes(d.total_bytes)}</span> on disk`;
+    }
+    if (d.safe_bytes >= 1e9) {
+      document.getElementById("libraryFreeText").textContent = "Free up " + humanBytes(d.safe_bytes);
+      document.getElementById("libraryFree").hidden = false;
+    }
+  } catch (e) { /* the page is complete without it */ }
+})();
+
+{% if not jobs %}
+// First run: say what is missing, what is already handled, and — the genuinely
+// reassuring part — what this machine's hardware means for how long a book takes.
+(async () => {
+  let d;
+  try { d = await getJSON("/api/prereqs"); } catch (e) { return; }
+  const rows = (d.checks || []).map((c) => {
+    const bad = !c.ok && c.required;
+    const mark = c.ok ? `<span class="setup-mark ok">${ICON.check}</span>`
+                      : bad ? `<span class="setup-mark bad">${ICON.close}</span>`
+                            : `<span class="setup-mark"></span>`;
+    return `<div class="setup-row">
+      ${mark}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <b style="font-size:13.5px;font-weight:600">${escapeHtml(c.name)}</b>
+          ${bad ? '<span class="chip bad">required</span>' : ""}
+        </div>
+        <p class="meta" style="margin-top:3px;line-height:1.5">${escapeHtml(c.detail || "")}</p>
+        ${c.fix ? `<pre class="fix">${escapeHtml(c.fix)}</pre>` : ""}
+      </div></div>`;
+  });
+  document.getElementById("setupList").innerHTML = rows.join("");
+  const ok = (d.checks || []).filter((c) => c.ok).length;
+  document.getElementById("setupCount").textContent = `${ok} of ${(d.checks || []).length} ready`;
+})();
+
+document.getElementById("welcomeFolder").addEventListener("click", () => {
+  openFsBrowser({ start: homeDir, accept: "dir", onPick: async (path) => {
+    const r = await postForm("/settings", { audiobooks_root: path });
+    if (r && r.ok) location.reload(); else toast((r && r.error) || "Couldn't use that folder");
+  }});
+});
+{% endif %}
+
+{% if running %}
+// The hero mirrors the sidebar dock, at the size the page can afford.
+const heroJob = {{ running[0].id|tojson }};
+async function heroTick() {
+  let s;
+  try { s = await getJSON("/api/status"); } catch (e) { return; }
+  const j = s.job;
+  if (!j || j.job_id !== heroJob) { location.reload(); return; }
+  const previewing = j.stage === "previewing";
+  const frac = previewing ? (j.preview_progress || 0)
+    : (j.total_segments ? j.rendered_segments / j.total_segments : 0);
+  document.getElementById("heroStage").textContent = j.stage_label;
+  document.getElementById("heroBar").style.width = Math.round(frac * 100) + "%";
+  document.getElementById("heroPct").textContent = Math.round(frac * 100) + "%";
+  document.getElementById("heroDetail").textContent = previewing ? "a short excerpt"
+    : (j.total_segments ? `section ${j.rendered_segments.toLocaleString()} of ${j.total_segments.toLocaleString()}` : "");
+  if (j.render_started_at) {
+    const el = (Date.now() - Date.parse(j.render_started_at)) / 1000;
+    document.getElementById("heroElapsed").textContent = fmtHMS(el);
+    document.getElementById("heroLeft").textContent =
+      frac > 0.01 ? "~" + fmtDuration(el / frac - el) : "estimating…";
+  }
+}
+document.getElementById("heroStop").addEventListener("click", async () => {
+  await postForm(`/job/${heroJob}/cancel`, {});
+  toast("Stopping…");
+});
+heroTick();
+setInterval(heroTick, 3000);
+{% endif %}
+</script>
 {% endblock %}

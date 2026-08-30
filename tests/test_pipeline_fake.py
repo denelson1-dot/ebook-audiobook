@@ -7,6 +7,7 @@ point — but they're marked so they can be skipped in a tool-less environment.
 
 import json
 import pathlib
+from pathlib import Path
 
 import pytest
 
@@ -404,3 +405,136 @@ def test_other_os_errors_are_still_retried(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError):
         worker_mod._render_one(Adapter(), "hello", tmp_path / "seg.wav")
     assert len(calls) == 3, "retries were skipped for a non-fatal error"
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_finished_render_reclaims_its_working_files_when_asked():
+    """The auto-reclaim switch, wired through a real render.
+
+    ``storage.free_after_render`` is unit-tested on its own; what this covers is
+    that ``render_job`` actually calls it — the sort of wiring that can rot
+    silently, because the audiobook still comes out either way.
+    """
+    from ebook_audiobook import settings as app_settings
+
+    store = _seed_job("autofreejob")
+    s = app_settings.load_settings()
+    s.auto_free_working_files = True
+    app_settings.save_settings(s)
+
+    state = worker.render_job("autofreejob")
+    assert state.stage == "done"
+    assert Path(state.output_path).is_file(), "the audiobook must survive the tidy-up"
+    assert store.intermediate_bytes() == 0, "raw narration audio should have been reclaimed"
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_finished_render_keeps_working_files_by_default():
+    store = _seed_job("keepfilesjob")
+    state = worker.render_job("keepfilesjob")
+    assert state.stage == "done"
+    assert store.intermediate_bytes() > 0, "nothing is deleted unless the user asked"
+
+
+# --- measuring what a book will actually cost --------------------------------
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_measuring_records_both_rates_and_the_settings_they_belong_to():
+    store = _seed_job("measurejob")
+    state = worker.measure_job("measurejob")
+
+    assert state.chars_per_audio_second and state.chars_per_audio_second > 0
+    assert state.chars_per_render_second and state.chars_per_render_second > 0
+    # Tied to the voice it was measured with, so a later change can be spotted.
+    from ebook_audiobook import config
+    from ebook_audiobook.hashing import voice_key
+    assert state.measured_voice_key == voice_key(store.load_voice(), config.SAMPLE_RATE)
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_measuring_leaves_the_job_where_it_found_it():
+    """It is a calibration, not a render: it must not look like progress."""
+    store = _seed_job("measurestage")
+    before = store.load_state().stage
+    state = worker.measure_job("measurestage")
+    assert state.stage == before
+    assert state.output_path is None
+    assert state.preview_output is None      # nothing to listen to
+    assert state.preview_progress == 0.0
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_measured_audio_is_kept_for_the_real_render():
+    """The point of using the real engine: none of the work is thrown away."""
+    store = _seed_job("measurecache")
+    worker.measure_job("measurecache")
+    cached = list(store.segments_dir.glob("*.wav"))
+    assert cached, "measuring should leave its segments in the content-addressed cache"
+
+    state = worker.render_job("measurecache")
+    assert state.stage == "done"
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_a_measurement_does_not_count_the_warm_up_segment():
+    """The first generation after a model load is markedly slower.
+
+    Counting it would make every machine look worse than it is, so it is
+    rendered (and kept) but excluded from the arithmetic. With the fake engine
+    every segment costs about the same, so the check is that the measurement is
+    based on fewer segments than it rendered.
+    """
+    store = _seed_job("warmup")
+    worker.measure_job("warmup")
+    rendered = len(list(store.segments_dir.glob("*.wav")))
+    assert rendered >= 2, "need more than the warm-up segment to measure anything"
+
+
+def test_estimates_use_a_measured_rate_when_there_is_one():
+    from ebook_audiobook.audio import estimate
+
+    # 30,000 characters at the generic 15 chars/sec is 2,000 seconds.
+    assert estimate.estimate_audio_seconds(30_000) == pytest.approx(2000)
+    # A slower measured rate means a longer book, and the estimate must follow.
+    assert estimate.estimate_audio_seconds(30_000, 10.0) == pytest.approx(3000)
+    # Nonsense never reaches a division.
+    assert estimate.estimate_audio_seconds(30_000, 0) == pytest.approx(2000)
+    assert estimate.estimate_audio_seconds(30_000, None) == pytest.approx(2000)
+
+
+def test_the_estimate_object_carries_the_measured_length_through():
+    from ebook_audiobook.audio import estimate
+
+    generic = estimate.estimate(30_000, 64)
+    measured = estimate.estimate(30_000, 64, None, 10.0)
+    assert measured.audio_seconds > generic.audio_seconds
+    # A longer book is a bigger file: the size estimate has to follow too.
+    assert measured.size_bytes > generic.size_bytes
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_a_book_of_one_short_section_can_still_be_measured():
+    """The degenerate case that broke the first attempt.
+
+    Drawing only from the chosen chapter meant a one-paragraph chapter had
+    nothing left once the warm-up segment was discarded, so no measurement was
+    recorded at all — and the UI would have gone on quietly showing a guess
+    while claiming to have measured.
+    """
+    store = JobStore("tiny").ensure()
+    store.save_book(Book(job_id="tiny", source_path="/nowhere/x.epub", source_hash="h",
+                         title="A Very Short Book", author="An Author"))
+    store.save_chapters([Chapter(chapter_id="only", sequence=1, title="Only",
+                                 text="A single short paragraph, and nothing else at all.",
+                                 char_count=49, include=True)])
+    store.save_voice(VoiceSettings(engine="fake"))
+
+    state = worker.measure_job("tiny")
+    assert state.chars_per_audio_second and state.chars_per_audio_second > 0

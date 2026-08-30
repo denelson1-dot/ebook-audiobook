@@ -1,63 +1,100 @@
 {% extends "base.html" %}
 {% set nav = 'voices' %}
-{% block body %}
-<h1 class="page-title">Voices</h1>
-<p class="page-sub">A voice is one short reference clip (~10s is used). Add your own rights-cleared
-clips and switch between them per book. The built-in narrator is always available.</p>
+{% import "_icons.html" as ic %}
+{% block title %}Voices · ebook·audiobook{% endblock %}
 
-<div class="card">
+{% block head %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Voices</h1>
+    <p class="page-sub" style="max-width:62ch">A voice is one short recording. About ten seconds is enough —
+      the engine copies its timbre and reads your whole book in it.</p>
+  </div>
+  <div class="head-actions">
+    <button type="button" class="btn primary" id="addToggle">{{ ic.icon('plus', 15) }} Add a voice</button>
+  </div>
+</header>
+{% endblock %}
+
+{% block body %}
+
+<div class="note info" style="margin-bottom:18px">
+  {{ ic.icon('shield', 16) }}
+  <span><b>Use only voices you have the right to use.</b> Your own recording, or one whose owner has agreed
+    to this. Clips never leave this computer — but that is not the same thing as permission.</span>
+</div>
+
+<div class="card" id="addCard" {{ 'hidden' if voices|length > 1 }}>
   <h3>Add a voice</h3>
-  <form method="post" action="{{ url_for('voices_add') }}" id="addForm">
+  <form method="post" action="{{ url_for('voices_add') }}" id="addForm" style="margin-top:12px">
     <div class="field-row">
       <div class="field">
-        <label>Name</label>
-        <input type="text" name="name" placeholder="e.g. Warm baritone" required>
+        <label for="voiceName">Name it</label>
+        <input type="text" id="voiceName" name="name" placeholder="Warm baritone" required>
       </div>
       <div class="field">
         <label>Reference clip</label>
         <div class="btn-row">
-          <button type="button" class="btn" id="clipBrowse">📂 Browse…</button>
-          <span class="meta" id="clipChosen">No clip selected</span>
+          <button type="button" class="btn" id="clipBrowse">{{ ic.icon('folder', 15) }} Browse…</button>
+          <span class="meta mono" id="clipChosen">Nothing chosen yet</span>
         </div>
         <input type="hidden" name="path" id="clipPath">
       </div>
     </div>
-    <div class="hint" style="margin-bottom:12px">WAV, MP3, FLAC, M4A, MP4, OGG, Opus, AAC, WebM (auto-converted to WAV). Use only voices you have the rights and consent to use.</div>
-    <button type="submit" class="btn primary" id="addBtn" disabled>Add voice</button>
+    <p class="hint">WAV, MP3, FLAC, M4A, MP4, OGG, Opus, AAC or WebM — converted to WAV on the way in.
+      Ten seconds of clear, unaccompanied speech works best.</p>
+    <div class="btn-row" style="margin-top:14px">
+      <button type="submit" class="btn primary" id="addBtn" disabled>Add this voice</button>
+    </div>
   </form>
 </div>
 
-<div class="card">
-  <h3>Your voices</h3>
-  <table>
-    <tr><th>Name</th><th>Clip</th><th style="text-align:right">Actions</th></tr>
-    {% for v in voices %}
-      <tr data-vid="{{ v.id }}">
-        <td>{{ v.name }}{% if v.is_default %} <span class="badge">built-in</span>{% endif %}</td>
-        <td class="meta mono">{{ v.clip_filename or "— default —" }}</td>
-        <td style="text-align:right">
-          <div class="btn-row" style="justify-content:flex-end">
-            <button class="btn sm test-btn" data-vid="{{ v.id }}">▶ Test</button>
-            {% if not v.is_default %}
-            <form method="post" action="{{ url_for('voices_delete', voice_id=v.id) }}" style="display:inline"
-                  onsubmit="return confirm('Delete this voice?')">
-              <button class="btn sm danger" type="submit">Delete</button>
-            </form>
-            {% endif %}
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+  {% for v in voices %}
+    <section class="panel" data-vid="{{ v.id }}" style="padding:15px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:flex-start;gap:9px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <h3 style="font-size:14px;font-weight:600">{{ v.name }}</h3>
+            {% if v.is_default %}<span class="tag">built in</span>{% endif %}
           </div>
-        </td>
-      </tr>
-      <tr class="sample-row" data-for="{{ v.id }}" style="display:none">
-        <td colspan="3"><audio controls data-audio="{{ v.id }}"></audio></td>
-      </tr>
-    {% endfor %}
-  </table>
+          <p class="dim mono" style="font-size:11px;margin-top:3px">
+            {{ v.clip_filename or 'ships with the app — no clip needed' }}</p>
+        </div>
+      </div>
+
+      {# A voice is a recording, so it is shown as one. The bars are a fixed
+         decorative envelope, not an analysis of the clip — they are here to make
+         the card read as audio, and the Audition button is what tells the truth. #}
+      <div class="wave" style="height:52px;justify-content:space-between;color:var(--text-3)" aria-hidden="true">
+        {% for h in [14,26,19,34,23,12,30,20,38,16,27,33,17,29,11,24,35,18,28,15,22,36,13,25,31,20,26,14,32,19,23,29,16,27,12,34,21,18,30,24] %}
+          <i style="height:{{ h }}px"></i>
+        {% endfor %}
+      </div>
+
+      <div class="btn-row" style="margin-top:auto">
+        <button class="btn sm test-btn" data-vid="{{ v.id }}" style="flex:1">{{ ic.icon('play', 12) }} Audition</button>
+        {% if not v.is_default %}
+        <form method="post" action="{{ url_for('voices_delete', voice_id=v.id) }}"
+              onsubmit="return confirm('Delete “{{ v.name }}”? Books already narrated with it are unaffected.')">
+          <button class="btn sm danger" type="submit">{{ ic.icon('trash', 13) }}</button>
+        </form>
+        {% endif %}
+      </div>
+      <audio controls data-audio="{{ v.id }}" style="display:none;width:100%"></audio>
+    </section>
+  {% endfor %}
 </div>
 {% endblock %}
 
 {% block script %}
 <script>
-// Add-voice: browse for a clip
+const addCard = document.getElementById("addCard");
+document.getElementById("addToggle").addEventListener("click", () => {
+  addCard.hidden = false;
+  document.getElementById("voiceName").focus();
+});
+
 document.getElementById("clipBrowse").addEventListener("click", () => {
   openFsBrowser({ start: {{ start|tojson }}, accept: "audio",
     onPick: (path) => {
@@ -67,26 +104,28 @@ document.getElementById("clipBrowse").addEventListener("click", () => {
     }});
 });
 
-// Audition a voice: kick off a render, poll global status, then play the sample.
+// Audition: kick off a render, poll global status, then play the sample. It uses
+// the same single worker as everything else, so it queues behind a render.
 document.querySelectorAll(".test-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     const vid = btn.dataset.vid;
-    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Rendering…';
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Rendering…';
     try {
       await postForm(`/voices/${vid}/test`, {});
-      // poll until the worker is idle
       for (let i = 0; i < 240; i++) {
         await new Promise(r => setTimeout(r, 1000));
         const s = await getJSON("/api/status");
         if (!s.busy) break;
       }
-      const row = document.querySelector(`.sample-row[data-for="${vid}"]`);
-      const audio = row.querySelector("audio");
+      const audio = document.querySelector(`audio[data-audio="${CSS.escape(vid)}"]`);
       audio.src = `/voices/${vid}/sample.wav?t=` + Date.now();
-      row.style.display = "";
+      audio.style.display = "block";
       audio.play().catch(() => {});
-    } catch (e) { toast("Test failed"); }
-    btn.disabled = false; btn.innerHTML = "▶ Test";
+    } catch (e) { toast("Couldn't render a sample"); }
+    btn.disabled = false;
+    btn.innerHTML = original;
   });
 });
 </script>

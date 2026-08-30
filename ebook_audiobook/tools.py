@@ -48,6 +48,47 @@ class MissingToolError(RuntimeError):
 
 # --- invocation --------------------------------------------------------------
 
+def reveal(path: Path) -> bool:
+    """Open a folder in the desktop's own file manager. Best effort.
+
+    Deliberately fire-and-forget: a file manager is a long-lived window, not a
+    tool that returns an answer, so waiting on it would hang the request. That
+    also means the exit status tells us nothing — Windows Explorer exits
+    non-zero on success — so this reports only whether the command could be
+    launched at all.
+
+    Lives here because this module is the one place allowed to start an external
+    program; see CONTRIBUTING. Callers must pass a path the app already knows
+    about, never one taken straight from a request.
+    """
+    path = Path(path)
+    if not path.is_dir():
+        return False
+    if IS_WINDOWS:
+        cmd: list[str] = ["explorer", str(path)]
+    elif sys.platform == "darwin":
+        cmd = ["open", str(path)]
+    else:
+        # Every mainstream Linux desktop provides this; it dispatches to whatever
+        # file manager the user actually has.
+        opener = shutil.which("xdg-open")
+        if not opener:
+            return False
+        cmd = [opener, str(path)]
+    try:
+        subprocess.Popen(  # noqa: S603 - fixed argv, path resolved by the caller
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=_NO_WINDOW,
+            start_new_session=not IS_WINDOWS,  # don't die with us
+        )
+        return True
+    except OSError:
+        return False
+
+
 def run(cmd: list[str | Path], timeout: float | None = None,
         capture: bool = True) -> subprocess.CompletedProcess:
     """Run an external tool with portable, non-surprising defaults.

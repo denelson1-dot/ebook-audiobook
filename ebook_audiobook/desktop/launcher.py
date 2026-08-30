@@ -124,6 +124,31 @@ def find_browser() -> str | None:
     return None
 
 
+def _saved_window_flags() -> list[str]:
+    """Reopen the window where it was left.
+
+    Chromium keeps its own record of app-window placement, but does not reliably
+    re-apply it — a relaunch kept landing on the default position regardless. So
+    the page reports its own geometry (see ``/api/window``) and it is handed back
+    explicitly here, which also works when the browser profile is thrown away.
+
+    ``--window-position`` is honoured on Windows, macOS and X11. Wayland does not
+    let a client place its own window, so there only the size takes effect; that
+    is the compositor's call and not something to work around.
+    """
+    try:
+        from .. import settings as app_settings
+
+        g = app_settings.load_settings().window_geometry or {}
+        w, h = int(g["width"]), int(g["height"])
+        x, y = int(g["x"]), int(g["y"])
+    except Exception:  # noqa: BLE001 - never let a stored preference stop the app opening
+        return []
+    if not (320 <= w <= 20000 and 240 <= h <= 20000):
+        return []
+    return [f"--window-size={w},{h}", f"--window-position={x},{y}"]
+
+
 def _command(browser: str, url: str) -> list[str]:
     profile = str(profile_dir())
     flags = [
@@ -134,6 +159,7 @@ def _command(browser: str, url: str) -> list[str]:
         # our application window.
         "--no-first-run",
         "--no-default-browser-check",
+        *_saved_window_flags(),
     ]
     if IS_MACOS:
         # Deliberately NOT `open -na "Google Chrome" --args …`. `open` hands the

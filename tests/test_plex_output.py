@@ -130,10 +130,32 @@ def test_web_settings_saves_and_rejects_bad_root(tmp_path):
 
 
 def test_setup_banner_shows_until_dismissed():
+    """The nag for a library that already has books in it.
+
+    An *empty* library has no banner: its whole page is a setup checklist, and
+    two prompts for the same folder would just be one too many. So this puts a
+    book on the shelf first, which is also the case that matters — the person
+    who imported something before choosing where finished books should go.
+    """
+    from ebook_audiobook.jobs.models import Book
+    from ebook_audiobook.jobs.store import JobStore
+
+    store = JobStore("bannerjob").ensure()
+    store.save_book(Book(job_id="bannerjob", source_path="/nowhere/x.epub",
+                         source_hash="h", title="A Book", author="An Author"))
+
     client = create_app().test_client()
-    assert b"audiobooks library folder" in client.get("/").data  # first run: banner
+    assert b"audiobooks library folder" in client.get("/").data
     client.post("/settings/dismiss-setup")
     assert b"audiobooks library folder" not in client.get("/").data
+
+
+def test_empty_library_asks_for_the_folder_in_its_own_words():
+    """Nothing imported yet: the folder step lives in the welcome checklist."""
+    client = create_app().test_client()
+    body = client.get("/").data
+    assert b"Choose where finished books go" in body
+    assert b"audiobooks library folder" not in body  # no duplicate banner
 
 
 # --- library-mode render: tree + tags + sidecar (ffmpeg) ---------------------

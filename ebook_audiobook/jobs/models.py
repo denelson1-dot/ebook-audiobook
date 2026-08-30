@@ -26,6 +26,37 @@ class Stage(str, Enum):
         return self in (Stage.IMPORTED, Stage.EXTRACTED, Stage.DONE,
                         Stage.ERROR, Stage.CANCELLED)
 
+    @property
+    def label(self) -> str:
+        """What a person is shown instead of the enum's name.
+
+        Kept here so the sidebar, the library card, the job page and the command
+        line cannot end up describing the same moment three different ways. Two
+        of these say *who* stopped the render, because "cancelled" answers a
+        question nobody asked and leaves the one they did.
+        """
+        return STAGE_LABELS.get(self.value, self.value)
+
+
+STAGE_LABELS = {
+    Stage.IMPORTED.value:   "Imported",
+    Stage.EXTRACTING.value: "Reading the book",
+    Stage.EXTRACTED.value:  "Ready to narrate",
+    Stage.PREPARING.value:  "Warming up",
+    Stage.PREVIEWING.value: "Making a preview",
+    Stage.RENDERING.value:  "Narrating",
+    Stage.ASSEMBLING.value: "Stitching chapters together",
+    Stage.PACKAGING.value:  "Packaging",
+    Stage.DONE.value:       "Finished",
+    Stage.ERROR.value:      "Stopped by a problem",
+    Stage.CANCELLED.value:  "Stopped by you",
+}
+
+
+def stage_label(value: str) -> str:
+    """Label for a raw stage string, tolerating one this build doesn't know."""
+    return STAGE_LABELS.get(value, value)
+
 
 @dataclass
 class Book:
@@ -119,6 +150,14 @@ class JobState:
     power_mode: str | None = None
     # measured after a render: chars of text produced per second of wall clock.
     chars_per_render_second: float | None = None
+    # measured: characters of text per second of *audio produced*. Drives the
+    # length, file-size and working-space estimates, all of which otherwise
+    # assume a fixed speaking rate and so ignore the pacing setting entirely.
+    chars_per_audio_second: float | None = None
+    # The voice settings the two figures above were measured with. When this no
+    # longer matches the job's current settings the estimates are stale, which
+    # is what lets the UI offer to remeasure rather than quietly misreport.
+    measured_voice_key: str | None = None
     # history/audit: ISO-8601 UTC timestamps and final output size.
     created_at: str | None = None
     # When the current full render's segment loop began. Used to show an honest

@@ -20,7 +20,7 @@ import sys
 from . import checks, config, power
 from .audio import estimate
 from .config import VoiceSettings
-from .jobs.models import JobState
+from .jobs.models import JobState, stage_label
 from .jobs.store import JobStore
 from . import worker
 
@@ -413,7 +413,9 @@ def cmd_list(args) -> int:
         try:
             book = store.load_book()
             state = store.load_state()
-            print(f"{jid}  {state.stage:12s}  {book.title} — {book.author}")
+            # Same words as the app window: the vocabulary lives in
+            # jobs.models so the two cannot drift apart.
+            print(f"{jid}  {stage_label(state.stage):28s}  {book.title} — {book.author}")
         except Exception:
             print(f"{jid}  (unreadable)")
     return 0

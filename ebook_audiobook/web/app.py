@@ -16,11 +16,13 @@ from flask import (Flask, Response, abort, current_app, jsonify, redirect,
                    render_template, request, send_file, url_for)
 from werkzeug.utils import secure_filename
 
-from .. import checks, config, power, settings as app_settings, tools, worker
+from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
+                tools, worker)
 from ..audio import estimate
+from .. import hashing
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
-from ..jobs.models import Stage
+from ..jobs.models import STAGE_LABELS, Stage, stage_label
 from ..jobs.store import JobStore
 from ..pipeline import extract as extract_mod, layout
 from ..voices import AUDIO_EXTS, VoiceLibrary
@@ -87,6 +89,36 @@ def human_bytes(n) -> str:
     return f"{f:.1f} TB"
 
 
+# Muted, deliberately unsaturated grounds for books whose ebook carries no cover
+# image. Picked by a stable hash of the title so a given book always looks the
+# same, and kept dark enough that the serif title stays legible on top.
+COVER_TINTS = ("#244A52", "#2A2F52", "#6E4A22", "#7A3B2E", "#4E5A44",
+               "#6B2733", "#3A3E2C", "#26221F", "#3F3350", "#1F4740")
+
+
+def cover_tint(title: str) -> str:
+    """A stable colour for a coverless book. Not decoration: it is what makes a
+    shelf of fallback covers scannable instead of a wall of identical grey."""
+    import zlib
+
+    return COVER_TINTS[zlib.crc32((title or "").encode("utf-8")) % len(COVER_TINTS)]
+
+
+def fmt_listening(output_bytes: int | None, kbps: int) -> str | None:
+    """How long a finished audiobook plays, from the one thing we always have.
+
+    The shelf shows this instead of a file size on its own: "8h 04m" is what
+    somebody actually wants to know about an audiobook.
+    """
+    if not output_bytes or kbps <= 0:
+        return None
+    secs = output_bytes / (kbps * 125)  # kbps -> bytes per second
+    h, m = int(secs // 3600), int(round((secs % 3600) / 60))
+    if m == 60:
+        h, m = h + 1, 0
+    return f"{h}h {m:02d}m" if h else f"{m}m"
+
+
 def fmt_dt(iso) -> str:
     if not iso:
         return ""
@@ -141,6 +173,13 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
+def _busy_job_id() -> str | None:
+    """Which job the single worker is on, if any. ``runner.current`` is
+    "<job_id>:<kind>"; everywhere outside the runner only the id matters."""
+    cur = runner.current
+    return cur.split(":", 1)[0] if cur else None
+
+
 def _job_or_404(job_id: str) -> JobStore:
     store = JobStore(job_id)
     if not store.exists():
@@ -174,6 +213,8 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.jinja_env.filters["humanbytes"] = human_bytes
     app.jinja_env.filters["dt"] = fmt_dt
+    app.jinja_env.filters["stage"] = stage_label
+    app.jinja_env.filters["tint"] = cover_tint
     p = paths().ensure()
 
     # A prior process may have been killed mid-render, leaving jobs frozen in a
@@ -190,6 +231,7 @@ def create_app() -> Flask:
         s = app_settings.load_settings()
         return {
             "home_dir": str(Path.home()),
+            "data_root": str(paths().root),
             "audiobooks_root": s.audiobooks_root,
             # First-run nudge: no library folder chosen and not yet dismissed.
             "setup_needed": not s.audiobooks_root and not s.setup_dismissed,
@@ -204,6 +246,7 @@ def create_app() -> Flask:
                 for m in power.MODES
             ],
             "check_for_updates": s.check_for_updates,
+            "auto_free_working_files": s.auto_free_working_files,
             "app_version": _app_version(),
         }
 
@@ -211,21 +254,42 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
+        busy_id = _busy_job_id()
         jobs = []
         for jid in JobStore.list_ids():
             store = JobStore(jid)
             try:
+                book = store.load_book()
+                state = _reconcile_stale(store)
                 jobs.append({
                     "id": jid,
-                    "book": store.load_book(),
-                    "state": _reconcile_stale(store),
+                    "book": book,
+                    "state": state,
                     "bytes": store.disk_bytes(),
+                    # The shelf shows covers; without this every card would have
+                    # to guess and then 404 an <img>.
+                    "has_cover": bool(book.cover_path and Path(book.cover_path).is_file()),
+                    "tint": cover_tint(book.title),
+                    "duration": fmt_listening(
+                        state.output_bytes,
+                        int(store.load_voice().extra.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS)),
+                    ) if state.stage == Stage.DONE.value else None,
+                    "working": state.stage == Stage.DONE.value,
+                    "busy": jid == busy_id,
                 })
             except Exception:
                 continue
         jobs.sort(key=lambda j: (j["state"].created_at or ""), reverse=True)  # newest first
+
+        # Three shelves, because the answer to "what is this app doing" differs
+        # completely between them: one book may be mid-render, some are finished
+        # and listenable, the rest are waiting on a decision.
+        running = [j for j in jobs if j["busy"]]
+        finished = [j for j in jobs if not j["busy"] and j["state"].stage == Stage.DONE.value]
+        waiting = [j for j in jobs if not j["busy"] and j["state"].stage != Stage.DONE.value]
         total = sum(j["bytes"] for j in jobs)
-        return render_template("library.html", jobs=jobs, total_bytes=total)
+        return render_template("library.html", jobs=jobs, total_bytes=total,
+                               running=running, finished=finished, waiting=waiting)
 
     @app.get("/new")
     def new_page():
@@ -242,6 +306,45 @@ def create_app() -> Flask:
     @app.get("/settings")
     def settings_page():
         return render_template("settings.html")
+
+    @app.get("/storage")
+    def storage_page():
+        """What is on disk, and which of it is only there to speed up a re-render.
+
+        The whole page exists because the biggest thing this app stores is also
+        the most disposable, and until now the only way to reclaim it was a
+        per-book button you had to already know about.
+        """
+        return render_template("storage.html",
+                               survey=storage_mod.survey(_busy_job_id()),
+                               safe=storage_mod.SAFE, held=storage_mod.HELD,
+                               busy=storage_mod.BUSY, none=storage_mod.NONE)
+
+    @app.get("/api/storage")
+    def api_storage():
+        """The same survey as JSON.
+
+        Fetched by every page to fill the sidebar's working-files figure. It
+        walks each job's tree, so it is deliberately not computed during a page
+        render — same reasoning as /api/prereqs.
+        """
+        return storage_mod.survey(_busy_job_id()).to_dict()
+
+    @app.post("/storage/free")
+    def storage_free():
+        """Delete the working files of the named jobs (default: every safe one).
+
+        ``force=1`` reaches past the safety check, which is only ever sent after
+        the user has been told, in the row itself, how many sections deleting
+        that book's files would make it narrate again.
+        """
+        busy = _busy_job_id()
+        ids = request.form.getlist("job_id")
+        force = request.form.get("force") == "1"
+        if not ids:
+            ids = [b.job_id for b in storage_mod.survey(busy).safe_books]
+        freed, skipped = storage_mod.free(ids, busy_job_id=busy, force=force)
+        return {"ok": True, "freed_bytes": freed, "skipped": skipped}
 
     @app.post("/settings")
     def settings_save():
@@ -264,11 +367,14 @@ def create_app() -> Flask:
             s.power_mode = power.normalize_mode(request.form.get("power_mode"))
         if "check_for_updates" in request.form:
             s.check_for_updates = request.form.get("check_for_updates") == "1"
+        if "auto_free_working_files" in request.form:
+            s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
         s.setup_dismissed = True  # user has engaged with setup either way
         app_settings.save_settings(s)
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
                 "power_mode": s.power_mode,
-                "check_for_updates": s.check_for_updates}
+                "check_for_updates": s.check_for_updates,
+                "auto_free_working_files": s.auto_free_working_files}
 
     # ----- updates, backup, diagnostics -------------------------------------
 
@@ -453,7 +559,13 @@ def create_app() -> Flask:
         pron_text = "\n".join(f"{k}={v}" for k, v in (voice.extra.get("pron") or {}).items())
         # Reset a stage stranded by a killed process before rendering the page.
         state = _reconcile_stale(store)
-        est = estimate.estimate(total_chars, bitrate, state.chars_per_render_second) if total_chars else None
+        est = (estimate.estimate(total_chars, bitrate, state.chars_per_render_second,
+                                 state.chars_per_audio_second) if total_chars else None)
+        # Estimates measured with different voice settings are no longer about
+        # this book as it is now, which is what the UI offers to put right.
+        current_vkey = hashing.voice_key(voice, config.SAMPLE_RATE)
+        measured_here = bool(state.measured_voice_key
+                             and state.measured_voice_key == current_vkey)
         default_ch = worker._pick_preview_chapter(chapters, None).chapter_id if chapters else ""
         book = store.load_book()
         root = app_settings.audiobooks_root()
@@ -461,6 +573,11 @@ def create_app() -> Flask:
             "job.html",
             job_id=job_id,
             book=book,
+            has_cover=bool(book.cover_path and Path(book.cover_path).is_file()),
+            tint=cover_tint(book.title),
+            # The client renders a stage into words too (it polls faster than a
+            # page reload), so it gets the same table rather than a second copy.
+            stage_labels=STAGE_LABELS,
             chapters=chapters,
             voice=voice,
             voices=[v.to_dict() for v in VoiceLibrary().list()],
@@ -484,6 +601,8 @@ def create_app() -> Flask:
             sample_rate=config.SAMPLE_RATE,
             size_warn_bytes=config.SIZE_WARN_BYTES,
             render_rate=state.chars_per_render_second,
+            audio_rate=state.chars_per_audio_second,
+            measured_here=measured_here,
         )
 
     # ----- filesystem browser ----------------------------------------------
@@ -614,6 +733,22 @@ def create_app() -> Flask:
         )
         return {"ok": True}
 
+    @app.post("/job/<job_id>/measure")
+    def start_measure(job_id):
+        """Narrate a little real audio to calibrate this book's estimates.
+
+        Cheaper than a preview and produces nothing to listen to — its whole
+        purpose is the two rates it measures. The audio it does render is
+        content-addressed, so the full render reuses every second of it.
+        """
+        store = _job_or_404(job_id)
+        if not store.load_chapters():
+            return {"ok": False, "error": "the book hasn't been read yet"}, 409
+        if runner.is_busy():
+            return {"ok": False, "error": "something else is running"}, 409
+        runner.submit(job_id, "measure")
+        return {"ok": True}
+
     @app.post("/job/<job_id>/render")
     def start_render(job_id):
         store = _job_or_404(job_id)
@@ -724,6 +859,65 @@ def create_app() -> Flask:
         return {"disk_bytes": store.disk_bytes(),
                 "intermediate_bytes": store.intermediate_bytes()}
 
+    @app.post("/api/window")
+    def save_window():
+        """Remember where the app window is, so a relaunch reopens it there.
+
+        Values come from the page's own ``screenX``/``outerWidth``. They are
+        clamped to something plausible before being stored: a window remembered
+        at 12000px because a monitor was unplugged would reopen off-screen, with
+        no obvious way back.
+        """
+        try:
+            g = {k: int(float(request.form[k])) for k in ("x", "y", "width", "height")}
+        except (KeyError, TypeError, ValueError):
+            return {"ok": False, "error": "bad geometry"}, 400
+        if not (320 <= g["width"] <= 20000 and 240 <= g["height"] <= 20000):
+            return {"ok": False, "error": "implausible size"}, 400
+        if not (-20000 < g["x"] < 20000 and -20000 < g["y"] < 20000):
+            return {"ok": False, "error": "implausible position"}, 400
+
+        s = app_settings.load_settings()
+        if s.window_geometry != g:
+            s.window_geometry = g
+            app_settings.save_settings(s)
+        return {"ok": True}
+
+    @app.post("/reveal")
+    def reveal_folder():
+        """Open one of the app's own folders in the system file manager.
+
+        Takes a *name*, not a path. This route ends in starting a program with a
+        path argument, so accepting one from the request would turn a convenience
+        into a way to point the file manager anywhere on the machine. The caller
+        says which folder it means and this resolves it.
+        """
+        what = (request.form.get("what") or "").strip()
+        job_id = (request.form.get("job_id") or "").strip()
+
+        target: Path | None = None
+        if job_id:
+            store = _job_or_404(job_id)
+            out = store.output_path()
+            # The folder the audiobook was actually written to, when there is one.
+            target = out.parent if out and out.exists() else None
+            if target is None:
+                state = store.load_state()
+                target = Path(state.output_dir) if state.output_dir else None
+        elif what == "data":
+            target = paths().root
+        elif what == "outputs":
+            target = paths().outputs
+        elif what == "library":
+            root = app_settings.audiobooks_root()
+            target = Path(root) if root else None
+
+        if target is None or not target.is_dir():
+            return {"ok": False, "error": "That folder doesn't exist yet."}, 404
+        if not tools.reveal(target):
+            return {"ok": False, "error": "Couldn't open a file manager on this system."}, 501
+        return {"ok": True, "path": str(target)}
+
     @app.get("/api/space")
     def api_space():
         """Free space for a render — on *both* filesystems it can touch.
@@ -749,6 +943,24 @@ def create_app() -> Flask:
             dest["same_volume"] = _same_volume(paths().root, Path(raw).expanduser())
             out["output"] = dest
         return out
+
+    @app.get("/job/<job_id>/cover.jpg")
+    def job_cover(job_id):
+        """The book's own cover, as extracted from the ebook.
+
+        A library of books should look like one, and this is the only thing that
+        makes a shelf scannable. Absent for plenty of ebooks, so callers must
+        cope with a 404 rather than assume an image.
+        """
+        store = _job_or_404(job_id)
+        raw = store.load_book().cover_path
+        if not raw:
+            abort(404)
+        f = Path(raw)
+        if not f.is_file():
+            abort(404)
+        mime = "image/png" if f.suffix.lower() == ".png" else "image/jpeg"
+        return send_file(f, mimetype=mime)
 
     @app.get("/job/<job_id>/preview.wav")
     def preview_audio(job_id):
@@ -830,7 +1042,7 @@ def create_app() -> Flask:
 
     @app.get("/api/status")
     def api_status():
-        return {
+        out = {
             # An open port proves something is listening, not that it is us.
             # A second launch identifies the instance recorded in runtime.json
             # by this marker before handing the user its window.
@@ -841,7 +1053,30 @@ def create_app() -> Flask:
             # control words its warning differently for a six-hour render than
             # for a ten-second voice sample.
             "kind": runner.current_kind(),
+            "job": None,
         }
+        # Enough about the running job for the sidebar dock to show it on every
+        # page. A render lasts hours; making the user navigate back to the job
+        # page to find out how it is going was the single worst thing about the
+        # old layout.
+        jid = _busy_job_id()
+        if jid:
+            try:
+                store = JobStore(jid)
+                st = store.load_state()
+                out["job"] = {
+                    "job_id": jid,
+                    "title": store.load_book().title,
+                    "stage": st.stage,
+                    "stage_label": stage_label(st.stage),
+                    "rendered_segments": st.rendered_segments,
+                    "total_segments": st.total_segments,
+                    "preview_progress": st.preview_progress,
+                    "render_started_at": st.render_started_at,
+                }
+            except Exception:  # noqa: BLE001 - the dock is not worth a 500
+                out["job"] = None
+        return out
 
     @app.post("/quit")
     def quit_app():

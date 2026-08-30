@@ -1,98 +1,151 @@
 {% extends "base.html" %}
 {% set nav = 'settings' %}
 {% block title %}Settings · ebook·audiobook{% endblock %}
+{% import "_icons.html" as ic %}
+{% block head %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Everything is stored in one folder on this machine.
+      <a href="{{ url_for('storage_page') }}">Show me what's in it</a></p>
+  </div>
+</header>
+{% endblock %}
+
 {% block body %}
-<h1 class="page-title">Settings</h1>
-<p class="page-sub">App-wide preferences, saved between sessions.</p>
+<div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(380px,1fr))">
+  <div class="stack">
 
-<div class="card">
-  <h3>Audiobooks library folder</h3>
-  <p class="meta">The root folder Plex watches. By default, finished conversions are filed here as a
-    Plex-ready <code>Author / Title (Year) / Title.m4b</code> tree (with a <code>cover.jpg</code> beside each book).
-    Per conversion, you can still choose a single flat folder instead.</p>
-  <div class="btn-row" style="margin-top:8px">
-    <button type="button" class="btn" id="rootBtn">📂 Choose folder…</button>
-    <span class="meta mono" id="rootText">{{ audiobooks_root or "Not set" }}</span>
-  </div>
-  <input type="hidden" id="rootInput" value="{{ audiobooks_root or '' }}">
-  <div class="btn-row" style="margin-top:12px">
-    <button type="button" class="btn primary" id="saveRootBtn">Save</button>
-    {% if audiobooks_root %}<button type="button" class="btn ghost" id="clearRootBtn">Clear</button>{% endif %}
-  </div>
-  <div class="hint" id="rootHint">The folder is checked for write access when you save.</div>
-</div>
+    <section class="panel">
+      <div class="panel-head"><h3>Where finished audiobooks go</h3></div>
+      <div class="panel-body">
+        <div class="pathbox mono">
+          {% if audiobooks_root %}
+            <button type="button" class="pathlink" id="revealRoot" title="Open this folder">
+              {{ ic.icon('folder', 13) }}<span id="rootText">{{ audiobooks_root }}</span>
+            </button>
+          {% else %}
+            <span id="rootText">Not set yet</span>
+          {% endif %}
+        </div>
+        <input type="hidden" id="rootInput" value="{{ audiobooks_root or '' }}">
+        <p class="meta" style="margin-top:9px;line-height:1.5">Point this at the folder Plex watches. Each book is
+          filed as <code>Author / Title (Year) / Title.m4b</code> with a <code>cover.jpg</code> beside it — the
+          layout Plex and Audiobookshelf both expect. Any single book can still go to a flat folder instead.</p>
+        <div class="btn-row" style="margin-top:12px">
+          <button type="button" class="btn" id="rootBtn">{{ ic.icon('folder', 14) }} Choose folder…</button>
+          <button type="button" class="btn primary" id="saveRootBtn">Save</button>
+          {% if audiobooks_root %}<button type="button" class="btn ghost" id="clearRootBtn">Clear</button>{% endif %}
+        </div>
+        <p class="hint" id="rootHint">The folder is checked for write access when you save.</p>
+      </div>
+    </section>
 
-<div class="card">
-  <h3>How hard to work this machine</h3>
-  <p class="meta">A full render runs for hours. If you want to keep using this computer while it
-    does — or you're on a laptop that gets hot and loud — turn it down. The audiobook is
-    identical either way; only the time it takes changes. You can override this for any
-    single conversion.</p>
-  <div class="power-modes" style="margin-top:10px">
-    {% for m in power_modes %}
-    <label class="power-mode{% if m.id == power_mode %} selected{% endif %}">
-      <input type="radio" name="power_mode" value="{{ m.id }}"
-             {% if m.id == power_mode %}checked{% endif %}>
-      <span>
-        <strong>{{ m.label }}</strong>
-        <span class="meta">{{ m.description }}</span>
-      </span>
-    </label>
-    {% endfor %}
-  </div>
-  <div class="hint" id="powerHint">Saved as the default for new conversions.</div>
-</div>
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Working files</h3>
+        <span class="meta" style="margin-left:auto" id="workingFiles"></span>
+      </div>
+      <div class="panel-body">
+        <p class="meta" style="line-height:1.5">Narrating a book leaves behind the raw audio of every sentence —
+          a few gigabytes per book. It buys one thing: re-narrating in minutes rather than hours after you change
+          a setting. Once a book sounds right, it is dead weight.</p>
+        <label class="switch" style="margin-top:13px">
+          <input type="checkbox" id="autoFreeCheck" {% if auto_free_working_files %}checked{% endif %}>
+          <span style="flex:1">
+            <b>Free them when a book finishes</b>
+            <span>Off by default, so nothing is ever deleted without you. Turn it on and a finished book
+              cleans up after itself.</span>
+          </span>
+        </label>
+        <div class="btn-row" style="margin-top:14px">
+          <a class="btn sm" href="{{ url_for('storage_page') }}">Review book by book</a>
+        </div>
+      </div>
+    </section>
 
-<div class="card">
-  <h3>Back up your books</h3>
-  <p class="meta">Rendered audio is left out by default. It is reproducible from the book and
-    your voice settings, and it is typically a <em>thousand times</em> larger than the work it
-    surrounds — so including it turns a 30&nbsp;MB backup into a 3&nbsp;GB one for nothing.
-    Choose <strong>Everything</strong> only if re-rendering would cost you more than the disk space.</p>
-  <div class="btn-row" style="margin-top:10px">
-    <label class="meta">What to include:
-      <select id="backupProfile">
-        <option value="projects" selected>Books and settings — no rendered audio</option>
-        <option value="settings">Settings and voice clips only</option>
-        <option value="full">Everything, including rendered audio</option>
-      </select>
-    </label>
+    <section class="panel">
+      <div class="panel-head">
+        <h3>How hard to work this machine</h3>
+        <span class="dim" style="margin-left:auto;font-size:11px">the audiobook is identical either way</span>
+      </div>
+      <div class="panel-body">
+        <div class="power-modes">
+          {% for m in power_modes %}
+          <label class="power-mode{% if m.id == power_mode %} selected{% endif %}">
+            <input type="radio" name="power_mode" value="{{ m.id }}" {% if m.id == power_mode %}checked{% endif %}>
+            <span>
+              <strong>{{ m.label }}</strong>
+              <span class="meta">{{ m.description }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="hint" id="powerHint">Saved as the default for new books. Any single one can override it.</p>
+      </div>
+    </section>
   </div>
-  <!-- pre, not div: the breakdown is a padded table, and HTML would collapse
-       both the newlines and the column alignment into one run-on line. -->
-  <pre id="backupBreakdown" class="meta mono"
-       style="margin-top:10px;white-space:pre;overflow-x:auto">Measuring…</pre>
-  <div class="btn-row" style="margin-top:12px">
-    <button type="button" class="btn primary" id="backupBtn">Download backup</button>
-  </div>
-  <div class="hint" id="backupHint">Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>.</div>
-</div>
 
-<div class="card">
-  <h3>Updates</h3>
-  <p class="meta">You're running <strong>{{ app_version }}</strong>. Checking asks GitHub what the
-    latest release is — the only request this app ever makes to the internet. It happens when you
-    press the button, and never on its own.</p>
-  <div class="btn-row" style="margin-top:10px">
-    <button type="button" class="btn" id="updateBtn">Check for updates</button>
-    <span class="meta" id="updateText"></span>
-  </div>
-  <label class="meta" style="display:block;margin-top:12px">
-    <input type="checkbox" id="autoUpdateCheck" {% if check_for_updates %}checked{% endif %}>
-    Let this page check automatically when it loads
-  </label>
-  <div class="hint" id="updateHint">Off by default. Nothing else in the app contacts the network.</div>
-</div>
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h3>Back up your work</h3></div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="backupProfile">What to include</label>
+          <select id="backupProfile">
+            <option value="projects" selected>Books and settings — not the audio</option>
+            <option value="settings">Settings and voice clips only</option>
+            <option value="full">Everything, including narrated audio</option>
+          </select>
+        </div>
+        <!-- pre, not div: the breakdown is a padded table, and HTML would collapse
+             both the newlines and the column alignment into one run-on line. -->
+        <pre id="backupBreakdown" class="meta mono"
+             style="margin-top:4px;white-space:pre;overflow-x:auto;font-size:11.5px">Measuring…</pre>
+        <p class="hint">Narrated audio is left out on purpose: it is a hundred times the size and any
+          re-render recreates it exactly. What is left is the part that cannot be recreated.</p>
+        <div class="btn-row" style="margin-top:12px">
+          <button type="button" class="btn primary" id="backupBtn">{{ ic.icon('download', 14) }} Download backup</button>
+        </div>
+        <p class="hint" id="backupHint">Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>.</p>
+      </div>
+    </section>
 
-<div class="card">
-  <h3>Problem reports</h3>
-  <p class="meta">If something fails, the reason is kept in a small local log — capped in size and
-    deleted after two weeks. The report below is safe to paste into a bug report: your home folder
-    is replaced with <code>~</code> and book titles are left out.</p>
-  <div id="diagText" class="meta">Loading…</div>
-  <div class="btn-row" style="margin-top:12px">
-    <a class="btn" id="reportBtn" href="/diagnostics/report">Download report</a>
-    <button type="button" class="btn ghost" id="clearLogBtn">Clear log</button>
+    <section class="panel">
+      <div class="panel-head"><h3>Updates</h3></div>
+      <div class="panel-body">
+        <p class="meta" style="line-height:1.55">Nothing here contacts the internet on its own. Asking whether
+          there is a newer version means sending a request to GitHub, which carries your IP address — so it
+          happens when you press the button, and not before.</p>
+        <div class="btn-row" style="margin-top:12px">
+          <button type="button" class="btn" id="updateBtn">Check for updates</button>
+          <span class="meta">Running <strong>{{ app_version }}</strong></span>
+          <span class="meta" id="updateText"></span>
+        </div>
+        <hr style="margin:14px -16px">
+        <label class="switch">
+          <input type="checkbox" id="autoUpdateCheck" {% if check_for_updates %}checked{% endif %}>
+          <span style="flex:1">
+            <b>Check when this page loads</b>
+            <span id="updateHint">Off. Turning it on is the only thing that makes this app talk to a server
+              without you asking.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>When something goes wrong</h3></div>
+      <div class="panel-body">
+        <div id="diagText" class="meta">Loading…</div>
+        <p class="hint">A report has your home folder replaced with <code>~</code> and book titles removed,
+          so filing one does not publish your reading history.</p>
+        <div class="btn-row" style="margin-top:12px">
+          <a class="btn sm" id="reportBtn" href="/diagnostics/report">Download report</a>
+          <button type="button" class="btn sm ghost" id="clearLogBtn">Clear the log</button>
+        </div>
+      </div>
+    </section>
   </div>
 </div>
 {% endblock %}
@@ -100,6 +153,9 @@
 {% block script %}
 <script>
 const startDir = {{ (audiobooks_root or home_dir)|tojson }};
+const revealRootBtn = document.getElementById("revealRoot");
+if (revealRootBtn) revealRootBtn.addEventListener("click", () => revealFolder({ what: "library" }));
+
 const rootInput = document.getElementById("rootInput");
 document.getElementById("rootBtn").addEventListener("click", () => {
   openFsBrowser({
@@ -107,7 +163,7 @@ document.getElementById("rootBtn").addEventListener("click", () => {
     onPick: (path) => { rootInput.value = path; document.getElementById("rootText").textContent = path; }
   });
 });
-document.getElementById("saveRootBtn").addEventListener("click", async () => {
+document.getElementById("saveRootBtn").addEventListener("click", () => withBusy(document.getElementById("saveRootBtn"), "Saving…", async () => {
   const r = await fetch("/settings", { method: "POST", body: new URLSearchParams({ audiobooks_root: rootInput.value }) });
   if (!r.ok) {
     let msg = "Couldn't save"; try { msg = (await r.json()).error || msg; } catch {}
@@ -116,7 +172,7 @@ document.getElementById("saveRootBtn").addEventListener("click", async () => {
     return;
   }
   toast("Saved"); setTimeout(() => location.reload(), 500);
-});
+}));
 const clearBtn = document.getElementById("clearRootBtn");
 if (clearBtn) clearBtn.addEventListener("click", async () => {
   await fetch("/settings", { method: "POST", body: new URLSearchParams({ audiobooks_root: "" }) });
@@ -185,7 +241,10 @@ async function checkUpdates() {
     }
   } catch { text.textContent = "Couldn't check right now."; }
 }
-document.getElementById("updateBtn").addEventListener("click", checkUpdates);
+const updateBtn = document.getElementById("updateBtn");
+// The one request in this app that leaves the machine, so it is the one most
+// worth showing as in flight.
+updateBtn.addEventListener("click", () => withBusy(updateBtn, "Checking…", checkUpdates));
 const autoBox = document.getElementById("autoUpdateCheck");
 autoBox.addEventListener("change", async () => {
   await fetch("/settings", {
@@ -218,5 +277,24 @@ document.getElementById("clearLogBtn").addEventListener("click", async () => {
   toast("Cleared"); refreshDiagnostics();
 });
 refreshDiagnostics();
+
+// The working-files figure, so this page agrees with the sidebar and Storage.
+(async () => {
+  try {
+    const d = await getJSON("/api/storage");
+    const el = document.getElementById("workingFiles");
+    if (!el) return;
+    el.innerHTML = d.safe_bytes
+      ? `<span class="chip warn">${humanBytes(d.safe_bytes)} can be freed</span>`
+      : `<span class="chip ok">nothing to reclaim</span>`;
+  } catch (e) { /* the page is complete without it */ }
+})();
+
+document.getElementById("autoFreeCheck").addEventListener("change", async (e) => {
+  await postForm("/settings", { auto_free_working_files: e.target.checked ? "1" : "0" });
+  toast(e.target.checked
+    ? "Finished books will clean up after themselves."
+    : "Working files will be kept until you say otherwise.");
+});
 </script>
 {% endblock %}
