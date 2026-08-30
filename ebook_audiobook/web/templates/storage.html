@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% set nav = 'storage' %}
+{% import "_icons.html" as ic %}
+{% block title %}Storage · ebook·audiobook{% endblock %}
+
+{% set total = survey.total_bytes or 1 %}
+{% macro pct(n) %}{{ (100.0 * n / total)|round(2) }}{% endmacro %}
+
+{% block head %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Storage</h1>
+    <p class="page-sub">{{ survey.books|length }} book{{ 's' if survey.books|length != 1 }} ·
+      <span class="mono">{{ survey.total_bytes|humanbytes }}</span> in your ebook·audiobook folder</p>
+  </div>
+  <div class="head-actions">
+    <button type="button" class="btn" id="showFolder">{{ ic.icon('folder', 14) }} Show me the folder</button>
+  </div>
+</header>
+{% endblock %}
+
+{% block body %}
+
+{% if not survey.books %}
+  <div class="card"><div class="empty">Nothing stored yet. <a href="{{ url_for('new_page') }}">Add a book →</a></div></div>
+{% else %}
+
+<section class="panel" style="padding:18px 20px;margin-bottom:16px">
+  <div style="display:flex;align-items:flex-end;gap:24px;margin-bottom:14px;flex-wrap:wrap">
+    <div>
+      <div class="eyebrow" style="margin-bottom:5px">
+        {% if survey.safe_bytes %}Temporary, and safe to delete{% else %}Nothing to reclaim{% endif %}
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span class="mono" style="font-size:40px;font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--warn)">
+          {{ survey.safe_bytes|humanbytes }}</span>
+        <span class="meta" style="max-width:52ch">
+          {% if survey.safe_bytes %}
+            of the <span class="mono">{{ survey.total_bytes|humanbytes }}</span> here is raw narration audio
+            from books you have already finished.
+          {% else %}
+            Every book here is either still being worked on or has already been tidied up.
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    {% if survey.safe_bytes %}
+    <button type="button" class="btn primary lg" id="freeAll" style="margin-left:auto">
+      {{ ic.icon('sparkle', 15) }} <span id="freeAllText">Free up {{ survey.safe_bytes|humanbytes }}</span>
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="split">
+    {% if survey.safe_bytes %}<span style="width:{{ pct(survey.safe_bytes) }}%;background:var(--warn)"></span>{% endif %}
+    {% if survey.held_bytes %}<span style="width:{{ pct(survey.held_bytes) }}%;background:var(--warn);opacity:.4"></span>{% endif %}
+    {% if survey.output_bytes %}<span style="width:{{ pct(survey.output_bytes) }}%;background:var(--accent)"></span>{% endif %}
+    {% if survey.keep_bytes %}<span style="width:{{ pct(survey.keep_bytes) }}%;background:var(--text-3)"></span>{% endif %}
+  </div>
+  <div class="legend">
+    <span style="color:var(--text)"><i style="background:var(--warn)"></i> Working files you can free
+      <b class="mono">{{ survey.safe_bytes|humanbytes }}</b></span>
+    <span><i style="background:var(--warn);opacity:.4"></i> Working files holding a resume
+      <b class="mono">{{ survey.held_bytes|humanbytes }}</b></span>
+    <span><i style="background:var(--accent)"></i> Finished audiobooks
+      <b class="mono">{{ survey.output_bytes|humanbytes }}</b></span>
+    <span><i style="background:var(--text-3)"></i> Your ebooks, voices and choices
+      <b class="mono">{{ survey.keep_bytes|humanbytes }}</b></span>
+  </div>
+</section>
+
+<div class="cols">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Book by book</h3>
+      <span class="meta" style="margin-left:auto" id="selCount"></span>
+    </div>
+    {% for b in survey.books %}
+      <div class="strow {{ 'held' if b.reclaim == held else ('none' if b.reclaim == none else '') }}">
+        {% if b.reclaim == safe %}
+          <input type="checkbox" class="pickjob" value="{{ b.job_id }}" data-bytes="{{ b.working_bytes }}" checked>
+        {% elif b.reclaim == held %}
+          <input type="checkbox" class="pickjob forced" value="{{ b.job_id }}" data-bytes="{{ b.working_bytes }}">
+        {% else %}
+          <span></span>
+        {% endif %}
+        {{ ic.cover({'has_cover': False, 'book': b, 'tint': b.title|tint}, '3.4px') }}
+        <a href="{{ url_for('job_page', job_id=b.job_id) }}" style="min-width:0;color:inherit">
+          <span class="name">{{ b.title }}</span>
+          <span class="why">{{ b.reason or (b.stage|stage) }}</span>
+        </a>
+        {% if b.reclaim == safe %}<span class="chip ok">safe</span>
+        {% elif b.reclaim == held %}<span class="chip warn">{{ b.stage|stage }}</span>
+        {% elif b.reclaim == busy %}<span class="chip live"><span class="dot pulse"></span>in use</span>
+        {% else %}<span></span>{% endif %}
+        <span class="size mono" style="color:{{ 'var(--warn)' if b.reclaim == safe else 'var(--text-2)' }}">
+          {{ b.working_bytes|humanbytes if b.working_bytes else '—' }}</span>
+      </div>
+    {% endfor %}
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h3>What these files are</h3></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <b style="font-size:12.5px;font-weight:600;display:block">Raw audio, one piece at a time</b>
+          <p class="hint">Every sentence is narrated separately and saved uncompressed, then stitched into
+            chapters and packed into the <code>.m4b</code>. The raw pieces stay behind afterwards.</p>
+        </div>
+        <div>
+          <b style="font-size:12.5px;font-weight:600;display:block">All they buy you is a shortcut</b>
+          <p class="hint">While they exist, changing a voice setting re-narrates only the parts that changed —
+            minutes instead of hours. Once you are happy with a book, that shortcut is worth nothing.</p>
+        </div>
+        <div>
+          <b style="font-size:12.5px;font-weight:600;display:block">You keep everything that matters</b>
+          <p class="hint">The finished audiobook, your ebook, your voices, your section choices — untouched.
+            You can always narrate the book again from scratch.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-body">
+        <label class="switch">
+          <input type="checkbox" id="autoFree" {{ 'checked' if auto_free_working_files }}>
+          <span style="flex:1">
+            <b>Free them the moment a book finishes</b>
+            <span>{{ 'On — a finished book now cleans up after itself.' if auto_free_working_files
+                     else 'Off, so nothing is ever deleted without you. Turn it on and every finished book cleans up after itself.' }}</span>
+          </span>
+        </label>
+      </div>
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+
+// This used to open the app's own folder *picker*, which was the wrong gesture
+// entirely — you are not choosing anything, you are asking to see it.
+document.getElementById("showFolder").addEventListener("click", () => revealFolder({ what: "data" }));
+
+const auto = document.getElementById("autoFree");
+if (auto) {
+  auto.addEventListener("change", async () => {
+    const r = await postForm("/settings", { auto_free_working_files: auto.checked ? "1" : "0" });
+    toast(auto.checked ? "Finished books will clean up after themselves." : "Left switched off.");
+    if (r && r.ok) setTimeout(() => location.reload(), 700);
+  });
+}
+
+const picks = () => Array.from(document.querySelectorAll(".pickjob"));
+function refreshSelection() {
+  const on = picks().filter((p) => p.checked);
+  const bytes = on.reduce((n, p) => n + (+p.dataset.bytes || 0), 0);
+  const el = document.getElementById("selCount");
+  if (el) el.textContent = on.length ? `${on.length} selected · ${humanBytes(bytes)}` : "nothing selected";
+  const btn = document.getElementById("freeAll");
+  if (btn) {
+    btn.disabled = !on.length;
+    document.getElementById("freeAllText").textContent =
+      on.length ? "Free up " + humanBytes(bytes) : "Nothing selected";
+  }
+}
+picks().forEach((p) => p.addEventListener("change", refreshSelection));
+refreshSelection();
+
+const freeBtn = document.getElementById("freeAll");
+if (freeBtn) freeBtn.addEventListener("click", async () => {
+  const on = picks().filter((p) => p.checked);
+  if (!on.length) return;
+  // Anything ticked that was held back gets its own sentence in the dialog:
+  // for those books this is not housekeeping, it is throwing away narration.
+  const risky = on.filter((p) => p.classList.contains("forced"));
+  const bytes = on.reduce((n, p) => n + (+p.dataset.bytes || 0), 0);
+  const ok = await confirmDialog({
+    title: `Free up ${humanBytes(bytes)}?`,
+    danger: risky.length > 0,
+    confirmLabel: risky.length ? "Delete anyway" : "Free up space",
+    bodyHtml: `<p>Deletes the raw narration audio for ${on.length} book${on.length === 1 ? "" : "s"}.
+      Finished audiobooks, your ebooks and your voices are untouched.</p>` +
+      (risky.length ? `<div class="plan-warn" style="margin-top:12px">${risky.length}
+        of these stopped part-way through. Their working files are what let them carry on —
+        delete them and those sections are narrated again from the beginning.</div>` : ""),
+  });
+  if (!ok) return;
+  const body = new URLSearchParams();
+  on.forEach((p) => body.append("job_id", p.value));
+  if (risky.length) body.append("force", "1");
+  const r = await fetch("/storage/free", { method: "POST", body });
+  if (!r.ok) { toast("Couldn't free that up"); return; }
+  const d = await r.json();
+  toast(`Freed ${humanBytes(d.freed_bytes)}`);
+  setTimeout(() => location.reload(), 800);
+});
+</script>
+{% endblock %}

@@ -655,6 +655,18 @@ def render_job(
         state.preview_output = None
         store.save_state(state)
         store.set_stage(Stage.DONE, f"output: {out}")
+        # Opt-in housekeeping: the raw narration audio is several GB and buys
+        # nothing once the .m4b exists. Done here rather than in the web layer so
+        # a `convert` from the command line honours the same preference. Never
+        # allowed to fail a render that has already succeeded.
+        try:
+            from . import storage as storage_mod
+
+            freed = storage_mod.free_after_render(job_id)
+            if freed:
+                store.set_stage(Stage.DONE, f"freed {freed} bytes of working files")
+        except Exception:  # noqa: BLE001 - the audiobook is written; nothing here is worth failing for
+            pass
         return store.load_state()
     except JobCancelled:
         if is_preview:
@@ -672,6 +684,146 @@ def render_job(
         store.save_state(state)
         if not is_preview:
             store.set_stage(Stage.ERROR, f"error: {e}")
+        raise
+    finally:
+        adapter.unload()
+
+
+def measure_job(job_id: str, progress: "Progress | None" = None,
+                should_cancel: "Callable[[], bool] | None" = None,
+                power_mode: str | None = None) -> JobState:
+    """Narrate a little real audio to find out what this book actually costs.
+
+    The estimates on the job page otherwise assume a fixed speaking rate, so they
+    ignore the pacing setting, the voice and the reference clip — every one of
+    which changes how long the finished audiobook runs. This renders a short
+    stretch with the *current* settings and measures two things from it:
+
+      * characters per second of audio  — drives length, file size, disk space
+      * characters per second of work   — drives "time to narrate"
+
+    Two things are deliberately excluded, because including them is how a
+    calibration lies:
+
+      * the model load, which happens once and is not part of narrating
+      * the first freshly-rendered segment, which is markedly slower while the
+        engine warms up — counting it makes fast machines look slow
+
+    Nothing is thrown away. Segments are content-addressed, so everything
+    rendered here is exactly what the full render would have produced and is
+    reused by it.
+    """
+    store = JobStore(job_id).ensure()
+    chapters = store.load_chapters()
+    if not chapters:
+        raise RuntimeError("no chapters — read the book first")
+    voice = store.load_voice()
+
+    prior_stage = store.load_state().stage
+    if prior_stage in (Stage.PREPARING.value, Stage.PREVIEWING.value, Stage.RENDERING.value,
+                       Stage.ASSEMBLING.value, Stage.PACKAGING.value):
+        prior_stage = Stage.EXTRACTED.value
+
+    store.set_stage(Stage.PREVIEWING, "measuring how long this will take")
+    st = store.load_state()
+    st.preview_progress = 0.0
+    st.error = None
+    store.save_state(st)
+
+    mode = power_mode or store.load_state().power_mode or settings.default_power_mode()
+    pace_profile = power.profile_for(mode)
+    power.apply(pace_profile)
+
+    adapter = get_adapter(voice, config.SAMPLE_RATE)
+    try:
+        adapter.load()  # deliberately outside every timing below
+        vkey = voice_key(voice, config.SAMPLE_RATE)
+        overrides = voice.extra.get("pron") or {}
+        segments = build_segments(chapters, adapter.engine_version, vkey, overrides)
+
+        # Draw from every section that will actually be narrated, starting at the
+        # first real chapter — not from that one chapter alone. A chapter can be
+        # a single paragraph, and taking only its segments left nothing to
+        # measure once the warm-up had been discarded.
+        chosen = _pick_preview_chapter(chapters, None)
+        included = {c.chapter_id for c in chapters if c.include}
+        ordered = [s for s in segments if s.chapter_id in included]
+        start = next((i for i, s in enumerate(ordered)
+                      if s.chapter_id == chosen.chapter_id), 0)
+        ordered = ordered[start:] + ordered[:start]
+        # Narrated chapter titles are one short line each and read nothing like
+        # the body of a book, so they are poor material for a rate.
+        body = [s for s in ordered if s.boundary != "chapter_title"] or ordered
+        # With only one usable segment there is nothing left after discarding a
+        # warm-up, and a rough figure beats none at all.
+        skip_warmup = len(body) > 1
+
+        chars = 0
+        audio_seconds = 0.0
+        work_seconds = 0.0
+        counted = 0
+        first = True
+
+        for seg in body[: config.MEASURE_MAX_SEGMENTS + 1]:
+            if should_cancel and should_cancel():
+                raise JobCancelled()
+            path = store.segment_audio_path(seg.segment_id)
+            fresh = not (path.exists() and is_valid_audio(path))
+            t0 = time.monotonic()
+            if fresh:
+                _render_one(adapter, seg.text, path)
+            elapsed = time.monotonic() - t0
+
+            if first and fresh and skip_warmup:
+                # The warm-up generation. Rendered and kept, but not counted.
+                first = False
+                power.pace(pace_profile, elapsed)
+                continue
+            first = False
+
+            duration = _safe_duration(path)
+            if duration <= 0:
+                continue
+            chars += len(seg.text)
+            audio_seconds += duration
+            # A cached segment costs no time, so it informs the audio-length
+            # measurement but must not flatter the speed one.
+            if fresh:
+                work_seconds += elapsed
+                counted += 1
+                power.pace(pace_profile, elapsed)
+
+            st = store.load_state()
+            st.preview_progress = min(1.0, audio_seconds / config.MEASURE_TARGET_AUDIO_SECONDS)
+            store.save_state(st)
+            if progress:
+                progress(st)
+            if audio_seconds >= config.MEASURE_TARGET_AUDIO_SECONDS:
+                break
+
+        store.save_segments(segments)
+        state = store.load_state()
+        if chars and audio_seconds > 0:
+            state.chars_per_audio_second = round(chars / audio_seconds, 2)
+            state.measured_voice_key = vkey
+        if counted and work_seconds > 0:
+            state.chars_per_render_second = round(chars / work_seconds, 2)
+        state.preview_progress = 0.0
+        state.stage = prior_stage
+        store.save_state(state)
+        return store.load_state()
+    except JobCancelled:
+        state = store.load_state()
+        state.stage = prior_stage
+        state.preview_progress = 0.0
+        store.save_state(state)
+        return store.load_state()
+    except Exception as e:  # noqa: BLE001
+        state = store.load_state()
+        state.error = str(e)
+        state.stage = prior_stage
+        state.preview_progress = 0.0
+        store.save_state(state)
         raise
     finally:
         adapter.unload()

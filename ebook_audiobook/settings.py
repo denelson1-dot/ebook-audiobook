@@ -28,6 +28,23 @@ class Settings:
     # Default render intensity for new jobs: "full", "balanced" or "quiet".
     # See ebook_audiobook.power. A job may override it.
     power_mode: str = "full"
+    # Where the app window was last time, as {"x","y","width","height"}.
+    #
+    # Reported by the page itself rather than read off the desktop: this is a
+    # browser window we spawned, so asking it where it is works identically on
+    # Windows, macOS and Linux and needs no window-manager tooling. Chromium does
+    # keep its own record, but it does not reliably re-apply it to an --app
+    # window, which is why a relaunch kept landing on the default.
+    window_geometry: dict | None = None
+
+    # Reclaim a book's working files the moment it finishes narrating.
+    #
+    # Off by default. Those files are several gigabytes a book and are useless
+    # once you are happy with the result, but deleting anything the user did not
+    # ask to have deleted is not this app's habit — so this is a choice they
+    # make, offered at the moment they hear the finished book.
+    auto_free_working_files: bool = False
+
     # Whether the UI may ask GitHub whether a newer release exists.
     #
     # Off by default, and deliberately so: the app's promise is that nothing
