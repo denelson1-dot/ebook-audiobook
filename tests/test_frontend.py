@@ -162,7 +162,13 @@ def test_inline_scripts_parse(template):
 
 
 def _node_check(source: str, label: str) -> None:
-    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as tmp:
+    # encoding is not optional here. Without it Python writes in the platform's
+    # default encoding, which is cp1252 on Windows — and the interface contains
+    # characters like U+2212 MINUS SIGN that cp1252 cannot represent at all. The
+    # test then dies encoding the file rather than checking anything, on one
+    # platform only. Node reads UTF-8 regardless of locale.
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                     encoding="utf-8") as tmp:
         tmp.write(source)
         path = tmp.name
     try:
