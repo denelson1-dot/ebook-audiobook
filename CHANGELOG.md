@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.1 — 2026-09-01
 
 A review pass over the 1.3.0 interface, with macOS in mind.
 
