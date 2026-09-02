@@ -22,6 +22,7 @@
 #   --cuda128 / --cuda126  pick a specific CUDA build (see --help)
 #   --no-tts           skip PyTorch entirely (import books, can't render yet)
 #   --yes              accept all prompts (for scripted installs)
+#   --lang fr          messages in French (default: your desktop's language)
 #   --uninstall        remove the app (your books and settings are kept)
 
 set -euo pipefail
@@ -44,6 +45,8 @@ DO_UNINSTALL=0
 # Set only when an AMD card needs it; the launcher exports it when non-empty.
 HSA_OVERRIDE=""
 INSTALL_DIR=""
+# Which language to talk in: --lang, then EBAB_LANG, then the desktop's locale.
+LANG_CODE=""
 
 # --- pretty output -----------------------------------------------------------
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -51,11 +54,96 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 else
   B=""; DIM=""; GRN=""; YLW=""; RED=""; N=""
 fi
-say()  { printf '%s\n' "$*"; }
-step() { printf '\n%s==>%s %s%s%s\n' "$GRN" "$N" "$B" "$*" "$N"; }
-ok()   { printf '  %s✓%s %s\n' "$GRN" "$N" "$*"; }
-warn() { printf '  %s!%s %s\n' "$YLW" "$N" "$*"; }
-die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$*" >&2; exit 1; }
+# --- language ----------------------------------------------------------------
+# The helpers below pass every message through tr_msg. In English it returns
+# the text as given; in French it matches the English (exactly, or by a glob
+# for lines that carry a path or a version) and prints the French. Call sites
+# stay English, so the installer's logic is the same in every language, and a
+# line with no French yet simply appears in English.
+resolve_lang() {
+  code="${LANG_CODE:-${EBAB_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}}"
+  code="$(printf '%s' "$code" | cut -c1-2 | tr '[:upper:]' '[:lower:]')"
+  case "$code" in fr) LANG_CODE="fr" ;; *) LANG_CODE="en" ;; esac
+}
+
+fr_msg() {
+  case "$1" in
+    "Uninstalling ebook-audiobook") printf '%s' "Désinstallation d'ebook-audiobook" ;;
+    "program removed") printf '%s' "programme retiré" ;;
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  Vos livres, réglages et livres audio n'ont PAS été supprimés. Ils sont dans :" ;;
+    "  Delete that folder yourself if you want them gone.") printf '%s' "  Supprimez ce dossier vous-même si vous voulez vous en débarrasser." ;;
+    *"ebook-audiobook installer"*) printf '%s' "${B}Installateur d'ebook-audiobook${N}" ;;
+    *"Turns ebooks you own into narrated audiobooks, entirely offline."*) printf '%s' "${DIM}Transforme vos livres numériques en livres audio narrés, entièrement hors ligne.${N}" ;;
+    "Looking for Python 3.11 or newer") printf '%s' "Recherche de Python 3.11 ou plus récent" ;;
+    "no Python 3.11+ found") printf '%s' "aucun Python 3.11+ trouvé" ;;
+    "Install Python 3.12 with Homebrew?") printf '%s' "Installer Python 3.12 avec Homebrew ?" ;;
+    "Install Python with 'sudo apt-get install python3 python3-venv'?") printf '%s' "Installer Python avec « sudo apt-get install python3 python3-venv » ?" ;;
+    *" at "*) printf '%s' "$1" ;;
+    "Python's 'venv' module is missing") printf '%s' "le module « venv » de Python est absent" ;;
+    "Python's 'ensurepip' module is missing (common on Debian/Ubuntu)") printf '%s' "le module « ensurepip » de Python est absent (courant sur Debian/Ubuntu)" ;;
+    "Install it with 'sudo apt-get install python3-venv'?") printf '%s' "L'installer avec « sudo apt-get install python3-venv » ?" ;;
+    "will install pip into the environment directly instead") printf '%s' "pip sera installé directement dans l'environnement à la place" ;;
+    "Creating a private environment") printf '%s' "Création d'un environnement privé" ;;
+    "reusing the existing environment (upgrading in place)") printf '%s' "réutilisation de l'environnement existant (mise à niveau sur place)" ;;
+    "created (with pip bootstrapped manually)") printf '%s' "créé (avec pip amorcé à la main)" ;;
+    "created") printf '%s' "créé" ;;
+    "Installing ebook-audiobook") printf '%s' "Installation d'ebook-audiobook" ;;
+    *"installing from the source tree at "*) printf '%s' "$1" ;;
+    *"downloaded with your GitHub credentials"*) printf '%s' "  ${DIM}(téléchargé avec vos identifiants GitHub — le dépôt n'est pas encore public)${N}" ;;
+    "installed "*) printf '%s' "installé : ${1#installed }" ;;
+    "Skipping the speech engine (--no-tts)") printf '%s' "Moteur vocal ignoré (--no-tts)" ;;
+    "you can import books, but rendering audio needs the engine") printf '%s' "vous pouvez importer des livres, mais produire l'audio demande le moteur" ;;
+    "  add it later with:") printf '%s' "  ajoutez-le plus tard avec :" ;;
+    "Setting up the speech engine") printf '%s' "Mise en place du moteur vocal" ;;
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only") printf '%s' "impossible de demander à l'application quelle version de PyTorch utiliser ; repli sur la version processeur" ;;
+    "  Detected: "*) printf '%s' "  Détecté : ${1#  Detected: }" ;;
+    "  Download: "*) printf '%s' "  Téléchargement : ${1#  Download: }" ;;
+    "skipping the speech engine — no PyTorch build exists for Intel Macs") printf '%s' "moteur vocal ignoré — aucune version de PyTorch n'existe pour les Mac Intel" ;;
+    *"You can still import books, browse chapters and manage voices."*) printf '%s' "  ${DIM}Vous pouvez toujours importer des livres, parcourir les chapitres et gérer les voix.${N}" ;;
+    "Download and install the speech engine now?") printf '%s' "Télécharger et installer le moteur vocal maintenant ?" ;;
+    "speech engine ready"*) printf '%s' "moteur vocal prêt${1#speech engine ready}" ;;
+    *"voice model downloads the first time you render."*) printf '%s' "  ${DIM}Le modèle vocal (~3 Go) se télécharge à la première narration.${N}" ;;
+    "skipped — add it later by re-running this installer.") printf '%s' "ignoré — ajoutez-le plus tard en relançant cet installateur." ;;
+    "Checking for Calibre (needed to read ebook files)") printf '%s' "Recherche de Calibre (nécessaire pour lire les fichiers de livres)" ;;
+    "Calibre found") printf '%s' "Calibre trouvé" ;;
+    "Calibre is not installed") printf '%s' "Calibre n'est pas installé" ;;
+    "Install it now with 'brew install --cask calibre'?") printf '%s' "L'installer maintenant avec « brew install --cask calibre » ?" ;;
+    "Install it now with 'sudo apt-get install calibre'?") printf '%s' "L'installer maintenant avec « sudo apt-get install calibre » ?" ;;
+    "Calibre installed") printf '%s' "Calibre installé" ;;
+    "install Calibre before converting a book:") printf '%s' "installez Calibre avant de convertir un livre :" ;;
+    *"or download it from https://calibre-ebook.com/download"*) printf '%s' "      ${DIM}ou téléchargez-le depuis https://calibre-ebook.com/download${N}" ;;
+    "Creating the launcher") printf '%s' "Création du lanceur" ;;
+    "command: "*) printf '%s' "commande : ${1#command: }" ;;
+    "application icon") printf '%s' "icône de l'application" ;;
+    "application menu entry") printf '%s' "entrée dans le menu des applications" ;;
+    "no icon.icns found; the app will use the generic bundle icon") printf '%s' "icon.icns introuvable ; l'application utilisera l'icône générique" ;;
+    "application: "*) printf '%s' "application : ${1#application: }" ;;
+    "Verifying the install") printf '%s' "Vérification de l'installation" ;;
+    "all required components are working") printf '%s' "tous les composants requis fonctionnent" ;;
+    "some checks failed — run 'ebook-audiobook check' for details") printf '%s' "certaines vérifications ont échoué — lancez « ebook-audiobook check » pour les détails" ;;
+    *"Installed."*) printf '%s' "${GRN}${B}Installé.${N}" ;;
+    "  Start it with:   "*) printf '%s' "  Démarrez-la avec :     ${1#  Start it with:   }" ;;
+    "  Your books live in: "*) printf '%s' "  Vos livres sont dans : ${1#  Your books live in: }" ;;
+    "  Check setup:     "*) printf '%s' "  Vérifier :             ${1#  Check setup:     }" ;;
+    "  Uninstall:       "*) printf '%s' "  Désinstaller :         ${1#  Uninstall:       }" ;;
+    *"isn't on your PATH yet.") printf '%s' "${1% isn?t on your PATH yet.} n'est pas encore dans votre PATH." ;;
+    "  Add this line to your ~/.bashrc or ~/.zshrc, then open a new terminal:") printf '%s' "  Ajoutez cette ligne à votre ~/.bashrc ou ~/.zshrc, puis ouvrez un nouveau terminal :" ;;
+    "  Until then, start it with: "*) printf '%s' "  En attendant, démarrez-la avec : ${1#  Until then, start it with: }" ;;
+    "couldn't ask for your password here, so nothing was installed") printf '%s' "impossible de demander votre mot de passe ici, donc rien n'a été installé" ;;
+    "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "l'installation de ${p% failed (see below)} a échoué (voir ci-dessous)" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+tr_msg() {
+  if [ "$LANG_CODE" = "fr" ]; then fr_msg "$1"; else printf '%s' "$1"; fi
+}
+
+say()  { printf '%s\n' "$(tr_msg "$*")"; }
+step() { printf '\n%s==>%s %s%s%s\n' "$GRN" "$N" "$B" "$(tr_msg "$*")" "$N"; }
+ok()   { printf '  %s✓%s %s\n' "$GRN" "$N" "$(tr_msg "$*")"; }
+warn() { printf '  %s!%s %s\n' "$YLW" "$N" "$(tr_msg "$*")"; }
+die()  { printf '\n%serror:%s %s\n' "$RED" "$N" "$(tr_msg "$*")" >&2; exit 1; }
 
 have_sudo() { command -v sudo >/dev/null 2>&1; }
 
@@ -197,14 +285,18 @@ apt_install() { # apt_install pkg...
 # Prompts must read from the terminal, not stdin: this script is normally piped
 # in from curl, so stdin is the script itself and `read` would consume it.
 ask() { # ask "question" [default y|n] -> 0 for yes
-  local q="$1" default="${2:-y}" reply hint
-  [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
+  local q="$(tr_msg "$1")" default="${2:-y}" reply hint
+  if [ "$LANG_CODE" = "fr" ]; then
+    [ "$default" = "y" ] && hint="[O/n]" || hint="[o/N]"
+  else
+    [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
+  fi
   if [ "$ASSUME_YES" = "1" ]; then say "  $q $hint y (auto)"; [ "$default" = "y" ]; return; fi
   if [ ! -t 0 ] && [ ! -r /dev/tty ]; then say "  $q $hint $default (no terminal)"; [ "$default" = "y" ]; return; fi
   printf '  %s %s ' "$q" "$hint"
   read -r reply < /dev/tty || reply=""
   reply="$(printf '%s' "${reply:-$default}" | tr '[:upper:]' '[:lower:]')"
-  [ "$reply" = "y" ] || [ "$reply" = "yes" ]
+  [ "$reply" = "y" ] || [ "$reply" = "yes" ] || [ "$reply" = "o" ] || [ "$reply" = "oui" ]
 }
 
 while [ $# -gt 0 ]; do
@@ -219,6 +311,7 @@ while [ $# -gt 0 ]; do
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
+    --lang)    LANG_CODE="${2:?--lang needs a value}"; shift 2 ;;
     # Printed inline rather than read back out of "$0": piped from curl, "$0" is
     # "bash" and there is no file to read the comment header from.
     -h|--help)
@@ -238,6 +331,7 @@ Options:
   --gpu, --cuda     force the CUDA PyTorch build, even if this script's GPU
                     probe came up empty (e.g. a broken nvidia-smi)
   --rocm, --amd     force the AMD ROCm build (Linux + Radeon)
+  --lang fr         messages in French (default: the desktop's language)
   --cuda128         force the CUDA 12.8 build (RTX 20-series and newer)
   --cuda126         force the CUDA 12.6 build (GTX 900/1000-series and older)
   --no-tts          skip PyTorch entirely (import books, can't render yet)
@@ -264,6 +358,7 @@ BIN_DIR="$HOME/.local/bin"
 
 # --- uninstall ---------------------------------------------------------------
 if [ "$DO_UNINSTALL" = "1" ]; then
+  resolve_lang
   step "Uninstalling ebook-audiobook"
   # Keep this list identical to the generated ebook-audiobook-uninstall below.
   # The banner tells people the two are equivalent, and a divergence here is
@@ -285,6 +380,7 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   exit 0
 fi
 
+resolve_lang
 say ""
 say "${B}ebook-audiobook installer${N}"
 say "${DIM}Turns ebooks you own into narrated audiobooks, entirely offline.${N}"

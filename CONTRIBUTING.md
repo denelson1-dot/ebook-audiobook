@@ -152,6 +152,21 @@ Rules that keep it working:
   report`, the "Unknown Title"/"Unknown Author" fallbacks (they name folders and
   tags), raw exception text, and the shell commands in "how to fix it" hints.
 
+## Narration languages
+
+What the narrator *reads* is separate from what the interface says. A book's
+language comes from its `dc:language`; the voice's language is the engine's
+`language_id`; `ebook_audiobook/narration_langs.py` knows which model pack
+speaks which language and whether it is in the Hugging Face cache (judged from
+disk, never the network). Per-language text preparation lives in
+`ebook_audiobook/pipeline/lang/<code>.py`: punctuation, abbreviations, numbers,
+front/back-matter titles, and the sentences the app narrates itself. English
+is the reference and `tests/data/golden_en.json` pins its output; adding a
+language is one such module, an entry in `narration_langs.LANGUAGES` (tier
+`supported`), bundled voices with that `language` in `voices.py`, and a
+default in `DEFAULT_BUNDLED_BY_LANGUAGE`. `VoiceSettings.language` is part of
+the render key except when it is English, so old caches stay valid.
+
 ## Cutting a release
 
 1. Bump `version` in `pyproject.toml`.
