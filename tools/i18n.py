@@ -57,6 +57,14 @@ PLACEHOLDER = re.compile(r"%\((\w+)\)[sd]")
 HTML_TAG = re.compile(r"</?[a-zA-Z][\w-]*")
 
 
+def is_translated(message) -> bool:
+    """A message with every form filled in — a plural's empty pair is a tuple,
+    and a tuple of empty strings is truthy, which is the trap this avoids."""
+    if isinstance(message.string, tuple):
+        return all(message.string)
+    return bool(message.string)
+
+
 def _need_babel():
     try:
         import babel  # noqa: F401
@@ -65,6 +73,43 @@ def _need_babel():
 
 
 # --- extraction ---------------------------------------------------------------
+
+# A _("…") or ngettext("…", "…", n) call whose arguments are plain string
+# literals. Babel's JavaScript lexer treats a template literal as one opaque
+# token, so a call inside `${…}` — which is how most sentences are built into
+# markup here — would never be seen. This second pass catches those; the
+# catalog merges the duplicates it produces for calls the lexer did see.
+_JS_STRING = r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\''
+JS_CALL = re.compile(
+    r"(?<![\w$.])(_|ngettext)\(\s*(" + _JS_STRING + r")(?:\s*,\s*(" + _JS_STRING + r"))?")
+
+
+def _js_unquote(literal: str) -> str:
+    body = literal[1:-1]
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), body)
+
+
+def js_calls(source: str):
+    """Yield (lineno, funcname, message) for every literal _()/ngettext() call."""
+    for m in JS_CALL.finditer(source):
+        lineno = source.count("\n", 0, m.start()) + 1
+        func, first, second = m.group(1), m.group(2), m.group(3)
+        if func == "ngettext":
+            if not second:
+                continue
+            yield lineno, func, (_js_unquote(first), _js_unquote(second)), []
+        else:
+            yield lineno, func, _js_unquote(first), []
+
+
+def extract_script(fileobj, keywords, comment_tags, options):
+    """A JavaScript file: Babel's extractor, plus the template-literal pass."""
+    from babel.messages.extract import extract_javascript
+
+    data = fileobj.read()
+    yield from extract_javascript(io.BytesIO(data), keywords, comment_tags, options)
+    yield from js_calls(data.decode("utf-8"))
+
 
 def extract_template(fileobj, keywords, comment_tags, options):
     """Extract from a template: its Jinja expressions, then its inline scripts."""
@@ -78,15 +123,18 @@ def extract_template(fileobj, keywords, comment_tags, options):
 
     for m in INLINE_SCRIPT.finditer(text):
         block_start = text.count("\n", 0, m.start(1)) + 1
-        block = JINJA.sub("0", m.group(1)).encode("utf-8")
+        block_text = JINJA.sub("0", m.group(1))
+        block = block_text.encode("utf-8")
         for lineno, funcname, message, comments in extract_javascript(
                 io.BytesIO(block), keywords, comment_tags, options):
+            yield block_start + lineno - 1, funcname, message, comments
+        for lineno, funcname, message, comments in js_calls(block_text):
             yield block_start + lineno - 1, funcname, message, comments
 
 
 METHOD_MAP = [
     ("**.py", "python"),
-    ("web/static/**.js", "javascript"),
+    ("web/static/**.js", extract_script),
     ("web/templates/**.html", extract_template),
 ]
 OPTIONS_MAP = {
@@ -257,7 +305,7 @@ def problems(lang: str, allow_missing: bool = False) -> list[str]:
 
     # 3. Completeness.
     if not allow_missing:
-        untranslated = [m.id for m in catalog if m.id and not m.string]
+        untranslated = [m.id for m in catalog if m.id and not is_translated(m)]
         fuzzy = [m.id for m in catalog if m.id and m.fuzzy]
         if untranslated:
             out.append(f"{lang}: {len(untranslated)} untranslated "
@@ -300,7 +348,7 @@ def cmd_report(args) -> int:
         for m in catalog:
             if not m.id:
                 continue
-            if not m.string or m.fuzzy:
+            if not is_translated(m) or m.fuzzy:
                 refs = ", ".join(f"{f}:{n}" for f, n in m.locations[:2])
                 tag = "needs work" if m.fuzzy else "untranslated"
                 print(f"  [{tag}] {m.id!r}  ({refs})")
@@ -321,7 +369,7 @@ def cmd_add(args) -> int:
 
 def _summary(catalog) -> str:
     total = sum(1 for m in catalog if m.id)
-    done = sum(1 for m in catalog if m.id and m.string and not m.fuzzy)
+    done = sum(1 for m in catalog if m.id and is_translated(m) and not m.fuzzy)
     fuzzy = sum(1 for m in catalog if m.id and m.fuzzy)
     return f"{done}/{total} translated" + (f", {fuzzy} need work" if fuzzy else "")
 

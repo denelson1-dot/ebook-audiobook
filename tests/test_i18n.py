@@ -205,3 +205,39 @@ def test_english_formatting_is_unchanged_by_the_refactor():
     assert web_app.human_bytes(3 * 1024**3) == "3.0 GB"
     assert web_app.fmt_listening(None, 64) is None
     assert web_app.fmt_listening(100, 0) is None
+
+
+# --- every page, in French ------------------------------------------------------------
+
+def _visible(html: str) -> str:
+    """The markup without its scripts — the inlined catalog carries English keys."""
+    return re.sub(r"<script\b.*?</script>", "", html, flags=re.S)
+
+
+@pytest.mark.parametrize("path, english, french", [
+    ("/", "Add a book", "Ajouter un livre"),
+    ("/new", "Read this book", "Lire ce livre"),
+    ("/voices", "Add a voice", "Ajouter une voix"),
+    ("/settings", "Check for updates", "Rechercher des mises à jour"),
+    ("/storage", "Show me the folder", "Afficher le dossier"),
+])
+def test_every_page_renders_in_french(monkeypatch, path, english, french):
+    monkeypatch.delenv("EBAB_LANG")
+    r = create_app().test_client().get(path, headers={"Accept-Language": FRENCH})
+    assert r.status_code == 200
+    body = _visible(r.data.decode())
+    assert french in body
+    assert english not in body
+
+
+def test_the_job_page_renders_in_french(monkeypatch, synthetic_epub):
+    monkeypatch.delenv("EBAB_LANG")
+    client = create_app().test_client()
+    r = client.post("/import", data={"path": str(synthetic_epub), "engine": "fake"})
+    assert r.status_code in (302, 303)
+    job = r.headers["Location"].rstrip("/").split("/")[-1]
+    body = _visible(client.get(f"/job/{job}", headers={"Accept-Language": FRENCH}).data.decode())
+    for french in ("Narrer le livre", "Ce qui sera narré", "Réglages du moteur", "Écouter d'abord"):
+        assert french in body, french
+    for english in ("Narrate the book", "What gets narrated", "Engine settings", "Hear it first"):
+        assert english not in body, english

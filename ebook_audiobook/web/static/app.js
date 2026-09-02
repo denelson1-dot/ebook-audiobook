@@ -29,7 +29,9 @@ const PLURAL_RULES = {
   fr: (n) => (n > 1 ? 1 : 0),
 };
 function _fmt(s, params) {
-  return params ? s.replace(/%\((\w+)\)[sd]/g, (m, k) => (k in params ? params[k] : m)) : s;
+  // Always a format string, as in the templates: %% is a literal percent.
+  const filled = params ? s.replace(/%\((\w+)\)[sd]/g, (m, k) => (k in params ? params[k] : m)) : s;
+  return filled.replace(/%%/g, "%");
 }
 function _(msgid, params) {
   const t = (window.EBAB_I18N || {})[msgid];

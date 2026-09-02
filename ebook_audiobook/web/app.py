@@ -220,6 +220,10 @@ def create_app() -> Flask:
     app.jinja_env.filters["dt"] = fmt_dt
     app.jinja_env.filters["stage"] = stage_label
     app.jinja_env.filters["tint"] = cover_tint
+    # For _(msgid, **params) where a value is a count: "12 000" in French.
+    app.jinja_env.filters["nums"] = lambda d: {
+        k: (i18n.fmt_int(v) if isinstance(v, int) and not isinstance(v, bool) else v)
+        for k, v in d.items()}
     # Interface language: Jinja's own i18n extension over stdlib gettext. The
     # callables look the language up per request, so one environment serves
     # every language. newstyle matters: _("… %(n)s …", n=x) formats with the

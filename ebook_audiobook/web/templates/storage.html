@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set nav = 'storage' %}
 {% import "_icons.html" as ic %}
-{% block title %}Storage · ebook·audiobook{% endblock %}
+{% block title %}{{ _("Storage") }} · ebook·audiobook{% endblock %}
 
 {% set total = survey.folder_bytes or 1 %}
 {% macro pct(n) %}{{ (100.0 * n / total)|round(2) }}{% endmacro %}
@@ -9,12 +9,12 @@
 {% block head %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Storage</h1>
-    <p class="page-sub">{{ survey.books|length }} book{{ 's' if survey.books|length != 1 }} ·
-      <span class="mono">{{ survey.folder_bytes|humanbytes }}</span> in your ebook·audiobook folder</p>
+    <h1 class="page-title">{{ _("Storage") }}</h1>
+    <p class="page-sub">{{ ngettext("%(num)d book", "%(num)d books", survey.books|length) }} ·
+      <span class="mono">{{ survey.folder_bytes|humanbytes }}</span> {{ _("in your ebook·audiobook folder") }}</p>
   </div>
   <div class="head-actions">
-    <button type="button" class="btn" id="showFolder">{{ ic.icon('folder', 14) }} Show me the folder</button>
+    <button type="button" class="btn" id="showFolder">{{ ic.icon('folder', 14) }} {{ _("Show me the folder") }}</button>
   </div>
 </header>
 {% endblock %}
@@ -22,29 +22,27 @@
 {% block body %}
 
 {% if not survey.books %}
-  <div class="card"><div class="empty">Nothing stored yet. <a href="{{ url_for('new_page') }}">Add a book →</a></div></div>
+  <div class="card"><div class="empty">{{ _("Nothing stored yet.") }} <a href="{{ url_for('new_page') }}">{{ _("Add a book →") }}</a></div></div>
 {% else %}
 
 <section class="panel" style="padding:18px 20px;margin-bottom:16px">
   <div style="display:flex;align-items:flex-end;gap:24px;margin-bottom:14px;flex-wrap:wrap">
     <div>
       <div class="eyebrow" style="margin-bottom:5px">
-        {% if survey.safe_bytes %}Temporary, and safe to delete
-        {% elif survey.held_bytes %}Nothing to reclaim without losing work
-        {% else %}Nothing to reclaim{% endif %}
+        {% if survey.safe_bytes %}{{ _("Temporary, and safe to delete") }}
+        {% elif survey.held_bytes %}{{ _("Nothing to reclaim without losing work") }}
+        {% else %}{{ _("Nothing to reclaim") }}{% endif %}
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
         <span class="mono" style="font-size:40px;font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--warn)">
           {{ survey.safe_bytes|humanbytes }}</span>
         <span class="meta" style="max-width:52ch">
           {% if survey.safe_bytes %}
-            of the <span class="mono">{{ survey.folder_bytes|humanbytes }}</span> here is raw narration audio
-            from books that are finished, or were only ever previewed.
+            {{ _("of the <span class=\"mono\">%(total)s</span> here is raw narration audio from books that are finished, or were only ever previewed.", total=survey.folder_bytes|humanbytes) }}
           {% elif survey.held_bytes %}
-            The working files here all belong to books that stopped part-way. They are what lets those
-            books carry on; tick one below only if you would rather narrate it again from the start.
+            {{ _("The working files here all belong to books that stopped part-way. They are what lets those books carry on; tick one below only if you would rather narrate it again from the start.") }}
           {% else %}
-            Every book here is either still being worked on or has already been tidied up.
+            {{ _("Every book here is either still being worked on or has already been tidied up.") }}
           {% endif %}
         </span>
       </div>
@@ -54,7 +52,7 @@
        anywhere on the page that acts on it. #}
     {% if survey.safe_bytes or survey.held_bytes %}
     <button type="button" class="btn primary lg" id="freeAll" style="margin-left:auto">
-      {{ ic.icon('sparkle', 15) }} <span id="freeAllText">Free up {{ survey.safe_bytes|humanbytes }}</span>
+      {{ ic.icon('sparkle', 15) }} <span id="freeAllText">{{ _("Free up %(size)s", size=survey.safe_bytes|humanbytes) }}</span>
     </button>
     {% endif %}
   </div>
@@ -68,20 +66,20 @@
     {% if survey.other_bytes %}<span style="width:{{ pct(survey.other_bytes) }}%;background:var(--text-3);opacity:.25"></span>{% endif %}
   </div>
   <div class="legend">
-    <span style="color:var(--text)"><i style="background:var(--warn)"></i> Working files you can free
+    <span style="color:var(--text)"><i style="background:var(--warn)"></i> {{ _("Working files you can free") }}
       <b class="mono">{{ survey.safe_bytes|humanbytes }}</b></span>
-    <span><i style="background:var(--warn);opacity:.4"></i> Working files holding a resume
+    <span><i style="background:var(--warn);opacity:.4"></i> {{ _("Working files holding a resume") }}
       <b class="mono">{{ survey.held_bytes|humanbytes }}</b></span>
-    <span><i style="background:var(--accent)"></i> Finished audiobooks
+    <span><i style="background:var(--accent)"></i> {{ _("Finished audiobooks") }}
       <b class="mono">{{ survey.output_bytes|humanbytes }}</b></span>
-    <span><i style="background:var(--text-3)"></i> Your ebooks, voices and choices
+    <span><i style="background:var(--text-3)"></i> {{ _("Your ebooks, voices and choices") }}
       <b class="mono">{{ survey.keep_bytes|humanbytes }}</b></span>
     {% if survey.app_bytes %}
-    <span><i style="background:var(--text-3);opacity:.45"></i> The app itself — its engine and models
+    <span><i style="background:var(--text-3);opacity:.45"></i> {{ _("The app itself — its engine and models") }}
       <b class="mono">{{ survey.app_bytes|humanbytes }}</b></span>
     {% endif %}
     {% if survey.other_bytes %}
-    <span><i style="background:var(--text-3);opacity:.25"></i> Other — temporary files, the window's browser profile
+    <span><i style="background:var(--text-3);opacity:.25"></i> {{ _("Other — temporary files, the window's browser profile") }}
       <b class="mono">{{ survey.other_bytes|humanbytes }}</b></span>
     {% endif %}
   </div>
@@ -90,7 +88,7 @@
 <div class="cols">
   <section class="panel">
     <div class="panel-head">
-      <h3>Book by book</h3>
+      <h3>{{ _("Book by book") }}</h3>
       <span class="meta" style="margin-left:auto" id="selCount"></span>
     </div>
     {% for b in survey.books %}
@@ -106,11 +104,13 @@
         {{ ic.cover({'has_cover': False, 'book': b, 'tint': b.title|tint}, '3.4px') }}
         <a href="{{ url_for('job_page', job_id=b.job_id) }}" style="min-width:0;color:inherit">
           <span class="name">{{ b.title }}</span>
-          <span class="why">{{ b.reason or (b.stage|stage) }}</span>
+          {# The survey is cached across requests, so the reason arrives as a
+             sentence with placeholders and is said here, in this page's language. #}
+          <span class="why">{{ _(b.reason_id, **(b.reason_params|nums)) if b.reason_id else (b.stage|stage) }}</span>
         </a>
-        {% if b.reclaim == safe %}<span class="chip ok">safe</span>
+        {% if b.reclaim == safe %}<span class="chip ok">{{ _("safe") }}</span>
         {% elif b.reclaim == held %}<span class="chip warn">{{ b.stage|stage }}</span>
-        {% elif b.reclaim == busy %}<span class="chip live"><span class="dot pulse"></span>in use</span>
+        {% elif b.reclaim == busy %}<span class="chip live"><span class="dot pulse"></span>{{ _("in use") }}</span>
         {% else %}<span></span>{% endif %}
         <span class="size mono" style="color:{{ 'var(--warn)' if b.reclaim == safe else 'var(--text-2)' }}">
           {{ b.working_bytes|humanbytes if b.working_bytes else '—' }}</span>
@@ -120,22 +120,19 @@
 
   <div class="stack">
     <section class="panel">
-      <div class="panel-head"><h3>What these files are</h3></div>
+      <div class="panel-head"><h3>{{ _("What these files are") }}</h3></div>
       <div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
         <div>
-          <b style="font-size:12.5px;font-weight:600;display:block">Raw audio, one piece at a time</b>
-          <p class="hint">Every sentence is narrated separately and saved uncompressed, then stitched into
-            chapters and packed into the <code>.m4b</code>. The raw pieces stay behind afterwards.</p>
+          <b style="font-size:12.5px;font-weight:600;display:block">{{ _("Raw audio, one piece at a time") }}</b>
+          <p class="hint">{{ _("Every sentence is narrated separately and saved uncompressed, then stitched into chapters and packed into the <code>.m4b</code>. The raw pieces stay behind afterwards.") }}</p>
         </div>
         <div>
-          <b style="font-size:12.5px;font-weight:600;display:block">All they buy you is a shortcut</b>
-          <p class="hint">While they exist, changing a voice setting re-narrates only the parts that changed —
-            minutes instead of hours. Once you are happy with a book, that shortcut is worth nothing.</p>
+          <b style="font-size:12.5px;font-weight:600;display:block">{{ _("All they buy you is a shortcut") }}</b>
+          <p class="hint">{{ _("While they exist, changing a voice setting re-narrates only the parts that changed — minutes instead of hours. Once you are happy with a book, that shortcut is worth nothing.") }}</p>
         </div>
         <div>
-          <b style="font-size:12.5px;font-weight:600;display:block">You keep everything that matters</b>
-          <p class="hint">The finished audiobook, your ebook, your voices, your section choices — untouched.
-            You can always narrate the book again from scratch.</p>
+          <b style="font-size:12.5px;font-weight:600;display:block">{{ _("You keep everything that matters") }}</b>
+          <p class="hint">{{ _("The finished audiobook, your ebook, your voices, your section choices — untouched. You can always narrate the book again from scratch.") }}</p>
         </div>
       </div>
     </section>
@@ -145,9 +142,9 @@
         <label class="switch">
           <input type="checkbox" id="autoFree" {{ 'checked' if auto_free_working_files }}>
           <span style="flex:1">
-            <b>Free them the moment a book finishes</b>
-            <span>{{ 'On — a finished book now cleans up after itself.' if auto_free_working_files
-                     else 'Off, so nothing is ever deleted without you. Turn it on and every finished book cleans up after itself.' }}</span>
+            <b>{{ _("Free them the moment a book finishes") }}</b>
+            <span>{{ _("On — a finished book now cleans up after itself.") if auto_free_working_files
+                     else _("Off, so nothing is ever deleted without you. Turn it on and every finished book cleans up after itself.") }}</span>
           </span>
         </label>
       </div>
@@ -168,7 +165,7 @@ const auto = document.getElementById("autoFree");
 if (auto) {
   auto.addEventListener("change", async () => {
     const r = await postForm("/settings", { auto_free_working_files: auto.checked ? "1" : "0" });
-    toast(auto.checked ? "Finished books will clean up after themselves." : "Left switched off.");
+    toast(auto.checked ? _("Finished books will clean up after themselves.") : _("Left switched off."));
     if (r && r.ok) setTimeout(() => location.reload(), 700);
   });
 }
@@ -178,12 +175,14 @@ function refreshSelection() {
   const on = picks().filter((p) => p.checked);
   const bytes = on.reduce((n, p) => n + (+p.dataset.bytes || 0), 0);
   const el = document.getElementById("selCount");
-  if (el) el.textContent = on.length ? `${on.length} selected · ${humanBytes(bytes)}` : "nothing selected";
+  if (el) el.textContent = on.length
+    ? _("%(n)s selected · %(size)s", { n: on.length, size: humanBytes(bytes) })
+    : _("nothing selected");
   const btn = document.getElementById("freeAll");
   if (btn) {
     btn.disabled = !on.length;
     document.getElementById("freeAllText").textContent =
-      on.length ? "Free up " + humanBytes(bytes) : "Nothing selected";
+      on.length ? _("Free up %(size)s", { size: humanBytes(bytes) }) : _("Nothing selected");
   }
 }
 picks().forEach((p) => p.addEventListener("change", refreshSelection));
@@ -198,28 +197,33 @@ if (freeBtn) freeBtn.addEventListener("click", async () => {
   const risky = on.filter((p) => p.classList.contains("forced"));
   const bytes = on.reduce((n, p) => n + (+p.dataset.bytes || 0), 0);
   const ok = await confirmDialog({
-    title: `Free up ${humanBytes(bytes)}?`,
+    title: _("Free up %(size)s?", { size: humanBytes(bytes) }),
     danger: risky.length > 0,
-    confirmLabel: risky.length ? "Delete anyway" : "Free up space",
-    bodyHtml: `<p>Deletes the raw narration audio for ${on.length} book${on.length === 1 ? "" : "s"}.
-      Finished audiobooks, your ebooks and your voices are untouched.</p>` +
-      (risky.length ? `<div class="plan-warn" style="margin-top:12px">${risky.length}
-        of these stopped part-way through. Their working files are what let them carry on —
-        delete them and those sections are narrated again from the beginning.</div>` : ""),
+    confirmLabel: risky.length ? _("Delete anyway") : _("Free up space"),
+    bodyHtml: `<p>` + ngettext(
+        "Deletes the raw narration audio for %(n)s book. Finished audiobooks, your ebooks and your voices are untouched.",
+        "Deletes the raw narration audio for %(n)s books. Finished audiobooks, your ebooks and your voices are untouched.",
+        on.length) + `</p>` +
+      (risky.length ? `<div class="plan-warn" style="margin-top:12px">` + ngettext(
+        "%(n)s of these stopped part-way through. Its working files are what let it carry on — delete them and those sections are narrated again from the beginning.",
+        "%(n)s of these stopped part-way through. Their working files are what let them carry on — delete them and those sections are narrated again from the beginning.",
+        risky.length) + `</div>` : ""),
   });
   if (!ok) return;
   const body = new URLSearchParams();
   on.forEach((p) => body.append("job_id", p.value));
   if (risky.length) body.append("force", "1");
   const r = await fetch("/storage/free", { method: "POST", body });
-  if (!r.ok) { toast("Couldn't free that up"); return; }
+  if (!r.ok) { toast(_("Couldn't free that up")); return; }
   const d = await r.json();
   // The server can refuse a book that has started rendering since this page
   // was drawn; say so rather than claim a clean sweep.
   const skipped = (d.skipped || []).length;
   toast(skipped
-    ? `Freed ${humanBytes(d.freed_bytes)} — ${skipped} book${skipped === 1 ? " was" : "s were"} left alone because ${skipped === 1 ? "it is" : "they are"} in use`
-    : `Freed ${humanBytes(d.freed_bytes)}`);
+    ? ngettext("Freed %(size)s — %(n)s book was left alone because it is in use",
+               "Freed %(size)s — %(n)s books were left alone because they are in use",
+               skipped, { size: humanBytes(d.freed_bytes) })
+    : _("Freed %(size)s", { size: humanBytes(d.freed_bytes) }));
   setTimeout(() => location.reload(), skipped ? 2400 : 800);
 });
 </script>

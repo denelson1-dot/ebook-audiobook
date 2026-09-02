@@ -6,7 +6,7 @@
 {% block head %}
 <header class="page-head" style="align-items:flex-start;flex-direction:column;gap:9px">
   <a class="meta" href="{{ url_for('index') }}" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-3)">
-    {{ ic.icon('arrow-left', 13) }} Library
+    {{ ic.icon('arrow-left', 13) }} {{ _("Library") }}
   </a>
   <div style="display:flex;align-items:flex-end;gap:16px;width:100%;flex-wrap:wrap">
     {{ ic.cover({'has_cover': has_cover, 'id': job_id, 'book': book, 'tint': tint}, '6.5px', 'job-cover') }}
@@ -16,7 +16,7 @@
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <span class="badge {{ state.stage }}" id="stageBadge"><span id="stageText">{{ state.stage|stage }}</span></span>
-      <span class="chip" id="sectionChip">{{ chapters|length }} section{{ 's' if chapters|length != 1 }}</span>
+      <span class="chip" id="sectionChip">{{ ngettext("%(num)d section", "%(num)d sections", chapters|length) }}</span>
     </div>
   </div>
 </header>
@@ -29,19 +29,19 @@
 <section class="panel" id="progressCard" style="padding:16px 18px;margin-bottom:18px">
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <div class="steps" id="stageSteps">
-      <span class="step" data-step="extracted"><i>{{ ic.icon('check', 9) }}</i>Read the book</span>
+      <span class="step" data-step="extracted"><i>{{ ic.icon('check', 9) }}</i>{{ _("Read the book") }}</span>
       <span class="step-line"></span>
-      <span class="step" data-step="rendering"><i></i>Narrate</span>
+      <span class="step" data-step="rendering"><i></i>{{ _("Narrate") }}</span>
       <span class="step-line"></span>
-      <span class="step" data-step="assembling"><i></i>Stitch chapters</span>
+      <span class="step" data-step="assembling"><i></i>{{ _("Stitch chapters") }}</span>
       <span class="step-line"></span>
-      <span class="step" data-step="packaging"><i></i>Package</span>
+      <span class="step" data-step="packaging"><i></i>{{ _("Package") }}</span>
     </div>
     <span class="meta mono" id="countText" style="margin-left:auto">{{ state.rendered_segments }}/{{ state.total_segments }}</span>
   </div>
   <div class="progress tall" style="margin-top:14px"><span id="bar"></span></div>
   <div class="meta" id="remainingText" style="display:none;margin-top:10px"></div>
-  <div class="meta" id="finishedText" style="margin-top:8px">{% if state.finished_at %}Finished {{ state.finished_at|dt }} · {{ state.output_bytes|humanbytes }}{% endif %}</div>
+  <div class="meta" id="finishedText" style="margin-top:8px">{% if state.finished_at %}{{ _("Finished %(when)s · %(size)s", when=state.finished_at|dt, size=state.output_bytes|humanbytes) }}{% endif %}</div>
   <div id="errorText" class="meta" style="color:var(--danger);margin-top:8px">{% if state.error %}{{ state.error }}{% endif %}</div>
   <div id="resultLinks" style="margin-top:14px"></div>
 </section>
@@ -51,18 +51,17 @@
   {# ── what gets narrated ─────────────────────────────────────────────── #}
   <section class="panel">
     <div class="panel-head">
-      <h3>What gets narrated</h3>
+      <h3>{{ _("What gets narrated") }}</h3>
       <span class="meta mono" id="includeSummary"></span>
       <label class="btn sm quiet" style="margin-left:auto;gap:7px">
-        <input type="checkbox" id="selectAllCh"> All
+        <input type="checkbox" id="selectAllCh"> {{ _("All") }}
       </label>
     </div>
 
     <div style="padding:12px 14px 0">
       <div class="note info">
         {{ ic.icon('info', 15) }}
-        <span>Copyright pages, contents and acknowledgements are switched off to begin with — nobody
-          wants four minutes of ISBN read aloud. Click a title to read its first lines and decide for yourself.</span>
+        <span>{{ _("Copyright pages, contents and acknowledgements are switched off to begin with — nobody wants four minutes of ISBN read aloud. Click a title to read its first lines and decide for yourself.") }}</span>
       </div>
     </div>
 
@@ -73,141 +72,126 @@
           <span class="mono dim" style="font-size:11.5px">{{ '%02d' % c.sequence }}</span>
           <button type="button" class="ttl ch-peek" data-ch="{{ c.chapter_id }}">{{ c.title }}</button>
           {% if c.chapter_id == 'intro' or c.chapter_id == 'outro' %}
-            <span class="tag">added by the app</span>
+            <span class="tag">{{ _("added by the app") }}</span>
           {% else %}<span></span>{% endif %}
           {% set mins = (c.char_count / chars_per_audio_second / 60)|round|int %}
-          <span class="mins">{{ '<1 min' if mins < 1 else mins ~ ' min' }}</span>
+          <span class="mins">{{ _("<1 min") if mins < 1 else _("%(n)s min", n=mins) }}</span>
         </div>
       {% endfor %}
     </div>
     <div class="empty" id="chaptersPending" style="{{ 'display:none' if chapters else '' }}">
-      <span class="spinner"></span> Reading the book…
+      <span class="spinner"></span> {{ _("Reading the book…") }}
     </div>
   </section>
 
   {# ── who reads it, and what it will sound like ──────────────────────── #}
   <div class="stack">
     <section class="panel">
-      <div class="panel-head"><h3>Narrator</h3></div>
+      <div class="panel-head"><h3>{{ _("Narrator") }}</h3></div>
       <div class="panel-body">
         <form id="settingsForm">
           <div class="field">
-            <label for="voiceSelect">Voice</label>
+            <label for="voiceSelect">{{ _("Voice") }}</label>
             <select name="voice_id" id="voiceSelect">
               {% for v in voices %}
                 <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}
                         data-pacing="{{ v.pacing if v.pacing is not none }}"
                         data-expressiveness="{{ v.expressiveness if v.expressiveness is not none }}">
-                  {{ v.name }}{{ ' — engine default' if v.is_default }}</option>
+                  {{ v.name }}{{ _(' — engine default') if v.is_default }}</option>
               {% endfor %}
             </select>
           </div>
 
           <div class="field">
-            <label>Expressiveness <span class="dim">— flat to theatrical</span></label>
+            <label>{{ _("Expressiveness") }} <span class="dim">{{ _("— flat to theatrical") }}</span></label>
             <div class="range">
               <input type="range" name="exaggeration" min="0" max="1" step="0.05" value="{{ voice.exaggeration }}">
               <span class="val"></span>
             </div>
-            <p class="hint">How much colour the narrator puts into it.</p>
+            <p class="hint">{{ _("How much colour the narrator puts into it.") }}</p>
           </div>
           <div class="field">
-            <label>Pacing <span class="dim">— measured to hurried</span></label>
+            <label>{{ _("Pacing") }} <span class="dim">{{ _("— measured to hurried") }}</span></label>
             <div class="range">
               <input type="range" name="cfg_weight" min="0" max="1" step="0.05" value="{{ voice.cfg_weight }}">
               <span class="val"></span>
             </div>
-            <p class="hint">How closely it sticks to the reference clip's rhythm. Lower reads faster
-              and looser; higher is more deliberate.</p>
+            <p class="hint">{{ _("How closely it sticks to the reference clip's rhythm. Lower reads faster and looser; higher is more deliberate.") }}</p>
           </div>
 
           <details class="advanced">
-            <summary>Engine settings <span class="dim">— temperature, seed, bitrate…</span></summary>
+            <summary>{{ _("Engine settings") }} <span class="dim">{{ _("— temperature, seed, bitrate…") }}</span></summary>
             {# These are the engine's own knobs under its own names. They are worth
                explaining rather than hiding: someone who opened this disclosure has
                already asked for the detail, so putting it behind a hover would be
                asking twice. One line each, about what you would actually hear. #}
-            <p class="hint" style="margin:10px 0 4px">The defaults are what the engine ships with, and most
-              books never need them touched. Generate a preview after changing one — the difference is
-              usually easier to hear than to predict.</p>
+            <p class="hint" style="margin:10px 0 4px">{{ _("The defaults are what the engine ships with, and most books never need them touched. Generate a preview after changing one — the difference is usually easier to hear than to predict.") }}</p>
             <div style="margin-top:12px">
               <div class="field">
-                <label>Temperature</label>
+                <label>{{ _("Temperature") }}</label>
                 <div class="range"><input type="range" name="temperature" min="0.05" max="1.5" step="0.05" value="{{ voice.temperature }}"><span class="val"></span></div>
-                <p class="hint">How much the delivery varies. Lower is steadier and flatter; higher is
-                  livelier but likelier to mispronounce something or wander.</p>
+                <p class="hint">{{ _("How much the delivery varies. Lower is steadier and flatter; higher is livelier but likelier to mispronounce something or wander.") }}</p>
               </div>
               <div class="field">
-                <label>Repetition penalty</label>
+                <label>{{ _("Repetition penalty") }}</label>
                 <div class="range"><input type="range" name="repetition_penalty" min="1" max="2" step="0.05" value="{{ voice.repetition_penalty }}"><span class="val"></span></div>
-                <p class="hint">Stops the voice getting stuck. Raise it if you hear a stutter or a syllable
-                  looping; too high and it can clip words the book genuinely repeats.</p>
+                <p class="hint">{{ _("Stops the voice getting stuck. Raise it if you hear a stutter or a syllable looping; too high and it can clip words the book genuinely repeats.") }}</p>
               </div>
               <div class="field">
-                <label>min_p <span class="dim">— least likely sounds</span></label>
+                <label>min_p <span class="dim">{{ _("— least likely sounds") }}</span></label>
                 <div class="range"><input type="range" name="min_p" min="0" max="0.5" step="0.01" value="{{ voice.min_p }}"><span class="val"></span></div>
-                <p class="hint">Discards the least plausible sounds before choosing. Higher keeps delivery
-                  safe and even; lower lets it take more risks.</p>
+                <p class="hint">{{ _("Discards the least plausible sounds before choosing. Higher keeps delivery safe and even; lower lets it take more risks.") }}</p>
               </div>
               <div class="field">
-                <label>top_p <span class="dim">— how wide a choice</span></label>
+                <label>top_p <span class="dim">{{ _("— how wide a choice") }}</span></label>
                 <div class="range"><input type="range" name="top_p" min="0.1" max="1" step="0.05" value="{{ voice.top_p }}"><span class="val"></span></div>
-                <p class="hint">Narrows each choice to the likeliest options. 1.00 leaves it open; lower is
-                  steadier and duller.</p>
+                <p class="hint">{{ _("Narrows each choice to the likeliest options. 1.00 leaves it open; lower is steadier and duller.") }}</p>
               </div>
               <div class="field">
-                <label>Seed</label>
+                <label>{{ _("Seed") }}</label>
                 <input type="number" name="seed" value="{{ voice.seed }}">
-                <p class="hint">Fixes the randomness so the same text narrates identically every time.
-                  <strong>0 means don't fix it</strong> — each render then sounds slightly different.</p>
+                <p class="hint">{{ _("Fixes the randomness so the same text narrates identically every time. <strong>0 means don't fix it</strong> — each render then sounds slightly different.") }}</p>
               </div>
               <div class="field">
-                <label>Output bitrate (kbps)</label>
+                <label>{{ _("Output bitrate (kbps)") }}</label>
                 <input type="number" name="bitrate" id="bitrateInput" value="{{ bitrate }}">
-                <p class="hint">Quality of the finished file, not of the narration. 64 is ample for speech;
-                  higher only makes the <code>.m4b</code> bigger.</p>
+                <p class="hint">{{ _("Quality of the finished file, not of the narration. 64 is ample for speech; higher only makes the <code>.m4b</code> bigger.") }}</p>
               </div>
             </div>
-            <p class="hint">Changing any of these re-narrates only the sections it affects. Bitrate changes
-              nothing — it is applied when the file is packaged.</p>
+            <p class="hint">{{ _("Changing any of these re-narrates only the sections it affects. Bitrate changes nothing — it is applied when the file is packaged.") }}</p>
           </details>
 
           {# Its own disclosure rather than the last field of the engine drawer:
              it is the one setting here about *this book* rather than about the
              engine, and it is the one nobody can guess the syntax of. #}
           <details class="advanced">
-            <summary>Pronunciation fixes <span class="dim">— words the narrator says wrong</span></summary>
-            <p class="hint" style="margin:10px 0 8px">Narrators mispronounce names and invented words, and often
-              read an acronym as separate letters — “en ay ess ay” instead of “nassa”. Write the word as the book
-              spells it, then how it should sound — one per line:</p>
+            <summary>{{ _("Pronunciation fixes") }} <span class="dim">{{ _("— words the narrator says wrong") }}</span></summary>
+            <p class="hint" style="margin:10px 0 8px">{{ _("Narrators mispronounce names and invented words, and often read an acronym as separate letters — “en ay ess ay” instead of “nassa”. Write the word as the book spells it, then how it should sound — one per line:") }}</p>
             <div class="tree" style="background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin-bottom:10px">Ryland = Rye-land
 Xenonite = Zee-non-ite
 NASA = Nassa</div>
             <div class="field">
-              <label for="pronBox" class="sr">Pronunciation fixes</label>
+              <label for="pronBox" class="sr">{{ _("Pronunciation fixes") }}</label>
               <textarea id="pronBox" name="pron" rows="4" placeholder="Ryland = Rye-land">{{ pron_text }}</textarea>
             </div>
             <ul class="hint" style="padding-left:16px;margin-top:8px;display:flex;flex-direction:column;gap:5px">
-              <li>Spell the right-hand side <strong>how it sounds</strong>, not how it is spelled. Hyphens
-                between syllables help; the narrator reads it as ordinary words.</li>
-              <li>Whole words only — <code>Grace</code> never changes <code>Graceful</code>.</li>
-              <li><strong>Typed exactly, capitals and all.</strong> A fix written <code>NASA</code> changes
-                <code>NASA</code> and leaves <code>nasa</code> alone — so fixing an acronym never touches an
-                ordinary word spelled the same way.</li>
-              <li>Only the sections containing that word are narrated again, so a fix costs minutes, not hours.</li>
-              <li>Generate a preview of a section that uses the word to hear whether it worked.</li>
+              <li>{{ _("Spell the right-hand side <strong>how it sounds</strong>, not how it is spelled. Hyphens between syllables help; the narrator reads it as ordinary words.") }}</li>
+              <li>{{ _("Whole words only — <code>Grace</code> never changes <code>Graceful</code>.") }}</li>
+              <li>{{ _("<strong>Typed exactly, capitals and all.</strong> A fix written <code>NASA</code> changes <code>NASA</code> and leaves <code>nasa</code> alone — so fixing an acronym never touches an ordinary word spelled the same way.") }}</li>
+              <li>{{ _("Only the sections containing that word are narrated again, so a fix costs minutes, not hours.") }}</li>
+              <li>{{ _("Generate a preview of a section that uses the word to hear whether it worked.") }}</li>
             </ul>
           </details>
 
           <div class="note info" id="staleNote" hidden style="margin-top:12px;padding:8px 11px">
             {{ ic.icon('info', 14) }}
-            <span>Estimates are out of date.
-              <button type="button" class="linkbtn" id="staleMeasure">Update them</button> (~30s)</span>
+            <span>{{ _("Estimates are out of date.") }}
+              <button type="button" class="linkbtn" id="staleMeasure">{{ _("Update them") }}</button> (~30s)</span>
           </div>
 
           <div class="btn-row" style="margin-top:14px">
-            <button type="button" class="btn" id="saveBtn">Save settings</button>
-            <button type="button" class="btn ghost" id="resetBtn">Reset to defaults</button>
+            <button type="button" class="btn" id="saveBtn">{{ _("Save settings") }}</button>
+            <button type="button" class="btn ghost" id="resetBtn">{{ _("Reset to defaults") }}</button>
           </div>
         </form>
       </div>
@@ -215,13 +199,13 @@ NASA = Nassa</div>
 
     <section class="panel">
       <div class="panel-head">
-        <h3>Hear it first</h3>
-        <span class="dim" style="margin-left:auto;font-size:11px">same engine as the full render</span>
+        <h3>{{ _("Hear it first") }}</h3>
+        <span class="dim" style="margin-left:auto;font-size:11px">{{ _("same engine as the full render") }}</span>
       </div>
       <div class="panel-body">
         <div class="field-row">
           <div class="field">
-            <label for="previewChapter">Section</label>
+            <label for="previewChapter">{{ _("Section") }}</label>
             <select id="previewChapter">
               {% for c in chapters %}
                 <option value="{{ c.chapter_id }}" {{ 'selected' if c.chapter_id == default_chapter_id }}>{{ c.sequence }} · {{ c.title }}</option>
@@ -229,36 +213,36 @@ NASA = Nassa</div>
             </select>
           </div>
           <div class="field">
-            <label for="previewSeconds">Length (seconds)</label>
+            <label for="previewSeconds">{{ _("Length (seconds)") }}</label>
             <input type="number" id="previewSeconds" value="30" min="5" max="120">
           </div>
         </div>
         <div class="btn-row">
-          <button type="button" class="btn primary" id="previewBtn">{{ ic.icon('play', 13) }} Generate a preview</button>
-          <button type="button" class="btn danger" id="previewStop" style="display:none">{{ ic.icon('stop', 13) }} Stop preview</button>
+          <button type="button" class="btn primary" id="previewBtn">{{ ic.icon('play', 13) }} {{ _("Generate a preview") }}</button>
+          <button type="button" class="btn danger" id="previewStop" style="display:none">{{ ic.icon('stop', 13) }} {{ _("Stop preview") }}</button>
         </div>
         <audio id="previewAudio" controls style="display:none;width:100%;margin-top:12px"></audio>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h3>This book on disk</h3></div>
+      <div class="panel-head"><h3>{{ _("This book on disk") }}</h3></div>
       <div class="panel-body">
-        <p class="meta">Using <strong id="diskBytes" class="mono">{{ disk_bytes|humanbytes }}</strong><span id="interWrap"
+        <p class="meta">{{ _("Using") }} <strong id="diskBytes" class="mono">{{ disk_bytes|humanbytes }}</strong><span id="interWrap"
            style="{{ '' if intermediate_bytes else 'display:none' }}"> — <strong id="interBytes" class="mono">{{ intermediate_bytes|humanbytes }}</strong>
-           of that is raw narration audio you can reclaim once the book sounds right</span>.</p>
+           {{ _("of that is raw narration audio you can reclaim once the book sounds right") }}</span>.</p>
         <div class="btn-row" style="margin-top:12px">
           <button type="button" class="btn warn" id="cleanupBtn" {{ 'disabled' if not intermediate_bytes }}>
-            {{ ic.icon('sparkle', 14) }} Free up space
+            {{ ic.icon('sparkle', 14) }} {{ _("Free up space") }}
           </button>
           <button type="button" class="btn sm" id="revealOutput" hidden>
-            {{ ic.icon('folder', 13) }} Show in folder
+            {{ ic.icon('folder', 13) }} {{ _("Show in folder") }}
           </button>
-          <a class="btn ghost sm" href="{{ url_for('storage_page') }}">All books…</a>
+          <a class="btn ghost sm" href="{{ url_for('storage_page') }}">{{ _("All books…") }}</a>
           <form method="post" action="{{ url_for('delete_job', job_id=job_id) }}" style="margin-left:auto"
-                data-confirm="Delete “{{ book.title }}”?"
-                data-confirm-detail="Everything belonging to it goes: the imported ebook, the working files, and the finished audiobook if there is one.">
-            <button class="btn danger sm" type="submit">{{ ic.icon('trash', 13) }} Delete</button>
+                data-confirm="{{ _("Delete “%(title)s”?", title=book.title) }}"
+                data-confirm-detail="{{ _("Everything belonging to it goes: the imported ebook, the working files, and the finished audiobook if there is one.") }}">
+            <button class="btn danger sm" type="submit">{{ ic.icon('trash', 13) }} {{ _("Delete") }}</button>
           </form>
         </div>
       </div>
@@ -271,47 +255,47 @@ NASA = Nassa</div>
 {% block commit %}
 <footer class="commit">
   <button type="button" class="btn remeasure" id="remeasureBtn"
-          title="Narrate a few seconds to measure this voice, then update these figures">
+          title="{{ _("Narrate a few seconds to measure this voice, then update these figures") }}">
     {{ ic.icon('redo', 16) }}
   </button>
   <div class="stats" style="gap:26px">
-    <div class="stat"><span class="v" id="estAudio">—</span><span class="k">of audio</span></div>
-    <div class="stat"><span class="v" id="estRender">—</span><span class="k">to narrate</span></div>
-    <div class="stat"><span class="v" id="estSize">—</span><span class="k">final .m4b</span></div>
-    <div class="stat"><span class="v" id="estTemp" style="color:var(--text-2)">—</span><span class="k">working files, freed later</span></div>
+    <div class="stat"><span class="v" id="estAudio">—</span><span class="k">{{ _("of audio") }}</span></div>
+    <div class="stat"><span class="v" id="estRender">—</span><span class="k">{{ _("to narrate") }}</span></div>
+    <div class="stat"><span class="v" id="estSize">—</span><span class="k">{{ _("final .m4b") }}</span></div>
+    <div class="stat"><span class="v" id="estTemp" style="color:var(--text-2)">—</span><span class="k">{{ _("working files, freed later") }}</span></div>
   </div>
   <div class="hint" id="estBasis" style="margin:0;flex-basis:100%;order:9"></div>
 
   <div style="margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
     <div style="text-align:right">
       <div class="seg" id="modeToggle" role="tablist" style="margin-bottom:5px">
-        <button type="button" class="seg-btn {{ 'on' if output_mode != 'folder' }}" data-mode="library">Plex library</button>
-        <button type="button" class="seg-btn {{ 'on' if output_mode == 'folder' }}" data-mode="folder">A folder</button>
+        <button type="button" class="seg-btn {{ 'on' if output_mode != 'folder' }}" data-mode="library">{{ _("Plex library") }}</button>
+        <button type="button" class="seg-btn {{ 'on' if output_mode == 'folder' }}" data-mode="folder">{{ _("A folder") }}</button>
       </div>
       <div id="libraryPane" style="{{ 'display:none' if output_mode == 'folder' }}">
         {% if library_target %}
           <button type="button" class="pathlink meta mono" id="revealLibrary" style="font-size:11px"
-                  title="Open this folder">
+                  title="{{ _("Open this folder") }}">
             {{ ic.icon('folder', 13) }}<span id="libraryTarget">{{ library_target }}</span>
           </button>
         {% else %}
           <div class="meta" id="libraryTarget" style="font-size:11px">
-            <a href="{{ url_for('settings_page') }}">Choose a library folder</a> — or save to a folder instead
+            <a href="{{ url_for('settings_page') }}">{{ _("Choose a library folder") }}</a> {{ _("— or save to a folder instead") }}
           </div>
         {% endif %}
       </div>
       <div id="folderPane" style="{{ 'display:none' if output_mode != 'folder' }}">
-        <button type="button" class="btn sm quiet" id="outDirBtn">{{ ic.icon('folder', 13) }} Choose…</button>
+        <button type="button" class="btn sm quiet" id="outDirBtn">{{ ic.icon('folder', 13) }} {{ _("Choose…") }}</button>
         <button type="button" class="pathlink meta mono" id="revealFolderBtn" style="font-size:11px"
-                title="Open this folder">
+                title="{{ _("Open this folder") }}">
           {{ ic.icon('folder', 13) }}<span id="outDirText">{{ folder_dir }}</span>
         </button>
         <input type="hidden" id="outputDir" value="{{ folder_dir }}">
       </div>
       <div class="sr" id="outFilename">{{ output_filename }}</div>
     </div>
-    <button type="button" class="btn primary lg" id="renderBtn">{{ ic.icon('play', 15) }} Narrate the book</button>
-    <button type="button" class="btn danger lg" id="renderStop" style="display:none">{{ ic.icon('stop', 14) }} Stop</button>
+    <button type="button" class="btn primary lg" id="renderBtn">{{ ic.icon('play', 15) }} {{ _("Narrate the book") }}</button>
+    <button type="button" class="btn danger lg" id="renderStop" style="display:none">{{ ic.icon('stop', 14) }} {{ _("Stop") }}</button>
   </div>
 </footer>
 {% endblock %}
@@ -360,26 +344,26 @@ async function saveSettings() {
   try {
     r = await fetch(`/job/${jobId}/settings`, { method: "POST", body: formData() });
   } catch (e) {
-    toast("Couldn't reach the app to save the settings");
+    toast(_("Couldn't reach the app to save the settings"));
     throw e;
   }
   if (!r.ok) {
-    toast("Couldn't save the settings");
+    toast(_("Couldn't save the settings"));
     throw new Error("settings not saved: " + r.status);
   }
   dirty = false;
 }
 
 const saveBtn = document.getElementById("saveBtn");
-saveBtn.addEventListener("click", () => withBusy(saveBtn, "Saving…", async () => {
+saveBtn.addEventListener("click", () => withBusy(saveBtn, _("Saving…"), async () => {
   await saveSettings();
-  toast("Settings saved");
+  toast(_("Settings saved"));
 }));
 document.getElementById("resetBtn").addEventListener("click", () => {
   for (const [k, v] of Object.entries(DEFAULTS)) {
     const el = form.querySelector(`[name=${k}]`); if (el) el.value = v;
   }
-  syncRanges(); computeEstimate(); toast("Reset to defaults (remember to Save)");
+  syncRanges(); computeEstimate(); toast(_("Reset to defaults (remember to Save)"));
 });
 // Bitrate changes the final-size estimate live.
 document.getElementById("bitrateInput").addEventListener("input", computeEstimate);
@@ -389,7 +373,7 @@ let fast = 0;
 function bump() { fast = 8; }
 
 const previewBtn = document.getElementById("previewBtn");
-previewBtn.addEventListener("click", () => withBusy(previewBtn, "Starting…", async () => {
+previewBtn.addEventListener("click", () => withBusy(previewBtn, _("Starting…"), async () => {
   await saveSettings();
   await postForm(`/job/${jobId}/preview`, {
     seconds: document.getElementById("previewSeconds").value,
@@ -397,7 +381,7 @@ previewBtn.addEventListener("click", () => withBusy(previewBtn, "Starting…", a
   });
   // The voice model has to load first, which is the slow part and produces no
   // progress of its own for a while — so say that rather than just "started".
-  toast("Warming up the voice — the first preview takes a moment");
+  toast(_("Warming up the voice — the first preview takes a moment"));
   bump();
 }));
 const outDirInput = document.getElementById("outputDir");
@@ -460,7 +444,7 @@ function computeEstimate() {
   set("estTemp", chars ? humanBytes(tempBytes) : "—");
   if (!chars) { set("estRender", "—"); }
   else if (renderRate && renderRate > 0) { set("estRender", "~" + fmtDuration(chars / renderRate)); }
-  else { set("estRender", "after a preview"); }
+  else { set("estRender", _("after a preview")); }
 
   const sizeEl = document.getElementById("estSize");
   if (sizeEl) sizeEl.style.color = sizeBytes > SIZE_WARN_BYTES ? "var(--warn)" : "";
@@ -477,8 +461,8 @@ function paintEstimateBasis() {
   if (!el) return;
   const measured = measuredHere && audioRate > 0;
   el.textContent = measured
-    ? "Measured from this voice at these settings."
-    : "A rough guide — a generic reading speed that ignores the voice and pacing. Measure it for a real figure.";
+    ? _("Measured from this voice at these settings.")
+    : _("A rough guide — a generic reading speed that ignores the voice and pacing. Measure it for a real figure.");
   if (btn) btn.classList.toggle("stale", !measured);
   if (note) note.hidden = measured;
 }
@@ -490,7 +474,7 @@ function paintChapterMinutes() {
     const cell = box.closest(".chrow")?.querySelector(".mins");
     if (!cell) return;
     const mins = Math.round((+box.dataset.chars || 0) / rate / 60);
-    cell.textContent = mins < 1 ? "<1 min" : mins + " min";
+    cell.textContent = mins < 1 ? _("<1 min") : _("%(n)s min", { n: mins });
   });
 }
 
@@ -519,25 +503,22 @@ async function renderPlanBody() {
   const destTight = !sameVolume && outFree !== null && outFree < sizeBytes * 1.15;
   const tight = workTight || destTight;
   const destRow = (!sameVolume && outFree !== null)
-    ? `<div class="plan-row"><span>Free space where the audiobook is saved</span><strong class="${destTight ? "bad" : ""}">${humanBytes(outFree)}</strong></div>`
+    ? `<div class="plan-row"><span>${_("Free space where the audiobook is saved")}</span><strong class="${destTight ? "bad" : ""}">${humanBytes(outFree)}</strong></div>`
     : "";
   const rows = `
-    <div class="plan-row"><span>Sections to narrate</span><strong>${count}</strong></div>
-    <div class="plan-row"><span>Audio length</span><strong>${chars ? fmtDuration(audioSecs) : "—"}</strong></div>
-    ${renderRate ? `<div class="plan-row"><span>Estimated time to narrate</span><strong>~${fmtDuration(chars / renderRate)}</strong></div>` : ""}
-    <div class="plan-row highlight"><span>Working files, at peak</span><strong>${humanBytes(tempBytes)}</strong></div>
-    <div class="plan-row"><span>Final audiobook</span><strong>${humanBytes(sizeBytes)}</strong></div>
-    <div class="plan-row"><span>Free space for working files</span><strong class="${workTight ? "bad" : ""}">${humanBytes(free)}</strong></div>
+    <div class="plan-row"><span>${_("Sections to narrate")}</span><strong>${count}</strong></div>
+    <div class="plan-row"><span>${_("Audio length")}</span><strong>${chars ? fmtDuration(audioSecs) : "—"}</strong></div>
+    ${renderRate ? `<div class="plan-row"><span>${_("Estimated time to narrate")}</span><strong>~${fmtDuration(chars / renderRate)}</strong></div>` : ""}
+    <div class="plan-row highlight"><span>${_("Working files, at peak")}</span><strong>${humanBytes(tempBytes)}</strong></div>
+    <div class="plan-row"><span>${_("Final audiobook")}</span><strong>${humanBytes(sizeBytes)}</strong></div>
+    <div class="plan-row"><span>${_("Free space for working files")}</span><strong class="${workTight ? "bad" : ""}">${humanBytes(free)}</strong></div>
     ${destRow}`;
   const explain = `
-    <p class="plan-explain">While it narrates, every piece is saved as raw uncompressed audio — about
-    <strong>${humanBytes(tempBytes)}</strong> in total. That is temporary: it lets you change a setting and
-    re-narrate in minutes instead of redoing the whole book. The finished audiobook is only
-    <strong>${humanBytes(sizeBytes)}</strong>.</p>
-    <p class="plan-explain">Reclaim the working files from <strong>Storage</strong> whenever the book sounds
-    right — or have it happen automatically.</p>`;
+    <p class="plan-explain">${_("While it narrates, every piece is saved as raw uncompressed audio — about <strong>%(temp)s</strong> in total. That is temporary: it lets you change a setting and re-narrate in minutes instead of redoing the whole book. The finished audiobook is only <strong>%(size)s</strong>.",
+      { temp: humanBytes(tempBytes), size: humanBytes(sizeBytes) })}</p>
+    <p class="plan-explain">${_("Reclaim the working files from <strong>Storage</strong> whenever the book sounds right — or have it happen automatically.")}</p>`;
   const warn = tight
-    ? `<div class="plan-warn">You may not have enough free space for the working files. Free up some disk space first, or narrate fewer sections.</div>`
+    ? `<div class="plan-warn">${_("You may not have enough free space for the working files. Free up some disk space first, or narrate fewer sections.")}</div>`
     : "";
   // Offered here rather than buried in Settings: this is the moment the user is
   // committing hours of machine time, so it's when the trade-off is relevant.
@@ -548,7 +529,7 @@ async function renderPlanBody() {
     </label>`).join("");
   const powerBlock = `
     <div class="plan-power">
-      <div class="plan-power-title">While this runs</div>
+      <div class="plan-power-title">${_("While this runs")}</div>
       <div class="power-modes">${powerRows}</div>
     </div>`;
   return { bodyHtml: `<div class="plan-table">${rows}</div>${explain}${powerBlock}${warn}`, tight };
@@ -560,15 +541,15 @@ async function renderPlanBody() {
 let planOpen = false;
 document.getElementById("renderBtn").addEventListener("click", async () => {
   const { chars } = includedChars();
-  if (!chars) { toast("Choose at least one section to narrate."); return; }
+  if (!chars) { toast(_("Choose at least one section to narrate.")); return; }
   if (planOpen) return;
   planOpen = true;
   try {
     const plan = await renderPlanBody();
     const ok = await confirmDialog({
-      title: "Ready to narrate",
+      title: _("Ready to narrate"),
       bodyHtml: plan.bodyHtml,
-      confirmLabel: plan.tight ? "Narrate anyway" : "Start",
+      confirmLabel: plan.tight ? _("Narrate anyway") : _("Start"),
       danger: plan.tight,
     });
     if (!ok) return;
@@ -579,12 +560,12 @@ document.getElementById("renderBtn").addEventListener("click", async () => {
     if (outputMode === "folder") body.output_dir = outDirInput.value;
     const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
     if (!r.ok) {
-      let msg = "Couldn't start";
+      let msg = _("Couldn't start");
       try { msg = (await r.json()).error || msg; } catch {}
       toast(msg);
       return;
     }
-    toast("Narrating…"); bump();
+    toast(_("Narrating…")); bump();
   } finally {
     planOpen = false;
   }
@@ -593,16 +574,16 @@ document.getElementById("renderBtn").addEventListener("click", async () => {
 // numbers. Cheap, and the audio it makes is kept for the full render.
 const remeasureBtn = document.getElementById("remeasureBtn");
 async function startMeasure(btn) {
-  await withBusy(btn || remeasureBtn, "Measuring…", async () => {
+  await withBusy(btn || remeasureBtn, _("Measuring…"), async () => {
     await saveSettings();  // measure what is on screen, not what was last saved
     const r = await fetch(`/job/${jobId}/measure`, { method: "POST" });
     if (!r.ok) {
-      let msg = "Couldn't measure just now";
+      let msg = _("Couldn't measure just now");
       try { msg = (await r.json()).error || msg; } catch {}
       toast(msg);
       return;
     }
-    toast("Narrating a few seconds to measure this voice…");
+    toast(_("Narrating a few seconds to measure this voice…"));
     bump();
   });
 }
@@ -634,13 +615,13 @@ form.addEventListener("change", (e) => {
   }
   if (moved) {
     syncRanges();
-    toast("Settings adjusted to suit this voice");
+    toast(_("Settings adjusted to suit this voice"));
   }
   if (measuredHere) { measuredHere = false; }
   computeEstimate();
 });
 
-async function stop() { await postForm(`/job/${jobId}/cancel`, {}); toast("Stopping…"); bump(); }
+async function stop() { await postForm(`/job/${jobId}/cancel`, {}); toast(_("Stopping…")); bump(); }
 document.getElementById("previewStop").addEventListener("click", stop);
 document.getElementById("renderStop").addEventListener("click", stop);
 
@@ -650,11 +631,11 @@ if (cleanupBtn) cleanupBtn.addEventListener("click", async () => {
   cleanupBtn.disabled = true;
   try {
     const r = await fetch(`/job/${jobId}/cleanup`, { method: "POST" });
-    if (!r.ok) { toast("Can't reclaim those while it's working"); cleanupBtn.disabled = false; return; }
+    if (!r.ok) { toast(_("Can't reclaim those while it's working")); cleanupBtn.disabled = false; return; }
     const d = await r.json();
-    toast("Freed " + humanBytes(d.freed_bytes));
+    toast(_("Freed %(size)s", { size: humanBytes(d.freed_bytes) }));
     await refreshStorage();  // reflect the new (lower) usage immediately, no reload
-  } catch { toast("Couldn't free that up"); cleanupBtn.disabled = false; }
+  } catch { toast(_("Couldn't free that up")); cleanupBtn.disabled = false; }
 });
 
 // Chapters are extracted in the background after import, so the page may load
@@ -676,7 +657,7 @@ async function ensureChapters() {
   sel.innerHTML = data.chapters.map(c =>
     `<option value="${c.chapter_id}"${c.chapter_id === data.default_chapter_id ? " selected" : ""}>${c.sequence} · ${escapeHtml(c.title)}</option>`).join("");
   document.getElementById("sectionChip").textContent =
-    data.chapters.length + " section" + (data.chapters.length === 1 ? "" : "s");
+    ngettext("%(n)s section", "%(n)s sections", data.chapters.length);
   document.getElementById("chaptersBody").innerHTML = data.chapters.map(chapterRowHtml).join("");
   document.getElementById("chaptersPending").style.display = "none";
   syncChapterUI();
@@ -689,8 +670,8 @@ function chapterRowHtml(c) {
     <input type="checkbox" class="ch-include" data-ch="${c.chapter_id}" data-chars="${c.char_count}"${c.include ? " checked" : ""}>
     <span class="mono dim" style="font-size:11.5px">${String(c.sequence).padStart(2, "0")}</span>
     <button type="button" class="ttl ch-peek" data-ch="${c.chapter_id}">${escapeHtml(c.title)}</button>
-    ${synthetic ? '<span class="tag">added by the app</span>' : "<span></span>"}
-    <span class="mins">${mins < 1 ? "&lt;1 min" : mins + " min"}</span>
+    ${synthetic ? `<span class="tag">${escapeHtml(_("added by the app"))}</span>` : "<span></span>"}
+    <span class="mins">${mins < 1 ? escapeHtml(_("<1 min")) : escapeHtml(_("%(n)s min", { n: mins }))}</span>
   </div>`;
 }
 
@@ -703,13 +684,13 @@ function syncChapterUI() {
   all.checked = boxes.length > 0 && inc === boxes.length;
   all.indeterminate = inc > 0 && inc < boxes.length;
   document.getElementById("includeSummary").textContent =
-    boxes.length ? `${inc} of ${boxes.length} sections` : "";
+    boxes.length ? _("%(inc)s of %(total)s sections", { inc, total: boxes.length }) : "";
   computeEstimate();
 }
 
 async function persistIncludes(map) {
   try { await postJSON(`/job/${jobId}/chapters/include`, { includes: map }); }
-  catch { toast("Couldn't save that choice"); }
+  catch { toast(_("Couldn't save that choice")); }
 }
 
 async function onChapterToggle(e) {
@@ -734,16 +715,18 @@ async function onSelectAll(e) {
 
 // ---- Chapter text peek (slide-over drawer) -----------------------------------
 async function peekChapter(chapterId) {
-  const d = openDrawer({ title: "Loading…", loading: true });
+  const d = openDrawer({ title: _("Loading…"), loading: true });
   let data;
   try { data = await getJSON(`/job/${jobId}/chapter/${encodeURIComponent(chapterId)}/text`); }
-  catch { d.setTitle("Couldn't load that section"); d.setBody(`<div class="empty">This section's text isn't available.</div>`); return; }
-  d.setTitle(data.title || "(untitled)", `Section ${data.sequence} · ${data.char_count.toLocaleString()} characters`);
+  catch { d.setTitle(_("Couldn't load that section")); d.setBody(`<div class="empty">${_("This section's text isn't available.")}</div>`); return; }
+  d.setTitle(data.title || _("(untitled)"), _("Section %(n)s · %(chars)s characters",
+    { n: data.sequence, chars: data.char_count.toLocaleString(EBAB_LANG) }));
   const text = (data.excerpt || "").trim();
   if (!text) {
-    d.setBody(`<div class="empty">This section has no readable text — it's likely a cover, an image, or a blank page. A good one to switch off.</div>`);
+    d.setBody(`<div class="empty">${_("This section has no readable text — it's likely a cover, an image, or a blank page. A good one to switch off.")}</div>`);
   } else {
-    const tail = data.truncated ? `<p class="hint" style="margin-top:12px">… showing the opening ${data.excerpt.length.toLocaleString()} characters of ${data.char_count.toLocaleString()}.</p>` : "";
+    const tail = data.truncated ? `<p class="hint" style="margin-top:12px">${_("… showing the opening %(shown)s characters of %(total)s.",
+      { shown: data.excerpt.length.toLocaleString(EBAB_LANG), total: data.char_count.toLocaleString(EBAB_LANG) })}</p>` : "";
     d.setBody(`<div class="peek-text">${escapeHtml(text)}</div>${tail}`);
   }
   // Let the user include/exclude straight from the drawer.
@@ -757,18 +740,18 @@ async function peekChapter(chapterId) {
   cb.checked = box ? box.checked : true;
   cb.disabled = !box || box.disabled;
   label.appendChild(cb);
-  label.appendChild(document.createTextNode("Narrate this section"));
+  label.appendChild(document.createTextNode(_("Narrate this section")));
   cb.addEventListener("change", async () => {
     if (!box) return;
     box.checked = cb.checked;
     box.closest(".chrow").classList.toggle("excluded", !cb.checked);
     syncChapterUI();
     await persistIncludes({ [chapterId]: cb.checked });
-    toast(cb.checked ? "Will be narrated" : "Left out");
+    toast(cb.checked ? _("Will be narrated") : _("Left out"));
   });
   const closeBtn = document.createElement("button");
   closeBtn.className = "btn ghost";
-  closeBtn.textContent = "Close";
+  closeBtn.textContent = _("Close");
   closeBtn.addEventListener("click", () => d.close());
   foot.appendChild(label);
   foot.appendChild(closeBtn);
@@ -801,20 +784,25 @@ async function refreshStorage() {
 
 // The stage in this person's words, with the detail that makes it useful.
 const STAGE_DETAIL = {
-  extracting: () => "Reading the book…",
-  preparing:  () => "Warming up — loading the voice…",
-  assembling: () => "Stitching chapters together…",
-  packaging:  () => "Packaging the audiobook…",
+  extracting: () => _("Reading the book…"),
+  preparing:  () => _("Warming up — loading the voice…"),
+  assembling: () => _("Stitching chapters together…"),
+  packaging:  () => _("Packaging the audiobook…"),
 };
 function statusLabel(s) {
   const extra = STAGE_DETAIL[s.stage];
   if (extra) return extra(s);
   if (s.stage === "previewing") {
-    return s.preview_progress ? `Making a preview… ${Math.round(100 * s.preview_progress)}%` : "Making a preview…";
+    return s.preview_progress
+      ? _("Making a preview… %(pct)s%%", { pct: Math.round(100 * s.preview_progress) })
+      : _("Making a preview…");
   }
-  if (s.stage === "rendering") return `Narrating — section ${s.rendered_segments} of ${s.total_segments}`;
+  if (s.stage === "rendering") {
+    return _("Narrating — section %(done)s of %(total)s", { done: s.rendered_segments, total: s.total_segments });
+  }
   if (s.stage === "cancelled" && s.total_segments) {
-    return `Stopped by you — ${Math.round(100 * s.rendered_segments / s.total_segments)}% narrated and kept`;
+    return _("Stopped by you — %(pct)s%% narrated and kept",
+             { pct: Math.round(100 * s.rendered_segments / s.total_segments) });
   }
   return STAGE_LABELS[s.stage] || s.stage;
 }
@@ -864,7 +852,7 @@ function updateRemaining(s) {
   const frac = s.rendered_segments / s.total_segments;
   if (elapsed <= 0 || frac <= 0) return;
   let remaining = (elapsed / frac - elapsed) * 1.1;  // pad ~10% to avoid over-promising
-  etaText = remaining < 30 ? "Finishing up…" : "About " + fmtDuration(remaining) + " remaining";
+  etaText = remaining < 30 ? _("Finishing up…") : _("About %(time)s remaining", { time: fmtDuration(remaining) });
   etaShownAt = now;
   el.textContent = etaText; el.style.display = "";
 }
@@ -905,7 +893,7 @@ async function pollOnce() {
     const pending = document.getElementById("chaptersPending");
     if (pending && !pending.dataset.empty) {
       pending.dataset.empty = "1";
-      pending.textContent = "No readable sections were found in this book.";
+      pending.textContent = _("No readable sections were found in this book.");
     }
   }
 
@@ -941,10 +929,10 @@ async function pollOnce() {
   // "Finished <date>" line under a live progress bar say the wrong thing.
   const hasResult = !working && s.output_path && s.output_path.endsWith(".m4b");
   document.getElementById("resultLinks").innerHTML = hasResult
-    ? `<a class="btn primary" href="/job/${jobId}/download">Save the .m4b</a>` : "";
+    ? `<a class="btn primary" href="/job/${jobId}/download">${_("Save the .m4b")}</a>` : "";
   revealOutputBtn.hidden = !hasResult;
   document.getElementById("finishedText").textContent = (hasResult && s.finished_at)
-    ? "Finished " + new Date(s.finished_at).toLocaleString() +
+    ? _("Finished %(when)s", { when: new Date(s.finished_at).toLocaleString(EBAB_LANG) }) +
       (s.output_bytes ? " · " + humanBytes(s.output_bytes) : "")
     : "";
 
@@ -967,7 +955,7 @@ async function pollOnce() {
         // permission expires with the click, and this runs seconds later — so
         // when the browser refuses, say the preview is there rather than let a
         // thirty-second wait end in silence.
-        a.play().catch(() => toast("Preview ready — press play to hear it"));
+        a.play().catch(() => toast(_("Preview ready — press play to hear it")));
       }
       previewRanHere = false;
     }

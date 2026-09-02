@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set nav = 'library' %}
 {% import "_icons.html" as ic %}
-{% block title %}Library · ebook·audiobook{% endblock %}
+{% block title %}{{ _("Library") }} · ebook·audiobook{% endblock %}
 
 {% macro shelf(items) %}
 <div class="shelf">
@@ -12,10 +12,10 @@
         <span class="acts">
           {% if j.state.output_path and j.state.output_path.endswith('.m4b') %}
             <span class="btn" onclick="event.preventDefault();location.href='{{ url_for('download', job_id=j.id) }}'">
-              {{ ic.icon('download', 12) }} Save
+              {{ ic.icon('download', 12) }} {{ _("Save") }}
             </span>
           {% else %}
-            <span class="btn">Open</span>
+            <span class="btn">{{ _("Open") }}</span>
           {% endif %}
         </span>
       </span>
@@ -27,7 +27,7 @@
           <span class="mono">{{ j.bytes|humanbytes }}</span>
         {% elif j.state.stage in ('cancelled', 'error') %}
           <span class="badge {{ j.state.stage }}">{{ j.state.stage|stage }}{% if j.state.total_segments %}
-            at {{ (100 * j.state.rendered_segments / j.state.total_segments)|round|int }}%{% endif %}</span>
+            {{ _("at %(pct)s%%", pct=(100 * j.state.rendered_segments / j.state.total_segments)|round|int) }}{% endif %}</span>
         {% else %}
           <span class="badge {{ j.state.stage }}">{{ j.state.stage|stage }}</span>
         {% endif %}
@@ -40,17 +40,17 @@
 {% block head %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Library</h1>
+    <h1 class="page-title">{{ _("Library") }}</h1>
     <p class="page-sub" id="libraryMeta">
-      {% if jobs %}{{ jobs|length }} book{{ 's' if jobs|length != 1 }} ·
-        <span class="mono">{{ total_bytes|humanbytes }}</span> on disk{% endif %}
+      {% if jobs %}{{ ngettext("%(num)d book", "%(num)d books", jobs|length) }} ·
+        <span class="mono">{{ total_bytes|humanbytes }}</span> {{ _("on disk") }}{% endif %}
     </p>
   </div>
   <div class="head-actions">
     <a class="btn warn" id="libraryFree" href="{{ url_for('storage_page') }}" hidden>
       {{ ic.icon('sparkle', 13) }} <span id="libraryFreeText"></span>
     </a>
-    <a class="btn primary" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} Add a book</a>
+    <a class="btn primary" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} {{ _("Add a book") }}</a>
   </div>
 </header>
 {% endblock %}
@@ -62,23 +62,22 @@
      this person and an audiobook are the only things on screen. #}
   <div class="welcome">
     <div style="text-align:center;margin-bottom:30px">
-      <h1 class="serif" style="font-size:40px;line-height:1.1;max-width:15ch;margin:0 auto">A book you own, read aloud to you</h1>
+      <h1 class="serif" style="font-size:40px;line-height:1.1;max-width:15ch;margin:0 auto">{{ _("A book you own, read aloud to you") }}</h1>
       <p class="meta" style="margin-top:12px;font-size:14px;max-width:52ch;margin-left:auto;margin-right:auto">
-        Point it at a DRM-free ebook and it produces a chaptered <code>.m4b</code>, tagged and filed for Plex.
-        It all happens on this computer — no account, no cloud, nothing uploaded.
+        {{ _("Point it at a DRM-free ebook and it produces a chaptered <code>.m4b</code>, tagged and filed for Plex. It all happens on this computer — no account, no cloud, nothing uploaded.") }}
       </p>
     </div>
 
     <div class="panel">
       <div class="panel-head">
-        <h3>Before your first book</h3>
+        <h3>{{ _("Before your first book") }}</h3>
         <span class="meta" style="margin-left:auto" id="setupCount"></span>
       </div>
       <div id="setupList">
         <div class="setup-row">
           <span class="setup-mark"></span>
           <div style="flex:1">
-            <b style="font-size:13.5px;font-weight:600">Checking what's installed…</b>
+            <b style="font-size:13.5px;font-weight:600">{{ _("Checking what's installed…") }}</b>
           </div>
         </div>
       </div>
@@ -86,13 +85,13 @@
         <span class="setup-mark {{ 'ok' if audiobooks_root else '' }}">{% if audiobooks_root %}{{ ic.icon('check', 12) }}{% endif %}</span>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:9px">
-            <b style="font-size:13.5px;font-weight:600">Choose where finished books go</b>
-            {% if not audiobooks_root %}<span class="chip">can wait</span>{% endif %}
+            <b style="font-size:13.5px;font-weight:600">{{ _("Choose where finished books go") }}</b>
+            {% if not audiobooks_root %}<span class="chip">{{ _("can wait") }}</span>{% endif %}
           </div>
           {% if audiobooks_root %}
             <p class="meta" style="margin-top:3px"><span class="mono">{{ audiobooks_root }}</span></p>
           {% else %}
-            <p class="meta" style="margin-top:3px;line-height:1.5">Usually the folder Plex already watches. Books are filed into it like this:</p>
+            <p class="meta" style="margin-top:3px;line-height:1.5">{{ _("Usually the folder Plex already watches. Books are filed into it like this:") }}</p>
             <div class="tree" style="margin-top:8px;font-size:11px">Ursula K. Le Guin/
   The Left Hand of Darkness (1969)/
     The Left Hand of Darkness.m4b
@@ -100,14 +99,14 @@
           {% endif %}
         </div>
         <div>
-          <button type="button" class="btn" id="welcomeFolder">{{ ic.icon('folder', 14) }} {{ 'Change' if audiobooks_root else 'Choose folder' }}</button>
+          <button type="button" class="btn" id="welcomeFolder">{{ ic.icon('folder', 14) }} {{ _("Change") if audiobooks_root else _("Choose folder") }}</button>
         </div>
       </div>
     </div>
 
     <div class="btn-row" style="margin-top:20px">
-      <a class="btn primary lg" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} Add your first book</a>
-      <span class="meta">Nothing here talks to the internet unless you ask it to.</span>
+      <a class="btn primary lg" href="{{ url_for('new_page') }}">{{ ic.icon('plus', 15) }} {{ _("Add your first book") }}</a>
+      <span class="meta">{{ _("Nothing here talks to the internet unless you ask it to.") }}</span>
     </div>
   </div>
 
@@ -127,28 +126,28 @@
         <p class="meta" style="margin:1px 0 13px">{{ j.book.author }}</p>
         <div class="progress tall"><span id="heroBar" style="width:0"></span></div>
         <div class="stats" style="margin-top:14px">
-          <div class="stat"><span class="v" id="heroPct" style="color:var(--accent)">—</span><span class="k">done</span></div>
-          <div class="stat"><span class="v" id="heroElapsed">—</span><span class="k">elapsed</span></div>
-          <div class="stat"><span class="v" id="heroLeft">—</span><span class="k">remaining</span></div>
+          <div class="stat"><span class="v" id="heroPct" style="color:var(--accent)">—</span><span class="k">{{ _("done") }}</span></div>
+          <div class="stat"><span class="v" id="heroElapsed">—</span><span class="k">{{ _("elapsed") }}</span></div>
+          <div class="stat"><span class="v" id="heroLeft">—</span><span class="k">{{ _("remaining") }}</span></div>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <a class="btn" href="{{ url_for('job_page', job_id=j.id) }}">Open</a>
-        <button type="button" class="btn danger" id="heroStop">{{ ic.icon('stop', 13) }} Stop</button>
+        <a class="btn" href="{{ url_for('job_page', job_id=j.id) }}">{{ _("Open") }}</a>
+        <button type="button" class="btn danger" id="heroStop">{{ ic.icon('stop', 13) }} {{ _("Stop") }}</button>
       </div>
     </section>
   {% endif %}
 
   {% if finished %}
     <section style="margin-bottom:26px">
-      <div class="sectionbar"><h2>Finished</h2><span class="mono dim" style="font-size:11.5px">{{ finished|length }}</span><span class="rule"></span></div>
+      <div class="sectionbar"><h2>{{ _("Finished") }}</h2><span class="mono dim" style="font-size:11.5px">{{ finished|length }}</span><span class="rule"></span></div>
       {{ shelf(finished) }}
     </section>
   {% endif %}
 
   {% if waiting %}
     <section>
-      <div class="sectionbar"><h2>Waiting on you</h2><span class="mono dim" style="font-size:11.5px">{{ waiting|length }}</span><span class="rule"></span></div>
+      <div class="sectionbar"><h2>{{ _("Waiting on you") }}</h2><span class="mono dim" style="font-size:11.5px">{{ waiting|length }}</span><span class="rule"></span></div>
       {{ shelf(waiting) }}
     </section>
   {% endif %}
@@ -167,10 +166,12 @@
     const meta = document.getElementById("libraryMeta");
     if (meta && d.books_bytes) {
       const n = d.books.length;
-      meta.innerHTML = `${n} book${n === 1 ? "" : "s"} · <span class="mono">${humanBytes(d.books_bytes)}</span> on disk`;
+      meta.innerHTML = ngettext("%(n)s book", "%(n)s books", n) +
+        ` · <span class="mono">${humanBytes(d.books_bytes)}</span> ` + _("on disk");
     }
     if (d.safe_bytes >= 1e9) {
-      document.getElementById("libraryFreeText").textContent = "Free up " + humanBytes(d.safe_bytes);
+      document.getElementById("libraryFreeText").textContent =
+        _("Free up %(size)s", { size: humanBytes(d.safe_bytes) });
       document.getElementById("libraryFree").hidden = false;
     }
   } catch (e) { /* the page is complete without it */ }
@@ -192,7 +193,7 @@
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
           <b style="font-size:13.5px;font-weight:600">${escapeHtml(c.name)}</b>
-          ${bad ? '<span class="chip bad">required</span>' : ""}
+          ${bad ? `<span class="chip bad">${escapeHtml(_("required"))}</span>` : ""}
         </div>
         <p class="meta" style="margin-top:3px;line-height:1.5">${escapeHtml(c.detail || "")}</p>
         ${c.fix ? `<pre class="fix">${escapeHtml(c.fix)}</pre>` : ""}
@@ -200,7 +201,8 @@
   });
   document.getElementById("setupList").innerHTML = rows.join("");
   const ok = (d.checks || []).filter((c) => c.ok).length;
-  document.getElementById("setupCount").textContent = `${ok} of ${(d.checks || []).length} ready`;
+  document.getElementById("setupCount").textContent =
+    _("%(ok)s of %(total)s ready", { ok, total: (d.checks || []).length });
 })();
 
 document.getElementById("welcomeFolder").addEventListener("click", () => {
@@ -209,7 +211,7 @@ document.getElementById("welcomeFolder").addEventListener("click", () => {
     // can't write to — on a Mac, one it was never given access to) must be
     // shown, not swallowed: postForm throws on a 400, postFormResult reports it.
     const r = await postFormResult("/settings", { audiobooks_root: path });
-    if (r.ok) location.reload(); else toast(r.error || "Couldn't use that folder");
+    if (r.ok) location.reload(); else toast(r.error || _("Couldn't use that folder"));
   }});
 });
 {% endif %}
@@ -228,21 +230,23 @@ async function heroTick() {
   document.getElementById("heroStage").textContent = j.stage_label;
   document.getElementById("heroBar").style.width = Math.round(frac * 100) + "%";
   document.getElementById("heroPct").textContent = Math.round(frac * 100) + "%";
-  document.getElementById("heroDetail").textContent = previewing ? "a short excerpt"
-    : (j.total_segments ? `section ${j.rendered_segments.toLocaleString()} of ${j.total_segments.toLocaleString()}` : "");
+  document.getElementById("heroDetail").textContent = previewing ? _("a short excerpt")
+    : (j.total_segments ? _("section %(done)s of %(total)s", {
+        done: j.rendered_segments.toLocaleString(EBAB_LANG),
+        total: j.total_segments.toLocaleString(EBAB_LANG) }) : "");
   if (j.render_started_at) {
     const el = (Date.now() - Date.parse(j.render_started_at)) / 1000;
     document.getElementById("heroElapsed").textContent = fmtHMS(el);
     document.getElementById("heroLeft").textContent =
-      frac > 0.01 ? "~" + fmtDuration(el / frac - el) : "estimating…";
+      frac > 0.01 ? "~" + fmtDuration(el / frac - el) : _("estimating…");
   }
 }
 document.getElementById("heroStop").addEventListener("click", async () => {
   try {
     await postForm(`/job/${heroJob}/cancel`, {});
-    toast("Stopping…");
+    toast(_("Stopping…"));
   } catch (e) {
-    toast("Couldn't reach the app to stop it");
+    toast(_("Couldn't reach the app to stop it"));
   }
 });
 heroTick();
