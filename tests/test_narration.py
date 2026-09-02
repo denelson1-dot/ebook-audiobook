@@ -198,6 +198,13 @@ def test_a_missing_model_is_refused_before_anything_starts(monkeypatch, syntheti
 
     # Force the voice to French behind the app's back, as an older cache might.
     voice = store.load_voice(); voice.language = "fr"; store.save_voice(voice)
+    # A section to render, so the routes get as far as the language check on a
+    # machine without Calibre (CI's test job), where the import reads nothing.
+    if not store.load_chapters():
+        from ebook_audiobook.jobs.models import Chapter
+
+        store.save_chapters([Chapter(chapter_id="ch0000", sequence=0, title="Un",
+                                     text="Bonjour.", char_count=8, include=True)])
     for path in (f"/job/{job}/render", f"/job/{job}/preview", f"/job/{job}/measure"):
         r = client.post(path, data={"seconds": "5", "output_mode": "folder",
                                     "output_dir": str(Path(store.dir) / "out")})
