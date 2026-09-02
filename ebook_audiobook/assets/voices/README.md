@@ -17,9 +17,10 @@ here to 24 kHz mono FLAC.
   original MP3s.
 - **French** (`female-french`, `male-french`): 60-second narration samples
   read by Nadine Eckert-Boulet and Gilles G. Le Blanc, from WAV. The female
-  voice is the default narrator when the interface is in French. Their gap
-  noise floor (−43.5 dB and −53.4 dB, per `tools/prepare_voices.py`) is well
-  above the English clips' −95 dB; cleaner sources would be worth having.
+  voice is the default narrator when the interface is in French. (The "floor"
+  figure `tools/prepare_voices.py` prints is meaningless for these: it is the
+  level of the quietest frames, and a continuous 60-second narration has no
+  silence to measure, only breaths and word tails.)
 
 Recording the provenance is the point of this file: audio shipped with no
 note of where it came from is very hard to reconstruct later, and "we
