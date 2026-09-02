@@ -20,7 +20,10 @@ class FakeAdapter(TTSAdapter):
 
     @property
     def engine_version(self) -> str:
-        return "fake-1"
+        # English keeps the version every existing test hash was made with; any
+        # other language shows in it, so a test can prove the language arrived.
+        lang = self.voice.language or "en"
+        return "fake-1" if lang == "en" else f"fake-1-{lang}"
 
     def synthesize(self, text: str) -> AudioClip:
         sr = self.voice.sample_rate

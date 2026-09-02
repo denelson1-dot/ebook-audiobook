@@ -12,6 +12,7 @@ Clip files live alongside it in the same directory.
 
 from __future__ import annotations
 
+from .i18n import N_, _
 import json
 import re
 import shutil
@@ -35,21 +36,31 @@ _INDEX = "voices.json"
 # constraints — both sliders still win, and moving one is visible.
 BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "voices"
 
+# ``language`` is the language the clip was recorded in — the one this voice
+# narrates naturally. Each language ships its own voices and its own default;
+# a voice is never offered as a narrator for a language it does not speak.
 BUNDLED = (
-    {"id": "male-north-american", "name": "Male, North American",
+    {"id": "male-north-american", "name": N_("English — Male, North American"), "language": "en",
      "file": "male-north-american.flac", "pacing": 0.50, "expressiveness": 0.60},
-    {"id": "male-north-american-alt", "name": "Male, North American (alt)",
+    {"id": "male-north-american-alt", "name": N_("English — Male, North American (alt)"), "language": "en",
      "file": "male-north-american-alt.flac", "pacing": 0.42},
-    {"id": "female-north-american", "name": "Female, North American",
+    {"id": "female-north-american", "name": N_("English — Female, North American"), "language": "en",
      "file": "female-north-american.flac", "pacing": 0.42},
-    {"id": "male-british", "name": "Male, British",
+    {"id": "male-british", "name": N_("English — Male, British"), "language": "en",
      "file": "male-british.flac", "pacing": 0.42},
-    {"id": "female-british", "name": "Female, British",
+    {"id": "female-british", "name": N_("English — Female, British"), "language": "en",
      "file": "female-british.flac", "pacing": 0.42},
+    {"id": "female-french", "name": N_("French — Female"), "language": "fr",
+     "file": "female-french.flac", "pacing": 0.42},
+    {"id": "male-french", "name": N_("French — Male"), "language": "fr",
+     "file": "male-french.flac", "pacing": 0.42},
 )
 
-# Which voice a newly imported book starts with.
-DEFAULT_BUNDLED_ID = "male-north-american"
+# Which voice a newly imported book starts with, per language. Until a book
+# carries its own language, the interface language decides: someone using the
+# app in French is, for now, taken to be narrating French books.
+DEFAULT_BUNDLED_BY_LANGUAGE = {"en": "male-north-american", "fr": "female-french"}
+DEFAULT_BUNDLED_ID = DEFAULT_BUNDLED_BY_LANGUAGE["en"]
 # Accepted upload/import formats. Anything that isn't already a WAV is transcoded
 # to WAV via ffmpeg on import (see VoiceLibrary.add), so container/AAC formats
 # like .mp4/.m4a — which librosa can't reliably decode — work regardless.
@@ -67,6 +78,9 @@ class Voice:
     # Suggested settings for this clip, or None to leave that slider alone.
     pacing: float | None = None
     expressiveness: float | None = None
+    # The language the clip is spoken in. User-added voices are English until
+    # the picker asks; the bundled ones say so themselves.
+    language: str = "en"
 
     @property
     def is_default(self) -> bool:
@@ -82,7 +96,7 @@ class Voice:
         return {"id": self.id, "name": self.name, "clip_filename": self.clip_filename,
                 "is_default": self.is_default, "bundled": self.bundled,
                 "removable": self.removable, "pacing": self.pacing,
-                "expressiveness": self.expressiveness}
+                "expressiveness": self.expressiveness, "language": self.language}
 
 
 def _slug(name: str, default: str = "voice") -> str:
@@ -125,14 +139,23 @@ class VoiceLibrary:
 
     @staticmethod
     def _default() -> Voice:
-        return Voice(DEFAULT_VOICE_ID, "Default narrator", None)
+        return Voice(DEFAULT_VOICE_ID, _("Default narrator"), None)
 
     @staticmethod
     def _bundled() -> list[Voice]:
         """The shipped voices, in the order they appear in the picker."""
-        return [Voice(b["id"], b["name"], b["file"], bundled=True,
-                      pacing=b.get("pacing"), expressiveness=b.get("expressiveness"))
-                for b in BUNDLED if (BUNDLED_DIR / b["file"]).is_file()]
+        voices = []
+        for b in BUNDLED:
+            if not (BUNDLED_DIR / b["file"]).is_file():
+                continue
+            # The name is marked N_() in BUNDLED and said here in the request's
+            # language. (Kept out of the _() call as a literal: the extractor
+            # would otherwise read the subscript's "name" as a message.)
+            label = b["name"]
+            voices.append(Voice(b["id"], _(label), b["file"], bundled=True,
+                                pacing=b.get("pacing"), expressiveness=b.get("expressiveness"),
+                                language=b.get("language", "en")))
+        return voices
 
     def list(self) -> list[Voice]:
         # Shipped voices first: a new install should meet a usable narrator
@@ -248,20 +271,25 @@ class VoiceLibrary:
         return True
 
 
-def default_voice_id() -> str:
+def default_voice_id(language: str | None = None) -> str:
     """The voice a newly imported book starts with.
 
     The user's choice if they have made one and it still exists, otherwise the
-    shipped default. Falls back to the engine's own voice if the bundled clips
-    are missing — a source checkout without them should still work.
+    shipped default for ``language`` — the interface language when none is
+    given, so a French interface starts a book with the French narrator. Falls
+    back to the engine's own voice if the bundled clips are missing — a source
+    checkout without them should still work.
     """
     from . import settings as app_settings
+    from .i18n import current_language
 
     lib = VoiceLibrary()
     available = {v.id for v in lib.list()}
     chosen = app_settings.load_settings().default_voice_id
     if chosen and chosen in available:
         return chosen
-    if DEFAULT_BUNDLED_ID in available:
-        return DEFAULT_BUNDLED_ID
+    wanted = DEFAULT_BUNDLED_BY_LANGUAGE.get(language or current_language(), DEFAULT_BUNDLED_ID)
+    for candidate in (wanted, DEFAULT_BUNDLED_ID):
+        if candidate in available:
+            return candidate
     return DEFAULT_VOICE_ID

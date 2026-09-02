@@ -15,6 +15,36 @@ function baseName(p) {
   return parts.length ? parts[parts.length - 1] : p;
 }
 
+// --- interface language -------------------------------------------------------
+// The server puts this page's catalog in window.EBAB_I18N (empty for English)
+// and its language code in window.EBAB_LANG. Strings are looked up by their
+// English text, exactly as in Python and the templates, so one .po file holds
+// all three. Placeholders are %(name)s everywhere for the same reason.
+//
+// Plural rules are gettext *indexes*, mirroring each language's Plural-Forms
+// header — not Intl.PluralRules, whose CLDR categories ("many" for a million
+// in French) would index past a two-form entry.
+const PLURAL_RULES = {
+  en: (n) => (n !== 1 ? 1 : 0),
+  fr: (n) => (n > 1 ? 1 : 0),
+};
+function _fmt(s, params) {
+  // Always a format string, as in the templates: %% is a literal percent.
+  const filled = params ? s.replace(/%\((\w+)\)[sd]/g, (m, k) => (k in params ? params[k] : m)) : s;
+  return filled.replace(/%%/g, "%");
+}
+function _(msgid, params) {
+  const t = (window.EBAB_I18N || {})[msgid];
+  return _fmt(typeof t === "string" ? t : msgid, params);
+}
+function ngettext(singular, plural, n, params) {
+  const rule = PLURAL_RULES[window.EBAB_LANG] || PLURAL_RULES.en;
+  const t = (window.EBAB_I18N || {})[singular];
+  const forms = Array.isArray(t) ? t : [singular, plural];
+  const form = forms[rule(n)] ?? forms[forms.length - 1];
+  return _fmt(form, Object.assign({ n }, params));
+}
+
 // Shared helpers for the ebook-audiobook UI. No framework — plain fetch + DOM.
 
 // For anything that goes into innerHTML and did not originate in this code:
@@ -45,7 +75,7 @@ async function postFormResult(url, data) {
   try {
     r = await fetch(url, { method: "POST", body: new URLSearchParams(data || {}) });
   } catch (e) {
-    return { ok: false, status: 0, error: "Couldn't reach the app" };
+    return { ok: false, status: 0, error: _("Couldn't reach the app") };
   }
   let body = {};
   try { body = await r.json(); } catch (e) { body = { error: r.statusText }; }
@@ -75,7 +105,7 @@ document.addEventListener("submit", (e) => {
   confirmDialog({
     title: form.dataset.confirm,
     bodyHtml: detail ? `<p>${escapeHtml(detail)}</p>` : "",
-    confirmLabel: form.dataset.confirmLabel || "Delete",
+    confirmLabel: form.dataset.confirmLabel || _("Delete"),
     danger: true,
   }).then((ok) => { if (ok) form.submit(); });  // submit() bypasses this listener
 });
@@ -87,8 +117,8 @@ async function revealFolder(params) {
   try {
     const r = await fetch("/reveal", { method: "POST", body: new URLSearchParams(params) });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.ok) { toast(d.error || "Couldn't open that folder"); return; }
-  } catch (e) { toast("Couldn't open that folder"); }
+    if (!r.ok || !d.ok) { toast(d.error || _("Couldn't open that folder")); return; }
+  } catch (e) { toast(_("Couldn't open that folder")); }
 }
 
 // Run an async action with the button showing that it is working.
@@ -128,25 +158,33 @@ function toast(msg) {
 function fmtHMS(secs) {
   secs = Math.max(0, Math.round(secs));
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
-  return (h ? h + "h" : "") + String(m).padStart(h ? 2 : 1, "0") + "m" + String(s).padStart(2, "0") + "s";
+  const mm = String(m).padStart(h ? 2 : 1, "0"), ss = String(s).padStart(2, "0");
+  // NOTE: elapsed time — "1h02m03s" / "2m03s"
+  return h ? _("%(h)sh%(m)sm%(s)ss", { h, m: mm, s: ss }) : _("%(m)sm%(s)ss", { m: mm, s: ss });
 }
 
 // A friendly, rounded duration for humans ("2h 10m", "8 min", "45 sec"). Used
 // for estimates where second-precision would be false precision.
 function fmtDuration(secs) {
   secs = Math.max(0, Math.round(secs));
-  if (secs < 60) return secs + " sec";
+  if (secs < 60) return _("%(n)s sec", { n: secs });
   const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
-  if (h) return m ? `${h}h ${m}m` : `${h}h`;
-  return m + " min";
+  // NOTE: rounded durations — "2h 10m", "2h", "8 min"
+  if (h) return m ? _("%(h)sh %(m)sm", { h, m }) : _("%(h)sh", { h });
+  return _("%(n)s min", { n: m });
 }
 
 function humanBytes(n) {
   if (n === null || n === undefined) return "—";
-  if (!n) return "0 B";
+  // The units are msgids ("Mo" in French); the decimal separator follows the
+  // interface language too, so this agrees with the Python side's "1,5 Mo".
   const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0, f = n;
+  if (!n) return "0 " + _(u[0]);
   while (f >= 1024 && i < u.length - 1) { f /= 1024; i++; }
-  return (i === 0 ? f.toFixed(0) : f.toFixed(1)) + " " + u[i];
+  const lang = window.EBAB_LANG || "en";
+  const num = i === 0 ? f.toFixed(0)
+    : f.toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false });
+  return num + " " + _(u[i]);
 }
 
 // ---- Slide-over drawer (chapter text peek) -----------------------------------
@@ -208,11 +246,11 @@ function confirmDialog(opts) {
     back.className = "modal-backdrop open";
     back.innerHTML = `
       <div class="modal confirm" role="dialog" aria-modal="true">
-        <header><h3>${escapeHtml(opts.title || "Confirm")}</h3></header>
+        <header><h3>${escapeHtml(opts.title || _("Confirm"))}</h3></header>
         <div class="confirm-body">${opts.bodyHtml || ""}</div>
         <footer>
-          <button class="btn ghost" data-cancel>Cancel</button>
-          <button class="btn ${opts.danger ? "danger" : "primary"}" data-ok>${opts.confirmLabel || "Continue"}</button>
+          <button class="btn ghost" data-cancel>${_("Cancel")}</button>
+          <button class="btn ${opts.danger ? "danger" : "primary"}" data-ok>${opts.confirmLabel || _("Continue")}</button>
         </footer>
       </div>`;
     document.body.appendChild(back);
@@ -231,7 +269,7 @@ function openFsBrowser(opts) {
   const accept = opts.accept || "ebook";
   const isDir = accept === "dir";
   const kind = isDir ? "dir" : accept === "audio" ? "audio" : "ebook";
-  const heading = isDir ? "Choose a folder" : `Choose a ${accept === "audio" ? "voice clip" : "book"}`;
+  const heading = isDir ? _("Choose a folder") : accept === "audio" ? _("Choose a voice clip") : _("Choose a book");
 
   let backdrop = document.getElementById("fsModal");
   if (!backdrop) {
@@ -245,8 +283,8 @@ function openFsBrowser(opts) {
         <div class="crumbs" data-crumbs></div>
         <div class="fs-list" data-list></div>
         <footer>
-          <button class="btn ghost" data-close>Cancel</button>
-          <button class="btn primary" data-use style="display:none">Use this folder</button>
+          <button class="btn ghost" data-close>${_("Cancel")}</button>
+          <button class="btn primary" data-use style="display:none">${_("Use this folder")}</button>
         </footer>
       </div>`;
     document.body.appendChild(backdrop);
@@ -270,18 +308,18 @@ function openFsBrowser(opts) {
     let data;
     try {
       data = await getJSON("/api/fs?kind=" + kind + "&path=" + encodeURIComponent(path || ""));
-    } catch (e) { listEl.innerHTML = `<div class="empty">Could not read folder</div>`; return; }
+    } catch (e) { listEl.innerHTML = `<div class="empty">${_("Could not read folder")}</div>`; return; }
     current = data.cwd;
     crumbEl.textContent = data.cwd + (data.error ? "  (" + data.error + ")" : "");
     const rows = [];
-    if (data.parent) rows.push(row("dir", ICON.up, "Back to " + baseName(data.parent), data.parent, true));
+    if (data.parent) rows.push(row("dir", ICON.up, _("Back to %(name)s", { name: baseName(data.parent) }), data.parent, true));
     // Names are real file names, escaped in row(): a file called
     // <img src=x onerror=…>.epub is a valid name.
     for (const d of data.dirs) rows.push(row("dir", ICON.folder, d.name, d.path, true));
     for (const fl of data.files) rows.push(row("file", ICON.file, fl.name, fl.path, false, fl.disabled, fl.reason));
     listEl.innerHTML = "";
     if (!rows.length) {
-      listEl.innerHTML = `<div class="empty">${isDir ? "No subfolders here" : "No matching files in this folder"}</div>`;
+      listEl.innerHTML = `<div class="empty">${isDir ? _("No subfolders here") : _("No matching files in this folder")}</div>`;
     }
     rows.forEach((r) => listEl.appendChild(r));
   }
@@ -290,8 +328,8 @@ function openFsBrowser(opts) {
     const el = document.createElement("div");
     el.className = "fs-item " + kind + (disabled ? " disabled" : "");
     if (disabled) {
-      el.innerHTML = `${ICON.blocked}<span>${escapeHtml(name)}<span class="fs-reason">${escapeHtml(reason || "unsupported")}</span></span>`;
-      el.title = reason || "unsupported";
+      el.innerHTML = `${ICON.blocked}<span>${escapeHtml(name)}<span class="fs-reason">${escapeHtml(reason || _("unsupported"))}</span></span>`;
+      el.title = reason || _("unsupported");
       return el;  // not selectable
     }
     el.innerHTML = `${icon}<span>${escapeHtml(name)}</span>`;
@@ -328,12 +366,14 @@ function startSidebar() {
     // says nothing is happening while the machine is plainly working.
     if (idleTitle) {
       idleTitle.textContent = (s && s.busy && s.kind === "voice_test")
-        ? "Rendering a voice sample" : idleText;
+        ? _("Rendering a voice sample")
+        : (s && s.busy && s.kind === "model_download")
+          ? _("Downloading a language model") : idleText;
     }
     if (!rendering) return;
 
     dock.href = "/job/" + job.job_id;
-    document.getElementById("dockStage").textContent = job.stage_label || "Working";
+    document.getElementById("dockStage").textContent = job.stage_label || _("Working");
     document.getElementById("dockTitle").textContent = job.title || "";
 
     // A preview reports its own progress; a full render is measured in segments.
@@ -343,21 +383,23 @@ function startSidebar() {
       : (job.total_segments ? job.rendered_segments / job.total_segments : 0);
     document.getElementById("dockBar").style.width = Math.round(frac * 100) + "%";
     document.getElementById("dockDetail").textContent = previewing
-      ? "a short excerpt"
-      : (job.total_segments ? `section ${job.rendered_segments.toLocaleString()} of ${job.total_segments.toLocaleString()}` : "");
+      ? _("a short excerpt")
+      : (job.total_segments ? _("section %(done)s of %(total)s", {
+          done: job.rendered_segments.toLocaleString(window.EBAB_LANG || "en"),
+          total: job.total_segments.toLocaleString(window.EBAB_LANG || "en") }) : "");
     document.getElementById("dockLeft").textContent = remainingText(job, frac);
   }
 
   // Honest only once the render has actually produced something: before that
   // there is no rate to extrapolate from, so it says nothing rather than lying.
   function remainingText(job, frac) {
-    if (!job.render_started_at || frac <= 0.01) return "estimating…";
+    if (!job.render_started_at || frac <= 0.01) return _("estimating…");
     const started = Date.parse(job.render_started_at);
     if (!started) return "";
     const elapsed = (Date.now() - started) / 1000;
     if (elapsed <= 0) return "";
     const left = elapsed / frac - elapsed;
-    return left > 30 ? fmtDuration(left) + " left" : "almost done";
+    return left > 30 ? _("%(time)s left", { time: fmtDuration(left) }) : _("almost done");
   }
 
   function paintStorage(d) {
@@ -374,7 +416,7 @@ function startSidebar() {
     if (rendering) {
       strip.hidden = true;
       line.hidden = false;
-      document.getElementById("diskLineText").textContent = humanBytes(d.safe_bytes) + " of working files";
+      document.getElementById("diskLineText").textContent = _("%(size)s of working files", { size: humanBytes(d.safe_bytes) });
       return;
     }
     line.hidden = true;
@@ -384,7 +426,8 @@ function startSidebar() {
     document.getElementById("diskBar").style.width = Math.round(share * 100) + "%";
     const n = d.safe_count;
     document.getElementById("diskWhy").textContent =
-      `Left behind by ${n} book${n === 1 ? "" : "s"} that ${n === 1 ? "is" : "are"} finished, or only ever previewed. Deleting them changes nothing you can hear.`;
+      ngettext("Left behind by %(n)s book that is finished, or only ever previewed. Deleting them changes nothing you can hear.",
+               "Left behind by %(n)s books that are finished, or only ever previewed. Deleting them changes nothing you can hear.", n);
   }
 
   async function tick() {
@@ -401,9 +444,9 @@ function startSidebar() {
       if (!id) return;
       try {
         await postForm(`/job/${id}/cancel`, {});
-        toast("Stopping…");
+        toast(_("Stopping…"));
       } catch (e) {
-        toast("Couldn't reach the app to stop it");
+        toast(_("Couldn't reach the app to stop it"));
       }
       tick();
     });

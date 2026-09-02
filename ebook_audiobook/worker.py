@@ -11,6 +11,8 @@ These functions are synchronous and drive the CLI directly; the web UI runs
 
 from __future__ import annotations
 
+from .i18n import N_, _
+from . import narration_langs
 import errno
 import shutil
 import tempfile
@@ -32,6 +34,7 @@ from .jobs.store import JobStore
 from .pipeline import assemble, extract, layout, package
 from .pipeline import cover as cover_mod
 from .pipeline.chunk import chunk_structured
+from .pipeline.lang import rules_for
 from .pipeline.normalize import apply_pronunciation, normalize_text, normalize_title
 from .tts import get_adapter
 
@@ -58,14 +61,14 @@ def resolve_output_dir(raw: str | Path | None) -> Path:
     try:
         target = target.resolve()
     except OSError as e:
-        raise OutputDirError(f"Invalid output folder: {raw} ({e})") from e
+        raise OutputDirError(_("Invalid output folder: %(path)s (%(e)s)", path=raw, e=e)) from e
 
     if target.exists() and not target.is_dir():
-        raise OutputDirError(f"Output path is not a folder: {target}")
+        raise OutputDirError(_("Output path is not a folder: %(path)s", path=target))
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise OutputDirError(f"Can't create output folder “{target}”: {e}") from e
+        raise OutputDirError(_("Can't create output folder “%(path)s”: %(e)s", path=target, e=e)) from e
 
     # A real write test — os.access()/W_OK can lie on read-only mounts, ACLs,
     # and some network filesystems, so actually create and remove a probe file.
@@ -74,7 +77,7 @@ def resolve_output_dir(raw: str | Path | None) -> Path:
             pass
     except OSError as e:
         raise OutputDirError(
-            f"No write permission for output folder “{target}”: {e}"
+            _("No write permission for output folder “%(path)s”: %(e)s", path=target, e=e)
         ) from e
     return target
 
@@ -152,20 +155,21 @@ def render_voice_sample(voice_id: str, params: dict | None = None) -> Path:
 
 # Actionable guidance for common formats we can't read directly.
 _UNSUPPORTED_HELP = {
-    ".kfx": ("KFX (newer Kindle) isn't supported directly. Open it in Calibre and "
-             "convert/export it to EPUB, then import the EPUB."),
-    ".azw8": ("This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, "
-              "then import the EPUB."),
-    ".acsm": ("An .acsm file is an Adobe download token, not the book itself. Open it "
-              "in Adobe Digital Editions or Calibre to fetch the actual book, then "
-              "import that."),
-    ".pdb": ("Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."),
+    ".kfx": N_("KFX (newer Kindle) isn't supported directly. Open it in Calibre and "
+               "convert/export it to EPUB, then import the EPUB."),
+    ".azw8": N_("This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, "
+                "then import the EPUB."),
+    ".acsm": N_("An .acsm file is an Adobe download token, not the book itself. Open it "
+                "in Adobe Digital Editions or Calibre to fetch the actual book, then "
+                "import that."),
+    ".pdb": N_("Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."),
 }
 
 
 def unsupported_format_hint(ext: str) -> str | None:
     """Actionable guidance for a known-but-unsupported ebook extension, else None."""
-    return _UNSUPPORTED_HELP.get(ext.lower())
+    hint = _UNSUPPORTED_HELP.get(ext.lower())
+    return _(hint) if hint else None
 
 
 def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
@@ -179,10 +183,10 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
         if hint:
             raise ValueError(hint)
         supported = ", ".join(sorted(extract.SUPPORTED_INPUT))
-        kind = f"“{ext}” files" if ext else "files with no extension"
+        kind = _("“%(ext)s” files", ext=ext) if ext else _("files with no extension")
         raise ValueError(
-            f"{kind} aren't supported. Supported formats: {supported}. "
-            "For best results, convert your book to EPUB in Calibre first."
+            _("%(kind)s aren't supported. Supported formats: %(formats)s. "
+              "For best results, convert your book to EPUB in Calibre first.", kind=kind, formats=supported)
         )
 
     p = paths().ensure()
@@ -200,51 +204,93 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
     from .voices import VoiceLibrary, default_voice_id
 
     voice = VoiceSettings(engine=engine)
-    lib = VoiceLibrary()
-    vid = default_voice_id()
-    clip = lib.clip_path(vid)
-    if clip:
-        voice.reference_clip = str(clip)
-        chosen = lib.get(vid)
-        if chosen and chosen.pacing is not None:
-            voice.cfg_weight = chosen.pacing
-        if chosen and chosen.expressiveness is not None:
-            voice.exaggeration = chosen.expressiveness
-    voice.extra["voice_id"] = vid
+    _choose_narrator(voice, VoiceLibrary(), default_voice_id())
     store.save_voice(voice)
     store.save_state(JobState(job_id=job_id, stage=Stage.IMPORTED.value, created_at=_now_iso()))
     return job_id
 
 
+def _choose_narrator(voice: VoiceSettings, lib, voice_id: str) -> None:
+    """Point ``voice`` at a library voice: its clip, its suggested sliders, its id."""
+    clip = lib.clip_path(voice_id)
+    chosen = lib.get(voice_id)
+    voice.reference_clip = str(clip) if clip else None
+    if chosen:
+        if chosen.pacing is not None:
+            voice.cfg_weight = chosen.pacing
+        if chosen.expressiveness is not None:
+            voice.exaggeration = chosen.expressiveness
+    voice.extra["voice_id"] = voice_id
+
+
+def set_job_language(store: JobStore, lang: str) -> None:
+    """Narrate this job in ``lang``.
+
+    Sets the book's language, the voice's language, and — when the current
+    narrator does not speak it — that language's default narrator, so the
+    change is one a person can hear rather than a French book read in an
+    English accent. Refuses, with a message that says what to install, when
+    the language's model is not on this machine. The caller re-extracts: the
+    text is prepared differently per language.
+    """
+    from .voices import DEFAULT_BUNDLED_BY_LANGUAGE, VoiceLibrary, default_voice_id
+
+    narration_langs.require_installed(lang)
+    book = store.load_book()
+    book.language = lang
+    store.save_book(book)
+
+    voice = store.load_voice()
+    if voice.language != lang:
+        # Each model was tuned with its own repetition penalty. Move the slider
+        # only if it still sits at the other model's default, so a value the
+        # user chose is never overwritten.
+        if lang == "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL:
+            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY
+        elif lang != "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY:
+            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL
+        voice.language = lang
+        lib = VoiceLibrary()
+        current = lib.get(voice.extra.get("voice_id", ""))
+        if not current or current.language != lang:
+            wanted = DEFAULT_BUNDLED_BY_LANGUAGE.get(lang) or default_voice_id(lang)
+            if not lib.get(wanted):
+                wanted = default_voice_id(lang)
+            _choose_narrator(voice, lib, wanted)
+    store.save_voice(voice)
+
+
+def narration_notice(store: JobStore) -> str | None:
+    """Why a book is not being narrated in its own language, if it isn't.
+
+    Stored nowhere: computed for the page, in the page's language.
+    """
+    book = store.load_book()
+    voice = store.load_voice()
+    if book.language == voice.language or narration_langs.language_available(book.language):
+        return None  # narrated in its language, or in another one on purpose
+    lang = narration_langs.LANGUAGES.get(book.language)
+    if lang is None:
+        return None
+    return _("This book is in %(language)s. Narrating it in %(language)s needs the "
+             "additional language model — see Settings, under Narration languages.",
+             language=_(lang.name))
+
+
 # --- extract -----------------------------------------------------------------
-
-# Title fragments that mark front/back matter a listener usually wants to skip.
-# Matched case-insensitively as whole-ish phrases against the normalized title.
-_SKIP_TITLE_HINTS = (
-    "copyright", "isbn", "all rights reserved", "title page", "half title",
-    "table of contents", "contents", "colophon", "dedication",
-    "acknowledgement", "acknowledgment", "about the author", "about the publisher",
-    "also by", "praise for", "advance praise", "other books", "other titles",
-    "by the same author", "more from", "more by",
-    "index", "bibliography", "notes", "footnotes", "endnotes", "glossary",
-    "newsletter", "sign up", "sign-up", "imprint", "frontispiece", "epigraph",
-    # Back-matter promos: "What's next on your reading list?", "Up next", etc.
-    "reading list", "what's next", "whats next", "up next", "keep reading",
-    "recommended reading",
-)
-
 
 _INTRO_CHAPTER_ID = "intro"
 
 
-def _intro_chapter(book: Book) -> Chapter | None:
+def _intro_chapter(book: Book, lang: str = "en") -> Chapter | None:
     """A synthetic opening section that announces the book before chapter one.
 
     The title is spoken as the standard chapter-title segment (and doubles as the
-    .m4b's opening marker); the body announces the author. Returns None when
-    there's no usable metadata to announce. Included by default; the user can
-    uncheck it like any other section.
+    .m4b's opening marker); the body announces the author, in the narration
+    language. Returns None when there's no usable metadata to announce. Included
+    by default; the user can uncheck it like any other section.
     """
+    words = rules_for(lang).strings
     title = (book.title or "").strip()
     author = (book.author or "").strip()
     has_title = bool(title) and title.lower() != "unknown title"
@@ -252,7 +298,7 @@ def _intro_chapter(book: Book) -> Chapter | None:
     if not has_title and not has_author:
         return None
     if has_title:
-        marker, body = title, (f"By {author}." if has_author else "")
+        marker, body = title, (words["by_author"] % {"author": author} if has_author else "")
     else:
         marker, body = author, ""  # author-only: just announce the author once
     return Chapter(chapter_id=_INTRO_CHAPTER_ID, sequence=0, title=marker,
@@ -262,28 +308,39 @@ def _intro_chapter(book: Book) -> Chapter | None:
 _OUTRO_CHAPTER_ID = "outro"
 
 
-def _outro_chapter(book: Book) -> Chapter | None:
+def _outro_chapter(book: Book, lang: str = "en") -> Chapter | None:
     """A synthetic closing section that signs off the book after the last chapter.
 
     Set apart by a long lead-in pause (``config.PAUSE_BEFORE_OUTRO``) so a
     listener who isn't looking at a screen clearly hears the book has ended. The
-    marker ("The End") is display-only; the body reads one flowing sentence.
-    Returns None when there's no usable metadata. Included by default.
+    marker ("The End") is display-only; the body reads one flowing sentence, in
+    the narration language. Returns None when there's no usable metadata.
+    Included by default.
     """
+    words = rules_for(lang).strings
     title = (book.title or "").strip()
     author = (book.author or "").strip()
     has_title = bool(title) and title.lower() != "unknown title"
     has_author = bool(author) and author.lower() != "unknown author"
     if not has_title and not has_author:
         return None
-    subject = title if has_title else "this book"
-    body = f"This concludes {subject}"
-    body += f", by {author}." if has_author else "."
-    return Chapter(chapter_id=_OUTRO_CHAPTER_ID, sequence=0, title="The End",
+    subject = title if has_title else words["this_book"]
+    body = words["concludes"] % {"subject": subject}
+    body += words["by_author_tail"] % {"author": author} if has_author else "."
+    return Chapter(chapter_id=_OUTRO_CHAPTER_ID, sequence=0, title=words["the_end"],
                    text=body, char_count=len(body), include=True, speak_title=False)
 
 
-def _default_included(title: str) -> bool:
+def _plain(s: str) -> str:
+    """Lowercase, accents stripped: "TABLE DES MATIÈRES" and "Table des
+    matieres" are the same title to a hint list."""
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").strip().lower())
+                   if not unicodedata.combining(c))
+
+
+def _default_included(title: str, lang: str = "en") -> bool:
     """Whether a freshly-extracted section should default to being rendered.
 
     Front/back matter (copyright, ISBN, TOC, dedication, acknowledgements, …) is
@@ -291,16 +348,20 @@ def _default_included(title: str) -> bool:
     off into publisher boilerplate. The match is on the section title only — a
     legitimately short chapter still narrates. The user overrides any choice in
     the UI.
+
+    The English hints always apply: a French EPUB is full of English
+    boilerplate ("Copyright", "Contents"). The book's own language adds its own.
     """
-    t = (title or "").strip().lower()
-    return not any(hint in t for hint in _SKIP_TITLE_HINTS)
+    t = _plain(title)
+    hints = set(rules_for("en").skip_title_hints) | set(rules_for(lang).skip_title_hints)
+    return not any(hint in t for hint in hints)
 
 
-def extract_job(job_id: str) -> list[Chapter]:
+def extract_job(job_id: str, keep_language: bool = False) -> list[Chapter]:
     store = JobStore(job_id)
     store.set_stage(Stage.EXTRACTING, "extracting")
     try:
-        return _extract_job(store)
+        return _extract_job(store, keep_language=keep_language)
     except Exception as e:  # noqa: BLE001 - surface the reason to the user
         # Record why extraction stopped so the job page can show it (the web
         # runner otherwise swallows the exception).
@@ -311,8 +372,16 @@ def extract_job(job_id: str) -> list[Chapter]:
         raise
 
 
-def _extract_job(store: JobStore) -> list[Chapter]:
+def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
+    """Read the book and prepare its text for the narrator.
+
+    ``keep_language``: the job's narration language was chosen on purpose (a
+    re-read after the picker changed it), so the book's own metadata must not
+    move it back. On a first read the book's language wins, when its model is
+    installed.
+    """
     book = store.load_book()
+    previous = {c.chapter_id: c.include for c in store.load_chapters()}
     epub = store.dir / "normalized.epub"
     extract.run_ebook_convert(Path(book.source_path), epub)
     raw = extract.parse_epub(epub)
@@ -340,15 +409,25 @@ def _extract_job(store: JobStore) -> list[Chapter]:
     book.isbn = raw.isbn
     book.series = raw.series
     book.series_index = raw.series_index
+    book.language = raw.language
     store.save_book(book)
+    # Narrate in the book's own language when its model is installed; when it
+    # is not, the voice stays English — what always happened — and the job
+    # page says what installing would change.
+    if (not keep_language and book.language != "en"
+            and narration_langs.language_available(book.language)):
+        set_job_language(store, book.language)
+    # The text is prepared for whoever will read it: numbers, abbreviations and
+    # the app's own announcements follow the *narration* language.
+    lang = store.load_voice().language or "en"
 
     chapters: list[Chapter] = []
-    intro = _intro_chapter(book)
+    intro = _intro_chapter(book, lang)
     if intro:
         chapters.append(intro)
     for i, rc in enumerate(raw.chapters):
-        norm = normalize_text(rc.text)
-        title = normalize_title(rc.title)
+        norm = normalize_text(rc.text, lang)
+        title = normalize_title(rc.title, lang)
         chapters.append(
             Chapter(
                 chapter_id=f"ch{i:04d}",
@@ -356,12 +435,17 @@ def _extract_job(store: JobStore) -> list[Chapter]:
                 title=title,
                 text=norm,
                 char_count=len(norm),
-                include=_default_included(title),
+                include=_default_included(title, book.language),
             )
         )
-    outro = _outro_chapter(book)
+    outro = _outro_chapter(book, lang)
     if outro:
         chapters.append(outro)
+    # A re-read keeps the sections the person switched on or off: the ids are
+    # positional, so the same source gives the same ids.
+    for ch in chapters:
+        if ch.chapter_id in previous:
+            ch.include = previous[ch.chapter_id]
     # Renumber the display order so the injected intro/outro don't collide with
     # the real chapters' sequences.
     for seq, ch in enumerate(chapters):
@@ -418,7 +502,7 @@ class OutOfSpaceError(RuntimeError):
 
 def _render_one(adapter, text: str, out_path: Path, retries: int = 2) -> None:
     last_err: Exception | None = None
-    for _ in range(retries + 1):
+    for _attempt in range(retries + 1):
         try:
             clip = adapter.synthesize(text)
             write_wav(out_path, clip.samples, clip.sample_rate)
@@ -500,6 +584,9 @@ def render_job(
     voice = store.load_voice()
     if not chapters:
         raise RuntimeError("no chapters — run extract first")
+    # Before any expensive work: a language whose model is not here fails now,
+    # with a message about Settings, not after the model load has failed.
+    narration_langs.require_installed(voice.language)
 
     is_preview = preview_max_seconds is not None
 
@@ -745,6 +832,7 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
     if not chapters:
         raise RuntimeError("no chapters — read the book first")
     voice = store.load_voice()
+    narration_langs.require_installed(voice.language)
 
     prior_stage = _resumable_stage(store.load_state().stage)
 
@@ -888,7 +976,7 @@ def _assemble_preview(store: JobStore, rendered: list[tuple[Segment, Path]]) -> 
     out.parent.mkdir(parents=True, exist_ok=True)
     with sf.SoundFile(str(out), "w", samplerate=config.SAMPLE_RATE, channels=1, subtype="PCM_16") as f:
         for i, (seg, p) in enumerate(rendered):
-            data, _ = read_wav(p)
+            data, _sr = read_wav(p)
             f.write(data)
             if i < len(rendered) - 1:
                 gap = np.zeros(int(assemble.gap_for(seg.boundary) * config.SAMPLE_RATE), dtype=np.float32)
@@ -929,6 +1017,7 @@ def _assemble_and_package(store: JobStore, book: Book, chapters: list[Chapter], 
     package.package_m4b(
         out, chapter_audios, book.title, book.author,
         cover_path=cover, bitrate_kbps=bitrate, workdir=store.dir,
+        language=voice.language,
     )
 
     # Plex-friendly tags (stik=2, album artist, covr, year/desc/ISBN) as a

@@ -49,6 +49,9 @@ SOURCES = {
     "Female North America v2.mp3": "female-north-american.flac",
     "Male British Sample v2.mp3": "male-british.flac",
     "Female British Sample.mp3": "female-british.flac",
+    # French: 60-second narration samples, one reader each.
+    "Nadine_Eckert-Boulet_ebook_narration_60s.wav": "female-french.flac",
+    "Gilles_G_Le_Blanc_ebook_narration_60s.wav": "male-french.flac",
 }
 
 
@@ -144,12 +147,17 @@ def prepare(src: Path, dest: Path) -> None:
 def main(argv: list[str]) -> int:
     src_dir = Path(argv[1]).expanduser() if len(argv) > 1 else Path.home() / "Downloads"
     out = Path(__file__).resolve().parent.parent / "ebook_audiobook" / "assets" / "voices"
-    missing = [s for s in SOURCES if not (src_dir / s).is_file()]
-    if missing:
-        print(f"missing from {src_dir}: {', '.join(missing)}", file=sys.stderr)
+    # Only what is there: a language's clips are added one batch at a time, and
+    # the earlier sources need not be re-fetched to prepare a new one.
+    present = {s: d for s, d in SOURCES.items() if (src_dir / s).is_file()}
+    missing = sorted(set(SOURCES) - set(present))
+    if not present:
+        print(f"nothing to prepare in {src_dir}: {', '.join(missing)}", file=sys.stderr)
         return 1
-    print(f"preparing {len(SOURCES)} voices from {src_dir}")
-    for src, dest in SOURCES.items():
+    if missing:
+        print(f"not in {src_dir}, leaving as shipped: {', '.join(missing)}")
+    print(f"preparing {len(present)} voice(s) from {src_dir}")
+    for src, dest in present.items():
         prepare(src_dir / src, out / dest)
     print(f"\ntotal {sum(p.stat().st_size for p in out.glob('*.flac')) / 1e6:.1f} MB")
     return 0

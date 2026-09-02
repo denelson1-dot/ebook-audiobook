@@ -35,6 +35,7 @@ applied to the render thread and fully reversible.
 
 from __future__ import annotations
 
+from .i18n import N_, _
 import ctypes
 import os
 import sys
@@ -52,16 +53,16 @@ DEFAULT_MODE = MODE_FULL
 # Shown in the UI and by `check`. Kept here so the CLI, the web UI, and the
 # settings page can't drift into describing the same mode three different ways.
 MODE_LABELS = {
-    MODE_FULL: "Full speed",
-    MODE_BALANCED: "Balanced",
-    MODE_QUIET: "Quiet / background",
+    MODE_FULL: N_("Full speed"),
+    MODE_BALANCED: N_("Balanced"),
+    MODE_QUIET: N_("Quiet / background"),
 }
 
 MODE_DESCRIPTIONS = {
-    MODE_FULL: "Use everything available. Fastest, and the machine will be busy.",
-    MODE_BALANCED: "Leave room to keep working. Roughly 10–25% slower.",
-    MODE_QUIET: "Stay out of the way — fewer cores, cooler, quieter fans. "
-                "Roughly 2x slower.",
+    MODE_FULL: N_("Use everything available. Fastest, and the machine will be busy."),
+    MODE_BALANCED: N_("Leave room to keep working. Roughly 10–25%% slower."),
+    MODE_QUIET: N_("Stay out of the way — fewer cores, cooler, quieter fans. "
+                "Roughly 2x slower."),
 }
 
 # Darwin thread QoS classes, from <sys/qos.h>, applied with
@@ -250,4 +251,4 @@ def pace(profile: Profile, work_seconds: float) -> float:
 
 def describe(mode: str | None) -> str:
     m = normalize_mode(mode)
-    return f"{MODE_LABELS[m]} — {MODE_DESCRIPTIONS[m]}"
+    return f"{_(MODE_LABELS[m])} — {_(MODE_DESCRIPTIONS[m])}"

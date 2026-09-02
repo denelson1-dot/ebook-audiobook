@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% set nav = 'settings' %}
-{% block title %}Settings · ebook·audiobook{% endblock %}
+{% block title %}{{ _("Settings") }} · ebook·audiobook{% endblock %}
 {% import "_icons.html" as ic %}
 {% block head %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Settings</h1>
-    <p class="page-sub">Everything is stored in one folder on this machine.
-      <a href="{{ url_for('storage_page') }}">Show me what's in it</a></p>
+    <h1 class="page-title">{{ _("Settings") }}</h1>
+    <p class="page-sub">{{ _("Everything is stored in one folder on this machine.") }}
+      <a href="{{ url_for('storage_page') }}">{{ _("Show me what's in it") }}</a></p>
   </div>
 </header>
 {% endblock %}
@@ -17,57 +17,52 @@
   <div class="stack">
 
     <section class="panel">
-      <div class="panel-head"><h3>Where finished audiobooks go</h3></div>
+      <div class="panel-head"><h3>{{ _("Where finished audiobooks go") }}</h3></div>
       <div class="panel-body">
         <div class="pathbox mono">
           {% if audiobooks_root %}
-            <button type="button" class="pathlink" id="revealRoot" title="Open this folder">
+            <button type="button" class="pathlink" id="revealRoot" title="{{ _("Open this folder") }}">
               {{ ic.icon('folder', 13) }}<span id="rootText">{{ audiobooks_root }}</span>
             </button>
           {% else %}
-            <span id="rootText">Not set yet</span>
+            <span id="rootText">{{ _("Not set yet") }}</span>
           {% endif %}
         </div>
         <input type="hidden" id="rootInput" value="{{ audiobooks_root or '' }}">
-        <p class="meta" style="margin-top:9px;line-height:1.5">Point this at the folder Plex watches. Each book is
-          filed as <code>Author / Title (Year) / Title.m4b</code> with a <code>cover.jpg</code> beside it — the
-          layout Plex and Audiobookshelf both expect. Any single book can still go to a flat folder instead.</p>
+        <p class="meta" style="margin-top:9px;line-height:1.5">{{ _("Point this at the folder Plex watches. Each book is filed as <code>Author / Title (Year) / Title.m4b</code> with a <code>cover.jpg</code> beside it — the layout Plex and Audiobookshelf both expect. Any single book can still go to a flat folder instead.") }}</p>
         <div class="btn-row" style="margin-top:12px">
-          <button type="button" class="btn" id="rootBtn">{{ ic.icon('folder', 14) }} Choose folder…</button>
-          <button type="button" class="btn primary" id="saveRootBtn">Save</button>
-          {% if audiobooks_root %}<button type="button" class="btn ghost" id="clearRootBtn">Clear</button>{% endif %}
+          <button type="button" class="btn" id="rootBtn">{{ ic.icon('folder', 14) }} {{ _("Choose folder…") }}</button>
+          <button type="button" class="btn primary" id="saveRootBtn">{{ _("Save") }}</button>
+          {% if audiobooks_root %}<button type="button" class="btn ghost" id="clearRootBtn">{{ _("Clear") }}</button>{% endif %}
         </div>
-        <p class="hint" id="rootHint">The folder is checked for write access when you save.</p>
+        <p class="hint" id="rootHint">{{ _("The folder is checked for write access when you save.") }}</p>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h3>Working files</h3>
+        <h3>{{ _("Working files") }}</h3>
         <span class="meta" style="margin-left:auto" id="workingFiles"></span>
       </div>
       <div class="panel-body">
-        <p class="meta" style="line-height:1.5">Narrating a book leaves behind the raw audio of every sentence —
-          a few gigabytes per book. It buys one thing: re-narrating in minutes rather than hours after you change
-          a setting. Once a book sounds right, it is dead weight.</p>
+        <p class="meta" style="line-height:1.5">{{ _("Narrating a book leaves behind the raw audio of every sentence — a few gigabytes per book. It buys one thing: re-narrating in minutes rather than hours after you change a setting. Once a book sounds right, it is dead weight.") }}</p>
         <label class="switch" style="margin-top:13px">
           <input type="checkbox" id="autoFreeCheck" {% if auto_free_working_files %}checked{% endif %}>
           <span style="flex:1">
-            <b>Free them when a book finishes</b>
-            <span>Off by default, so nothing is ever deleted without you. Turn it on and a finished book
-              cleans up after itself.</span>
+            <b>{{ _("Free them when a book finishes") }}</b>
+            <span>{{ _("Off by default, so nothing is ever deleted without you. Turn it on and a finished book cleans up after itself.") }}</span>
           </span>
         </label>
         <div class="btn-row" style="margin-top:14px">
-          <a class="btn sm" href="{{ url_for('storage_page') }}">Review book by book</a>
+          <a class="btn sm" href="{{ url_for('storage_page') }}">{{ _("Review book by book") }}</a>
         </div>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h3>How hard to work this machine</h3>
-        <span class="dim" style="margin-left:auto;font-size:11px">the audiobook is identical either way</span>
+        <h3>{{ _("How hard to work this machine") }}</h3>
+        <span class="dim" style="margin-left:auto;font-size:11px">{{ _("the audiobook is identical either way") }}</span>
       </div>
       <div class="panel-body">
         <div class="power-modes">
@@ -81,82 +76,101 @@
           </label>
           {% endfor %}
         </div>
-        <p class="hint" id="powerHint">Saved as the default for new books. Any single one can override it.</p>
+        <p class="hint" id="powerHint">{{ _("Saved as the default for new books. Any single one can override it.") }}</p>
       </div>
     </section>
   </div>
 
   <div class="stack">
     <section class="panel">
-      <div class="panel-head"><h3>Previews</h3></div>
+      <div class="panel-head"><h3>{{ _("Language") }}</h3></div>
+      <div class="panel-body">
+        <div class="field" style="max-width:320px">
+          {# Native names, never translated: someone who picked the wrong
+             language must still be able to find their own. #}
+          <select id="langSelect">
+            <option value="" {% if not language_setting %}selected{% endif %}>{{ _("Automatic — follow the browser") }}</option>
+            {% for l in languages %}
+            <option value="{{ l.code }}" {% if l.code == language_setting %}selected{% endif %}>{{ l.native }}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">{{ _("Also used by the menu-bar icon, whose title changes the next time the app starts.") }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>{{ _("Previews") }}</h3></div>
       <div class="panel-body">
         <label class="switch">
           <input type="checkbox" id="autoplayCheck" {% if autoplay_preview %}checked{% endif %}>
           <span style="flex:1">
-            <b>Play a preview as soon as it is ready</b>
-            <span>Generating one takes a while, so this saves pressing play after the wait.
-              Turn it off if you would rather choose the moment it starts.</span>
+            <b>{{ _("Play a preview as soon as it is ready") }}</b>
+            <span>{{ _("Generating one takes a while, so this saves pressing play after the wait. Turn it off if you would rather choose the moment it starts.") }}</span>
           </span>
         </label>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h3>Back up your work</h3></div>
+      <div class="panel-head"><h3>{{ _("Back up your work") }}</h3></div>
       <div class="panel-body">
         <div class="field">
-          <label for="backupProfile">What to include</label>
+          <label for="backupProfile">{{ _("What to include") }}</label>
           <select id="backupProfile">
-            <option value="projects" selected>Books and settings — not the audio</option>
-            <option value="settings">Settings and voice clips only</option>
-            <option value="full">Everything, including narrated audio</option>
+            <option value="projects" selected>{{ _("Books and settings — not the audio") }}</option>
+            <option value="settings">{{ _("Settings and voice clips only") }}</option>
+            <option value="full">{{ _("Everything, including narrated audio") }}</option>
           </select>
         </div>
         <!-- pre, not div: the breakdown is a padded table, and HTML would collapse
              both the newlines and the column alignment into one run-on line. -->
         <pre id="backupBreakdown" class="meta mono"
-             style="margin-top:4px;white-space:pre;overflow-x:auto;font-size:11.5px">Measuring…</pre>
-        <p class="hint">Narrated audio is left out on purpose: it is a hundred times the size and any
-          re-render recreates it exactly. What is left is the part that cannot be recreated.</p>
+             style="margin-top:4px;white-space:pre;overflow-x:auto;font-size:11.5px">{{ _("Measuring…") }}</pre>
+        <p class="hint">{{ _("Narrated audio is left out on purpose: it is a hundred times the size and any re-render recreates it exactly. What is left is the part that cannot be recreated.") }}</p>
         <div class="btn-row" style="margin-top:12px">
-          <button type="button" class="btn primary" id="backupBtn">{{ ic.icon('download', 14) }} Download backup</button>
+          <button type="button" class="btn primary" id="backupBtn">{{ ic.icon('download', 14) }} {{ _("Download backup") }}</button>
         </div>
-        <p class="hint" id="backupHint">Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>.</p>
+        <p class="hint" id="backupHint">{{ _("Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>.") }}</p>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h3>Updates</h3></div>
+      <div class="panel-head"><h3>{{ _("Narration languages") }}</h3></div>
       <div class="panel-body">
-        <p class="meta" style="line-height:1.55">Nothing here contacts the internet on its own. Asking whether
-          there is a newer version means sending a request to GitHub, which carries your IP address — so it
-          happens when you press the button, and not before.</p>
+        <p class="meta" style="line-height:1.55">{{ _("Books are narrated in English out of the box. Narrating in another language needs a second speech model, about 3 GB, downloaded from huggingface.co when — and only when — you press Install. Each language has its own narrators; a book's page offers the ones that speak its language.") }}</p>
+        <div id="langPacks" style="margin-top:12px">{{ _("Loading…") }}</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>{{ _("Updates") }}</h3></div>
+      <div class="panel-body">
+        <p class="meta" style="line-height:1.55">{{ _("Nothing here contacts the internet on its own. Asking whether there is a newer version means sending a request to GitHub, which carries your IP address — so it happens when you press the button, and not before.") }}</p>
         <div class="btn-row" style="margin-top:12px">
-          <button type="button" class="btn" id="updateBtn">Check for updates</button>
-          <span class="meta">Running <strong>{{ app_version }}</strong></span>
+          <button type="button" class="btn" id="updateBtn">{{ _("Check for updates") }}</button>
+          <span class="meta">{{ _("Running <strong>%(version)s</strong>", version=app_version) }}</span>
           <span class="meta" id="updateText"></span>
         </div>
         <hr style="margin:14px -16px">
         <label class="switch">
           <input type="checkbox" id="autoUpdateCheck" {% if check_for_updates %}checked{% endif %}>
           <span style="flex:1">
-            <b>Check when this page loads</b>
-            <span id="updateHint">Off. Turning it on is the only thing that makes this app talk to a server
-              without you asking.</span>
+            <b>{{ _("Check when this page loads") }}</b>
+            <span id="updateHint">{{ _("Off. Turning it on is the only thing that makes this app talk to a server without you asking.") }}</span>
           </span>
         </label>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h3>When something goes wrong</h3></div>
+      <div class="panel-head"><h3>{{ _("When something goes wrong") }}</h3></div>
       <div class="panel-body">
-        <div id="diagText" class="meta">Loading…</div>
-        <p class="hint">A report has your home folder replaced with <code>~</code> and book titles removed,
-          so filing one does not publish your reading history.</p>
+        <div id="diagText" class="meta">{{ _("Loading…") }}</div>
+        <p class="hint">{{ _("A report has your home folder replaced with <code>~</code> and book titles removed, so filing one does not publish your reading history.") }}</p>
         <div class="btn-row" style="margin-top:12px">
-          <a class="btn sm" id="reportBtn" href="/diagnostics/report">Download report</a>
-          <button type="button" class="btn sm ghost" id="clearLogBtn">Clear the log</button>
+          <a class="btn sm" id="reportBtn" href="/diagnostics/report">{{ _("Download report") }}</a>
+          <button type="button" class="btn sm ghost" id="clearLogBtn">{{ _("Clear the log") }}</button>
         </div>
       </div>
     </section>
@@ -177,20 +191,26 @@ document.getElementById("rootBtn").addEventListener("click", () => {
     onPick: (path) => { rootInput.value = path; document.getElementById("rootText").textContent = path; }
   });
 });
-document.getElementById("saveRootBtn").addEventListener("click", () => withBusy(document.getElementById("saveRootBtn"), "Saving…", async () => {
+document.getElementById("saveRootBtn").addEventListener("click", () => withBusy(document.getElementById("saveRootBtn"), _("Saving…"), async () => {
   const r = await fetch("/settings", { method: "POST", body: new URLSearchParams({ audiobooks_root: rootInput.value }) });
   if (!r.ok) {
-    let msg = "Couldn't save"; try { msg = (await r.json()).error || msg; } catch {}
+    let msg = _("Couldn't save"); try { msg = (await r.json()).error || msg; } catch {}
     document.getElementById("rootHint").textContent = msg;
     document.getElementById("rootHint").style.color = "var(--danger)";
     return;
   }
-  toast("Saved"); setTimeout(() => location.reload(), 500);
+  toast(_("Saved")); setTimeout(() => location.reload(), 500);
 }));
 const clearBtn = document.getElementById("clearRootBtn");
 if (clearBtn) clearBtn.addEventListener("click", async () => {
   await fetch("/settings", { method: "POST", body: new URLSearchParams({ audiobooks_root: "" }) });
-  toast("Cleared"); setTimeout(() => location.reload(), 500);
+  toast(_("Cleared")); setTimeout(() => location.reload(), 500);
+});
+
+// Language: saves on pick and reloads, since every word on the page changes.
+document.getElementById("langSelect").addEventListener("change", async (e) => {
+  await postForm("/settings", { language: e.target.value });
+  location.reload();
 });
 
 // Saves on pick — no separate button, and deliberately posts only power_mode so
@@ -203,9 +223,9 @@ document.querySelectorAll('input[name="power_mode"]').forEach((radio) => {
       method: "POST", body: new URLSearchParams({ power_mode: radio.value }),
     });
     document.getElementById("powerHint").textContent =
-      r.ok ? "Saved as the default for new conversions."
-           : "Couldn't save that setting.";
-    if (r.ok) toast("Saved");
+      r.ok ? _("Saved as the default for new conversions.")
+           : _("Couldn't save that setting.");
+    if (r.ok) toast(_("Saved"));
   });
 });
 
@@ -213,17 +233,17 @@ document.querySelectorAll('input[name="power_mode"]').forEach((radio) => {
 const profileSel = document.getElementById("backupProfile");
 async function refreshBackupEstimate() {
   const el = document.getElementById("backupBreakdown");
-  el.textContent = "Measuring…";
+  el.textContent = _("Measuring…");
   try {
     const r = await fetch(`/backup/estimate?profile=${encodeURIComponent(profileSel.value)}`);
     const d = await r.json();
-    if (!d.ok) { el.textContent = d.error || "Couldn't measure"; return; }
+    if (!d.ok) { el.textContent = d.error || _("Couldn't measure"); return; }
     const rows = d.categories.map((c) =>
-      `${c.included ? "+" : "−"} ${c.label.padEnd(20)} ${String(c.files).padStart(7)} files  ${c.human.padStart(10)}${c.included ? "" : "   (left out)"}`);
-    rows.push("", `backup size: ${d.human} in ${d.files} files`);
-    if (d.excluded_human !== "0 B") rows.push(`left out:    ${d.excluded_human}`);
+      `${c.included ? "+" : "−"} ${c.label.padEnd(20)} ${String(c.files).padStart(7)} ${_("files")}  ${c.human.padStart(10)}${c.included ? "" : "   " + _("(left out)")}`);
+    rows.push("", _("backup size: %(size)s in %(files)s files", { size: d.human, files: d.files }));
+    if (d.excluded_human !== "0 B") rows.push(_("left out:    %(size)s", { size: d.excluded_human }));
     el.textContent = rows.join("\n");
-  } catch { el.textContent = "Couldn't measure the data folder."; }
+  } catch { el.textContent = _("Couldn't measure the data folder."); }
 }
 profileSel.addEventListener("change", refreshBackupEstimate);
 refreshBackupEstimate();
@@ -237,13 +257,73 @@ document.getElementById("backupBtn").addEventListener("click", () => {
   i.type = "hidden"; i.name = "profile"; i.value = profileSel.value;
   f.appendChild(i); document.body.appendChild(f); f.submit(); f.remove();
   document.getElementById("backupHint").textContent =
-    "Building the archive… the download starts when it's ready.";
+    _("Building the archive… the download starts when it's ready.");
 });
+
+// --- narration languages ---------------------------------------------------------
+// Rows built from /api/languages; polled every two seconds while a model is
+// coming down, since the only progress there is is the size of the cache.
+let langPollTimer = null;
+async function refreshLanguages() {
+  const box = document.getElementById("langPacks");
+  let d;
+  try { d = await getJSON("/api/languages"); } catch (e) { box.textContent = _("Couldn't read the model cache."); return; }
+  const rows = d.packs.map((p) => {
+    const downloading = d.download && d.download.pack === p.id;
+    let status, actions;
+    if (p.installed) {
+      status = `<span class="chip ok">${_("installed")}</span> <span class="meta mono">${humanBytes(p.bytes_on_disk)}</span>`;
+      actions = p.id === "english" ? "" :
+        `<button type="button" class="btn sm ghost" data-remove="${p.id}">${_("Remove")}</button>`;
+    } else if (downloading) {
+      const pct = Math.round(100 * d.download.done_bytes / d.download.total_bytes);
+      status = `<span class="chip live"><span class="dot pulse"></span>${_("downloading")}</span>
+        <span class="meta mono">${humanBytes(d.download.done_bytes)} / ${humanBytes(d.download.total_bytes)}</span>
+        <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>`;
+      actions = `<button type="button" class="btn sm ghost" data-cancel="${p.id}">${_("Cancel")}</button>`;
+    } else {
+      status = p.id === "english"
+        ? `<span class="meta">${_("downloads with the first narration")}</span>`
+        : `<span class="meta">${_("not installed")}</span>`;
+      actions = p.id === "english" || !d.engine_ok ? "" :
+        `<button type="button" class="btn sm primary" data-install="${p.id}">${_("Install (%(size)s)", { size: humanBytes(p.size_bytes) })}</button>`;
+    }
+    const langs = p.id === "english" ? "" :
+      `<p class="hint" style="margin-top:4px">${escapeHtml(p.languages.join(", "))}</p>`;
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><b style="font-size:13px">${escapeHtml(p.label)}</b>${langs}
+        <div style="margin-top:6px">${status}</div></div>
+      <div>${actions}</div></div>`;
+  });
+  let note = "";
+  if (!d.engine_ok) note = `<p class="hint" style="margin-top:8px">${_("Install the speech engine first (re-run the installer); a language model is of no use without it.")}</p>`;
+  else if (d.last_error && !d.download) note = `<p class="hint" style="margin-top:8px;color:var(--danger)">${escapeHtml(d.last_error.message)}</p>`;
+  box.innerHTML = rows.join("") + note;
+  clearTimeout(langPollTimer);
+  if (d.download) langPollTimer = setTimeout(refreshLanguages, 2000);
+}
+document.getElementById("langPacks").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const pack = btn.dataset.install || btn.dataset.cancel || btn.dataset.remove;
+  const action = btn.dataset.install ? "install" : btn.dataset.cancel ? "cancel" : "remove";
+  if (action === "remove") {
+    const ok = await confirmDialog({ title: _("Remove this language model?"), danger: true,
+      confirmLabel: _("Remove"),
+      bodyHtml: `<p>${_("Books in its languages can't be narrated until it is downloaded again.")}</p>` });
+    if (!ok) return;
+  }
+  const r = await postFormResult(`/api/languages/${action}`, { pack });
+  if (!r.ok) toast(r.error || _("Couldn't do that"));
+  else if (action === "install") toast(_("Downloading — this takes a while"));
+  refreshLanguages();
+});
+refreshLanguages();
 
 // --- updates --------------------------------------------------------------
 async function checkUpdates() {
   const text = document.getElementById("updateText");
-  text.textContent = "Checking…";
+  text.textContent = _("Checking…");
   try {
     const r = await fetch("/updates/check", { method: "POST" });
     const d = await r.json();
@@ -253,23 +333,24 @@ async function checkUpdates() {
       // the one that is not trusted as markup.
       const url = /^https:\/\//.test(d.notes_url || "") ? d.notes_url : "";
       text.innerHTML = escapeHtml(d.message) + (url
-        ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Release notes</a>` : "");
+        ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${_("Release notes")}</a>` : "");
       document.getElementById("updateHint").innerHTML =
-        `Upgrade by running <code>ebook-audiobook update --apply</code>, or: <code>${escapeHtml(d.command)}</code>`;
+        _("Upgrade by running <code>ebook-audiobook update --apply</code>, or: <code>%(command)s</code>",
+          { command: escapeHtml(d.command) });
     }
-  } catch { text.textContent = "Couldn't check right now."; }
+  } catch { text.textContent = _("Couldn't check right now."); }
 }
 const updateBtn = document.getElementById("updateBtn");
 // The one request in this app that leaves the machine, so it is the one most
 // worth showing as in flight.
-updateBtn.addEventListener("click", () => withBusy(updateBtn, "Checking…", checkUpdates));
+updateBtn.addEventListener("click", () => withBusy(updateBtn, _("Checking…"), checkUpdates));
 const autoBox = document.getElementById("autoUpdateCheck");
 autoBox.addEventListener("change", async () => {
   await fetch("/settings", {
     method: "POST",
     body: new URLSearchParams({ check_for_updates: autoBox.checked ? "1" : "0" }),
   });
-  toast("Saved");
+  toast(_("Saved"));
   if (autoBox.checked) checkUpdates();
 });
 if (autoBox.checked) checkUpdates();
@@ -282,18 +363,19 @@ async function refreshDiagnostics() {
     const d = await r.json();
     const kb = Math.round(d.bytes / 1024);
     if (!d.errors.length) {
-      el.textContent = `No errors logged. (Log capped at ${Math.round(d.max_bytes / 1024)} KB, kept ${d.max_age_days} days.)`;
+      el.textContent = _("No errors logged. (Log capped at %(kb)s KB, kept %(days)s days.)",
+                         { kb: Math.round(d.max_bytes / 1024), days: d.max_age_days });
       return;
     }
     // Error text quotes file names and parser output from the ebook itself.
-    el.innerHTML = `<strong>${d.errors.length} recent error(s)</strong>, log is ${kb} KB:<br>` +
+    el.innerHTML = _("<strong>%(n)s recent error(s)</strong>, log is %(kb)s KB:", { n: d.errors.length, kb }) + "<br>" +
       d.errors.slice(0, 5).map((e) =>
         `<span class="mono">${escapeHtml(e.ts)} · ${escapeHtml(e.op)} · ${escapeHtml(e.error)}</span>`).join("<br>");
-  } catch { el.textContent = "Couldn't read the log."; }
+  } catch { el.textContent = _("Couldn't read the log."); }
 }
 document.getElementById("clearLogBtn").addEventListener("click", async () => {
   await fetch("/diagnostics/clear", { method: "POST" });
-  toast("Cleared"); refreshDiagnostics();
+  toast(_("Cleared")); refreshDiagnostics();
 });
 refreshDiagnostics();
 
@@ -304,21 +386,21 @@ refreshDiagnostics();
     const el = document.getElementById("workingFiles");
     if (!el) return;
     el.innerHTML = d.safe_bytes
-      ? `<span class="chip warn">${humanBytes(d.safe_bytes)} can be freed</span>`
-      : `<span class="chip ok">nothing to reclaim</span>`;
+      ? `<span class="chip warn">${_("%(size)s can be freed", { size: humanBytes(d.safe_bytes) })}</span>`
+      : `<span class="chip ok">${_("nothing to reclaim")}</span>`;
   } catch (e) { /* the page is complete without it */ }
 })();
 
 document.getElementById("autoFreeCheck").addEventListener("change", async (e) => {
   await postForm("/settings", { auto_free_working_files: e.target.checked ? "1" : "0" });
   toast(e.target.checked
-    ? "Finished books will clean up after themselves."
-    : "Working files will be kept until you say otherwise.");
+    ? _("Finished books will clean up after themselves.")
+    : _("Working files will be kept until you say otherwise."));
 });
 
 document.getElementById("autoplayCheck").addEventListener("change", async (e) => {
   await postForm("/settings", { autoplay_preview: e.target.checked ? "1" : "0" });
-  toast(e.target.checked ? "Previews will play themselves." : "Previews will wait for you.");
+  toast(e.target.checked ? _("Previews will play themselves.") : _("Previews will wait for you."));
 });
 </script>
 {% endblock %}

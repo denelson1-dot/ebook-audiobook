@@ -27,6 +27,7 @@ Two directories are *never* included at any setting:
 
 from __future__ import annotations
 
+from .i18n import N_, _
 import json
 import os
 import time
@@ -73,14 +74,14 @@ PROFILES: dict[str, Selection] = {
 DEFAULT_PROFILE = "projects"
 
 CATEGORY_LABELS = {
-    "settings": "settings",
-    "voices": "voice clips",
-    "imports": "imported books",
-    "job_metadata": "project data",
-    "job_audio": "rendered audio",
-    "outputs": "finished audiobooks",
-    "models": "model cache",
-    "logs": "logs",
+    "settings": N_("settings"),
+    "voices": N_("voice clips"),
+    "imports": N_("imported books"),
+    "job_metadata": N_("project data"),
+    "job_audio": N_("rendered audio"),
+    "outputs": N_("finished audiobooks"),
+    "models": N_("model cache"),
+    "logs": N_("logs"),
 }
 
 
@@ -201,15 +202,13 @@ def create(dest: Path, selection: Selection | None = None,
     root = Path(root) if root else paths().root
     dest = Path(dest)
     if not root.is_dir():
-        raise BackupError(f"There's no data folder at {root}.")
+        raise BackupError(_("There's no data folder at %(root)s.", root=root))
 
     est = estimate(selection, root=root)
     if max_bytes is not None and est.selected_bytes > max_bytes:
-        raise BackupError(
-            f"That backup would be about {human_bytes(est.selected_bytes)}, over the "
-            f"{human_bytes(max_bytes)} limit. Use a smaller profile "
-            f"(--profile settings), or raise --max-size."
-        )
+        raise BackupError(_(
+            "That backup would be about %(size)s, over the %(limit)s limit. Use a "
+            "smaller profile (--profile settings), or raise --max-size.", size=human_bytes(est.selected_bytes), limit=human_bytes(max_bytes)))
 
     manifest = {
         "format": FORMAT_VERSION,
@@ -234,7 +233,7 @@ def create(dest: Path, selection: Selection | None = None,
         tmp.replace(dest)
     except OSError as e:
         tmp.unlink(missing_ok=True)
-        raise BackupError(f"Couldn't write the backup: {e}") from e
+        raise BackupError(_("Couldn't write the backup: %(e)s", e=e)) from e
     return dest
 
 
@@ -249,12 +248,9 @@ def read_manifest(archive: Path) -> dict:
         with zipfile.ZipFile(archive) as z:
             return json.loads(z.read(MANIFEST_NAME).decode("utf-8"))
     except KeyError as e:
-        raise BackupError(
-            f"{Path(archive).name} isn't an ebook-audiobook backup "
-            "(no manifest inside)."
-        ) from e
+        raise BackupError(_("%(name)s isn't an ebook-audiobook backup (no manifest inside).", name=Path(archive).name)) from e
     except (zipfile.BadZipFile, OSError, ValueError) as e:
-        raise BackupError(f"Couldn't read {Path(archive).name}: {e}") from e
+        raise BackupError(_("Couldn't read %(name)s: %(e)s", name=Path(archive).name, e=e)) from e
 
 
 def _safe_target(root: Path, name: str) -> Path | None:
@@ -316,7 +312,7 @@ def restore(archive: Path, into: Path | None = None, force: bool = False) -> Res
                         out.write(chunk)
                 written += 1
     except (zipfile.BadZipFile, OSError) as e:
-        raise BackupError(f"Couldn't restore {archive.name}: {e}") from e
+        raise BackupError(_("Couldn't restore %(name)s: %(e)s", name=archive.name, e=e)) from e
     return RestoreResult(written=written, skipped=skipped, root=root, ignored=ignored)
 
 

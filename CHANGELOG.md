@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+### The interface speaks French, and French books are narrated in French
+
+- **Interface language.** Every page, the tray menu and the app's replies are
+  translated. The language follows the browser, or **Settings → Language**,
+  or `EBAB_LANG`. English and French; the catalog is one `.po` file a
+  translator edits in Poedit (`tools/i18n.py` maintains it, CI checks it).
+  Numbers, sizes and durations follow the language too: "1,5 Mo", "8 h 04 min".
+- **Narration language.** A book carries the language its metadata declares,
+  and a voice the language it speaks. French books are narrated in French by
+  two new bundled French voices — the female one is the default under a French
+  interface — with numbers, abbreviations and typography read the French way
+  ("1625" → *mille six cent vingt-cinq*, "M. de Tréville" → *Monsieur de
+  Tréville*, "12,50 €" → *douze euros et cinquante centimes*, "Chapitre IV" →
+  *Chapitre quatre*, guillemets and no-break spaces folded away). "Table des
+  matières" and "Remerciements" are switched off by default like their English
+  counterparts. The opening and closing announcements and the fallback chapter
+  title are in the narration language.
+- **Narration languages panel** in Settings. French needs the engine's
+  multilingual model (about 3 GB), downloaded from huggingface.co only when
+  **Install** is pressed — through the one worker, cancellable, resumable,
+  removable — or with `ebook-audiobook languages install fr`. Until it is
+  there, a French book is narrated in English and its page says what to
+  install. The same model's other twenty-one languages are offered as
+  experimental. A book's narration language can be changed on its page; the
+  book is read again and that language's narrator takes over. Rendering in a
+  language whose model is missing is refused before it starts, in a sentence.
+- **Voices carry a language**, are named with it ("English — Male, North
+  American", "French — Female"), and a book's page offers the ones that speak
+  its language.
+- The `.m4b` is tagged with the narration language players read.
+- The installers take `--lang fr` / `-Lang fr` and follow the desktop's
+  language; `README.fr.md` is the French README.
+- English renders are untouched: the English text rules moved without changing
+  a byte (a golden test holds them to it) and English render keys are
+  identical, so every existing cache is still valid.
+
 ## 1.3.1 — 2026-09-01
 
 A review pass over the 1.3.0 interface, with macOS in mind.

@@ -61,7 +61,9 @@ jobs:
                       # an explicit check catches it.
                       "ebook_audiobook/assets/icon-256.png",
                       "ebook_audiobook/assets/icon.ico",
-                      "ebook_audiobook/assets/icon.icns"]
+                      "ebook_audiobook/assets/icon.icns",
+                      # The compiled translations, or the app is English-only.
+                      "ebook_audiobook/locale/fr/LC_MESSAGES/messages.mo"]
           missing = [r for r in required if r not in names]
           if missing:
               sys.exit("MISSING FROM WHEEL: " + ", ".join(missing))

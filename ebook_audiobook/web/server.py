@@ -25,6 +25,7 @@ import threading
 import time
 import webbrowser
 
+from .. import i18n, settings as app_settings
 from . import create_app
 from ..desktop import launcher, runtime, tray
 
@@ -119,7 +120,7 @@ def _quit_label() -> str:
     """The tray's quit text, which doubles as its only way to warn."""
     from .runner import runner
 
-    return "Quit — stops the running render" if runner.is_busy() else "Quit"
+    return i18n._("Quit — stops the running render") if runner.is_busy() else i18n._("Quit")
 
 
 def serve(host: str | None = None, port: int | None = None,
@@ -212,6 +213,12 @@ def serve(host: str | None = None, port: int | None = None,
         # Daemon thread so it can never hold up shutdown.
         threading.Thread(target=_open_when_ready, args=(url, host, port),
                          daemon=True).start()
+
+    # The tray menu has no browser to ask, so its language is the desktop's,
+    # unless Settings says otherwise. Set here, once — never at import time,
+    # which is what keeps the CLI and the test suite English on a French Mac.
+    i18n.set_process_language(
+        i18n.resolve(app_settings.load_settings().language, i18n.detect_os_language()))
 
     has_tray = use_tray and tray.available()
     _announce(url, has_tray)

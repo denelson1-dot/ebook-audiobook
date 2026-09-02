@@ -12,13 +12,14 @@ import threading
 import uuid
 from pathlib import Path
 
-from flask import (Flask, Response, abort, current_app, jsonify, redirect,
+from flask import (Flask, Response, abort, current_app, g, jsonify, redirect,
                    render_template, request, send_file, url_for)
 from werkzeug.utils import secure_filename
 
 from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
                 tools, worker)
-from .. import hashing
+from .. import hashing, i18n, narration_langs
+from ..i18n import _
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
 from ..jobs.models import STAGE_LABELS, Stage, stage_label
@@ -78,14 +79,8 @@ def _safe_upload_name(filename: str) -> str:
 
 
 def human_bytes(n) -> str:
-    if n is None:
-        return "—"
-    f = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if f < 1024 or unit == "TB":
-            return f"{f:.0f} {unit}" if unit == "B" else f"{f:.1f} {unit}"
-        f /= 1024
-    return f"{f:.1f} TB"
+    """In the request's language: "1.5 MB" here, "1,5 Mo" in French."""
+    return i18n.human_bytes(n)
 
 
 # Muted, deliberately unsaturated grounds for books whose ebook carries no cover
@@ -104,18 +99,8 @@ def cover_tint(title: str) -> str:
 
 
 def fmt_listening(output_bytes: int | None, kbps: int) -> str | None:
-    """How long a finished audiobook plays, from the one thing we always have.
-
-    The shelf shows this instead of a file size on its own: "8h 04m" is what
-    somebody actually wants to know about an audiobook.
-    """
-    if not output_bytes or kbps <= 0:
-        return None
-    secs = output_bytes / (kbps * 125)  # kbps -> bytes per second
-    h, m = int(secs // 3600), int(round((secs % 3600) / 60))
-    if m == 60:
-        h, m = h + 1, 0
-    return f"{h}h {m:02d}m" if h else f"{m}m"
+    """How long a finished audiobook plays — "8h 04m" — in the request's language."""
+    return i18n.fmt_listening(output_bytes, kbps)
 
 
 def fmt_dt(iso) -> str:
@@ -139,7 +124,7 @@ def _nearest_existing(path: Path) -> Path:
     unknown rather than lying.
     """
     p = path
-    for _ in range(64):  # bounded: a symlink cycle must not hang a request
+    for _hop in range(64):  # bounded: a symlink cycle must not hang a request
         if p.exists():
             return p
         if p.parent == p:
@@ -172,16 +157,66 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
-def _offerable_voices(current_id: str | None = None) -> list[dict]:
-    """The voices a person may pick from.
+def _offerable_voices(current_id: str | None = None, language: str = "en") -> list[dict]:
+    """The voices a person may pick from: the ones that speak ``language``.
 
     The engine's own untuned voice is deliberately not among them: it exists as
     a fallback, not as a choice, and the shipped narrators are better in every
-    case. It is still shown when a job already uses it, because silently
-    swapping a book's voice would silently re-render the book.
+    case. It — and a voice of another language — is still shown when the job
+    already uses it, because silently swapping a book's voice would silently
+    re-render the book.
     """
     return [v.to_dict() for v in VoiceLibrary().list()
-            if not v.is_default or v.id == current_id]
+            if (v.language == language and not v.is_default) or v.id == current_id]
+
+
+def _narration_language_choices() -> list[dict]:
+    """Every language the engine can speak, said in the interface language,
+    with whether its model is on this machine."""
+    # Names head a list here, so they are capitalised; in a sentence ("en
+    # français") the catalog's lowercase form is the right one.
+    return [{"code": lg.code, "name": _capitalized(_(lg.name)), "tier": lg.tier,
+             "available": narration_langs.language_available(lg.code)}
+            for lg in narration_langs.LANGUAGES.values()]
+
+
+def _capitalized(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+def _engine_present() -> bool:
+    """Whether the speech engine is installed at all, judged without importing
+    it: torch takes seconds to load and this is asked on a two-second poll."""
+    import importlib.util
+
+    return (importlib.util.find_spec("torch") is not None
+            and importlib.util.find_spec("chatterbox") is not None)
+
+
+def _languages_report() -> dict:
+    nl = narration_langs
+    download = None
+    current = runner.current or ""
+    if current.endswith(":model_download"):
+        pack_id = current.split(":", 1)[0].removeprefix("langpack-")
+        pack = nl.PACKS.get(pack_id)
+        if pack:
+            download = {"pack": pack.id, "done_bytes": nl.bytes_on_disk(pack),
+                        "total_bytes": pack.size_bytes}
+    return {
+        "ok": True,
+        "engine_ok": _engine_present(),
+        "cache_root": str(nl.cache_root()),
+        "download": download,
+        "last_error": nl.last_error if nl.last_error.get("message") else None,
+        "packs": [{
+            "id": p.id, "label": _capitalized(_(p.label)), "size_bytes": p.size_bytes,
+            "installed": nl.is_installed(p.id), "bytes_on_disk": nl.bytes_on_disk(p),
+            "languages": [_(nl.LANGUAGES[c].name) for c in sorted(p.languages)
+                          if c in nl.LANGUAGES],
+        } for p in nl.PACKS.values()],
+        "languages": _narration_language_choices(),
+    }
 
 
 def _busy_job_id() -> str | None:
@@ -236,6 +271,21 @@ def create_app() -> Flask:
     app.jinja_env.filters["dt"] = fmt_dt
     app.jinja_env.filters["stage"] = stage_label
     app.jinja_env.filters["tint"] = cover_tint
+    # For _(msgid, **params) where a value is a count: "12 000" in French.
+    app.jinja_env.filters["nums"] = lambda d: {
+        k: (i18n.fmt_int(v) if isinstance(v, int) and not isinstance(v, bool) else v)
+        for k, v in d.items()}
+    # Interface language: Jinja's own i18n extension over stdlib gettext. The
+    # callables look the language up per request, so one environment serves
+    # every language. newstyle matters: _("… %(n)s …", n=x) formats with the
+    # variables escaped and the msgid trusted as markup, which is what lets a
+    # paragraph keep its inline <code> as one translatable piece — the price is
+    # that a literal % in a template string must be written %%.
+    app.jinja_env.add_extension("jinja2.ext.i18n")
+    app.jinja_env.install_gettext_callables(
+        i18n.translate, i18n.translate_plural, newstyle=True,
+        pgettext=i18n.translate_context, npgettext=i18n.translate_context_plural)
+    app.jinja_env.policies["ext.i18n.trimmed"] = True
     p = paths().ensure()
 
     # A prior process may have been killed mid-render, leaving jobs frozen in a
@@ -247,10 +297,29 @@ def create_app() -> Flask:
         except Exception:
             continue
 
+    @app.before_request
+    def _choose_language():
+        # EBAB_LANG, then the saved setting, then what the browser asks for.
+        s = app_settings.load_settings()
+        g.settings = s
+        g.lang = i18n.resolve(
+            s.language, request.accept_languages.best_match(list(i18n.SUPPORTED)))
+
+    @app.after_request
+    def _declare_language(resp):
+        if resp.mimetype == "text/html":
+            resp.headers["Content-Language"] = getattr(g, "lang", i18n.DEFAULT)
+        return resp
+
     @app.context_processor
     def inject_globals():
-        s = app_settings.load_settings()
+        s = getattr(g, "settings", None) or app_settings.load_settings()
+        lang = getattr(g, "lang", None) or i18n.DEFAULT
         return {
+            "lang": lang,
+            "language_setting": s.language,
+            "languages": i18n.language_choices(),
+            "js_catalog": i18n.js_catalog(lang),
             "home_dir": str(Path.home()),
             "data_root": str(paths().root),
             "audiobooks_root": s.audiobooks_root,
@@ -262,8 +331,8 @@ def create_app() -> Flask:
             "can_quit": bool(current_app.config.get("EBAB_SHUTDOWN")),
             "power_mode": s.power_mode,
             "power_modes": [
-                {"id": m, "label": power.MODE_LABELS[m],
-                 "description": power.MODE_DESCRIPTIONS[m]}
+                {"id": m, "label": _(power.MODE_LABELS[m]),
+                 "description": _(power.MODE_DESCRIPTIONS[m])}
                 for m in power.MODES
             ],
             "check_for_updates": s.check_for_updates,
@@ -428,17 +497,22 @@ def create_app() -> Flask:
             s.autoplay_preview = request.form.get("autoplay_preview") == "1"
         if "auto_free_working_files" in request.form:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
+        if "language" in request.form:
+            s.language = i18n.normalize(request.form.get("language"))
         if "audiobooks_root" in request.form:
             # Choosing (or clearing) the folder answers the first-run question.
             # Flipping an unrelated switch does not, and must not silently
             # dismiss a prompt the user never saw.
             s.setup_dismissed = True
         app_settings.save_settings(s)
+        # The tray has no browser to ask; it follows the setting, or the desktop.
+        i18n.set_process_language(i18n.resolve(s.language, i18n.detect_os_language()))
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
                 "power_mode": s.power_mode,
                 "check_for_updates": s.check_for_updates,
                 "auto_free_working_files": s.auto_free_working_files,
-                "autoplay_preview": s.autoplay_preview}
+                "autoplay_preview": s.autoplay_preview,
+                "language": s.language}
 
     # ----- updates, backup, diagnostics -------------------------------------
 
@@ -481,7 +555,7 @@ def create_app() -> Flask:
             "human": backup_mod.human_bytes(est.selected_bytes),
             "excluded_human": backup_mod.human_bytes(est.excluded_bytes),
             "categories": [
-                {"key": key, "label": label,
+                {"key": key, "label": _(label),
                  "files": est.by_category.get(key, (0, 0))[0],
                  "human": backup_mod.human_bytes(est.by_category.get(key, (0, 0))[1]),
                  "included": getattr(selection, key, False)}
@@ -634,12 +708,16 @@ def create_app() -> Flask:
             has_cover=bool(book.cover_path and Path(book.cover_path).is_file()),
             tint=cover_tint(book.title),
             # The client renders a stage into words too (it polls faster than a
-            # page reload), so it gets the same table rather than a second copy.
-            stage_labels=STAGE_LABELS,
+            # page reload), so it gets the same table rather than a second copy —
+            # already said in this request's language.
+            stage_labels={k: stage_label(k) for k in STAGE_LABELS},
             chapters=chapters,
             voice=voice,
-            voices=_offerable_voices(voice.extra.get("voice_id")),
+            voices=_offerable_voices(voice.extra.get("voice_id"), voice.language),
             selected_voice_id=voice.extra.get("voice_id", "default"),
+            narration_language=voice.language,
+            narration_languages=_narration_language_choices(),
+            narration_notice=worker.narration_notice(store),
             default_chapter_id=default_ch,
             bitrate=bitrate,
             pron_text=pron_text,
@@ -731,23 +809,23 @@ def create_app() -> Flask:
                 upload.save(staged)
             except OSError as e:
                 staged.unlink(missing_ok=True)
-                return fail(f"Couldn't save the uploaded file — is the disk full?\n\n{e}")
+                return fail(_("Couldn't save the uploaded file — is the disk full?\n\n%(e)s", e=e))
             src_path = str(staged)
         elif request.form.get("path"):
             # Local path import is intentional for a single-user localhost tool.
             src_path = request.form["path"].strip()
         if not src_path:
-            return fail("Choose an ebook file first.")
+            return fail(_("Choose an ebook file first."))
         try:
             job_id = worker.import_ebook(src_path, engine=engine)
         except FileNotFoundError:
-            return fail(f"That file no longer exists:\n{src_path}")
+            return fail(_("That file no longer exists:\n%(path)s", path=src_path))
         except ValueError as e:
             # Unsupported/again-actionable format problems — show the guidance inline.
             return fail(str(e))
         except OSError as e:
             # Out of space, unreadable source, permission denied on the data dir.
-            return fail(f"Couldn't import that book:\n\n{e}")
+            return fail(_("Couldn't import that book:\n\n%(e)s", e=e))
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)
@@ -781,11 +859,44 @@ def create_app() -> Flask:
         store.save_voice(voice)
         return {"ok": True}
 
+    def _language_pack_missing(job_id: str):
+        """A 409 saying which model to install, or None when the job's language
+        can be narrated here. Asked before anything is queued, so a French
+        book on a machine without the French model is refused in a sentence
+        rather than in a failed model load ten seconds later."""
+        try:
+            narration_langs.require_installed(JobStore(job_id).load_voice().language)
+        except narration_langs.LanguagePackMissing as e:
+            return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
+        return None
+
+    @app.post("/job/<job_id>/language")
+    def set_language(job_id):
+        """Narrate this book in another language, and read it again for that."""
+        store = _job_or_404(job_id)
+        if runner.is_busy(job_id):
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
+        lang = (request.form.get("language") or "").strip().lower()
+        if lang not in narration_langs.LANGUAGES:
+            return {"ok": False, "error": _("That isn't a language this can narrate.")}, 400
+        try:
+            worker.set_job_language(store, lang)
+        except narration_langs.LanguagePackMissing as e:
+            return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
+        # The text is prepared per language, so read the book again; the
+        # sections' on/off choices are carried across by the extraction, and
+        # the language just chosen is not second-guessed by the book's metadata.
+        runner.submit(job_id, "extract", keep_language=True)
+        return {"ok": True, "language": lang}
+
     @app.post("/job/<job_id>/preview")
     def start_preview(job_id):
         _job_or_404(job_id)
         if runner.is_busy(job_id):
-            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         # Bounded: zero would divide the progress by nothing after a full model
         # load, and an hour-long "preview" is a render by another name.
         seconds = min(300.0, max(5.0, _f(request.form, "seconds", 30)))
@@ -810,9 +921,12 @@ def create_app() -> Flask:
         """
         store = _job_or_404(job_id)
         if not store.load_chapters():
-            return {"ok": False, "error": "the book hasn't been read yet"}, 409
+            return {"ok": False, "error": _("The book hasn't been read yet.")}, 409
         if runner.is_busy():
-            return {"ok": False, "error": "something else is running"}, 409
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         runner.submit(job_id, "measure")
         return {"ok": True}
 
@@ -824,9 +938,12 @@ def create_app() -> Flask:
             # second submit queues a second full pass — re-assembling and
             # re-packaging the book for nothing — and its state writes below
             # land under a render that is already saving its own copy.
-            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         if not any(c.include for c in store.load_chapters()):
-            return {"ok": False, "error": "Select at least one section to render."}, 400
+            return {"ok": False, "error": _("Select at least one section to render.")}, 400
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         mode = request.form.get("output_mode") or worker.default_output_mode()
         raw = (request.form.get("output_dir") or "").strip() or None
         # Resolve + write-check the real destination now, so a bad folder (or an
@@ -917,7 +1034,7 @@ def create_app() -> Flask:
         Only listed chapters are changed; the rest keep their current setting."""
         store = _job_or_404(job_id)
         if runner.is_busy(job_id):
-            return {"ok": False, "error": "job is busy — stop it first"}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         includes = (request.get_json(silent=True) or {}).get("includes", {})
         if not isinstance(includes, dict):
             abort(400, "includes must be an object of chapter_id -> bool")
@@ -991,9 +1108,9 @@ def create_app() -> Flask:
             target = Path(root) if root else None
 
         if target is None or not target.is_dir():
-            return {"ok": False, "error": "That folder doesn't exist yet."}, 404
+            return {"ok": False, "error": _("That folder doesn't exist yet.")}, 404
         if not tools.reveal(target):
-            return {"ok": False, "error": "Couldn't open a file manager on this system."}, 501
+            return {"ok": False, "error": _("Couldn't open a file manager on this system.")}, 501
         return {"ok": True, "path": str(target)}
 
     @app.get("/api/space")
@@ -1083,23 +1200,73 @@ def create_app() -> Flask:
         lib = VoiceLibrary()
         name = request.form.get("name", "").strip()
         if not name:
-            return _voices_page("Give the voice a name.", 400)
+            return _voices_page(_("Give the voice a name."), 400)
         upload = request.files.get("file")
         path = request.form.get("path", "").strip()
         try:
             if upload and upload.filename:
                 if Path(upload.filename).suffix.lower() not in AUDIO_EXTS:
-                    return _voices_page("That isn't an audio format this can read.", 400)
+                    return _voices_page(_("That isn't an audio format this can read."), 400)
                 lib.add(name, file_storage=upload, orig_filename=upload.filename)
             elif path:
                 lib.add(name, src_path=path)
             else:
-                return _voices_page("Choose a clip first.", 400)
+                return _voices_page(_("Choose a clip first."), 400)
         except (ValueError, OSError) as e:
             # A clip ffmpeg couldn't decode, a path that has gone, a folder macOS
             # wouldn't let us read: all shown on the page, with a way back.
-            return _voices_page(f"Couldn't add that voice: {e}", 400)
+            return _voices_page(_("Couldn't add that voice: %(e)s", e=e), 400)
         return redirect(url_for("voices_page"))
+
+    @app.get("/api/languages")
+    def api_languages():
+        """Which languages books can be narrated in, and what is on disk.
+
+        Not cached: the Settings page polls it while a model downloads, and the
+        figures are read from the cache folder, not from the network.
+        """
+        return _languages_report()
+
+    @app.post("/api/languages/install")
+    def api_languages_install():
+        """Start the one download in this app that is not the engine's own
+        first-run one — and only ever from the button that says Install."""
+        nl = narration_langs
+        pack = nl.PACKS.get(request.form.get("pack", ""))
+        if pack is None:
+            return {"ok": False, "error": _("No such language model.")}, 400
+        if not _engine_present():
+            return {"ok": False, "error": _(
+                "The speech engine isn't installed, so there is nothing to add a "
+                "language to. Install it first (re-run the installer).")}, 409
+        if runner.is_busy():
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        if nl.is_installed(pack.id):
+            return {"ok": True, "installed": True}
+        ok, needed = nl.free_space_ok(pack)
+        if not ok:
+            return {"ok": False, "error": _(
+                "Not enough free space where the model cache lives: about %(size)s is needed.",
+                size=human_bytes(needed))}, 400
+        runner.submit(f"langpack-{pack.id}", "model_download", pack=pack.id)
+        return {"ok": True}
+
+    @app.post("/api/languages/cancel")
+    def api_languages_cancel():
+        pack = request.form.get("pack", "")
+        runner.cancel(f"langpack-{pack}")
+        return {"ok": True}
+
+    @app.post("/api/languages/remove")
+    def api_languages_remove():
+        nl = narration_langs
+        pack = nl.PACKS.get(request.form.get("pack", ""))
+        if pack is None:
+            return {"ok": False, "error": _("No such language model.")}, 400
+        if runner.is_busy():
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        freed = nl.remove(pack.id)
+        return {"ok": True, "freed_bytes": freed}
 
     @app.post("/voices/<voice_id>/default")
     def voices_set_default(voice_id):
@@ -1154,11 +1321,14 @@ def create_app() -> Flask:
             "app": runtime.APP_ID,
             "busy": runner.is_busy(),
             "current": runner.current,
-            # "render" | "preview" | "extract" | "voice_test" | None — the Quit
-            # control words its warning differently for a six-hour render than
-            # for a ten-second voice sample.
+            # "render" | "preview" | "extract" | "voice_test" | "model_download"
+            # | None — the Quit control words its warning differently for a
+            # six-hour render than for a ten-second voice sample.
             "kind": runner.current_kind(),
             "job": None,
+            # A language model coming down: the sidebar says so, and how far.
+            "download": _languages_report()["download"]
+            if runner.current_kind() == "model_download" else None,
         }
         # Enough about the running job for the sidebar dock to show it on every
         # page. A render lasts hours; making the user navigate back to the job
@@ -1216,7 +1386,8 @@ def create_app() -> Flask:
     # only when the user installs something, so cache it briefly. The TTL (rather
     # than caching forever) means installing a missing tool clears the banner
     # within a minute instead of needing a restart.
-    _prereq_cache: dict = {"at": 0.0, "value": None}
+    # One entry per interface language: the answer carries sentences.
+    _prereq_cache: dict = {}
     _PREREQ_TTL = 60.0
 
     @app.get("/api/prereqs")
@@ -1229,16 +1400,17 @@ def create_app() -> Flask:
         import time
 
         now = time.monotonic()
-        if _prereq_cache["value"] is None or now - _prereq_cache["at"] > _PREREQ_TTL:
+        entry = _prereq_cache.setdefault(g.lang, {"at": 0.0, "value": None})
+        if entry["value"] is None or now - entry["at"] > _PREREQ_TTL:
             tools.reset_cache()  # notice a tool installed since the last look
             results = checks.run_all()
             blocking = checks.blocking_problems(results)
-            _prereq_cache["value"] = {
+            entry["value"] = {
                 "checks": [r.to_dict() for r in results],
                 "blocking": [r.to_dict() for r in blocking],
                 "ok": not blocking,
             }
-            _prereq_cache["at"] = now
-        return _prereq_cache["value"]
+            entry["at"] = now
+        return entry["value"]
 
     return app

@@ -1,3 +1,5 @@
+*[English](README.md) · [Français](README.fr.md)*
+
 <p align="center">
   <img src="ebook_audiobook/assets/icon-128.png" width="88" height="88" alt="">
 </p>
@@ -20,6 +22,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#using-it">Using it</a> ·
+  <a href="#languages">Languages</a> ·
   <a href="#listening-to-it">Listening to it</a> ·
   <a href="#how-long-it-takes">How long it takes</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -39,8 +42,9 @@ leaves the computer.
 - **A real audiobook, not a text-to-speech dump.** One `.m4b` per book with a
   chapter marker per chapter, the cover embedded, and the tags Plex and
   Audiobookshelf look for. Filed as `Author / Title (Year) / Title.m4b`.
-- **A narrator you'd choose.** Five public-domain voices ship with it, tuned by
-  ear. Or clone a rights-cleared clip of your own in about ten seconds of audio.
+- **A narrator you'd choose.** Seven public-domain voices ship with it, tuned by
+  ear — five English, two French. Or clone a rights-cleared clip of your own in
+  about ten seconds of audio.
 - **Honest about the hours.** A render takes a while, so the app measures your
   machine, tells you how long, and keeps the progress on every screen. Close the
   window and it carries on in the tray.
@@ -52,6 +56,10 @@ leaves the computer.
   is holding a resume, and never deletes either unasked.
 - **One command to install**, on Windows, macOS and Linux. It sets up its own
   Python, picks the right PyTorch build for your hardware, and bundles ffmpeg.
+- **Speaks your language, and the book's.** The interface follows your
+  browser (English and French so far), and a French book is narrated in French
+  by French voices, with its numbers and abbreviations read the French way —
+  see [Languages](#languages).
 
 ## What it looks like
 
@@ -128,6 +136,7 @@ Run with `--no-tray` to skip the tray deliberately.
 | `--cuda128` / `-Cuda128` | Force the CUDA 12.8 build (RTX 20-series and newer) |
 | `--cuda126` / `-Cuda126` | Force the CUDA 12.6 build (GTX 900/1000-series) |
 | `--no-tts` / `-NoTts` | Skip PyTorch for now — import books, add the engine later |
+| `--lang fr` / `-Lang fr` | Installer messages in French (default: the desktop's language) |
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
 | `--yes` / `-Yes` | Accept all prompts (scripted installs) |
@@ -195,7 +204,10 @@ ebook-audiobook web --no-tray                     # ...without a tray icon
 ebook-audiobook web --no-browser                  # ...server only, no window
 ebook-audiobook check                             # is everything installed?
 ebook-audiobook paths                             # where is my data?
+ebook-audiobook languages                         # which narration languages are ready?
+ebook-audiobook languages install fr              # fetch the multilingual model (~3 GB)
 ebook-audiobook convert book.epub --preview-seconds 30   # preview, then confirm
+ebook-audiobook convert book.epub --language fr          # narrate in French
 ebook-audiobook convert book.epub -y --bitrate 64        # straight through
 ebook-audiobook convert book.epub --voice-ref clip.wav   # clone a voice
 ebook-audiobook convert book.epub --engine fake -y       # no-GPU plumbing test
@@ -206,6 +218,36 @@ ebook-audiobook update                            # is there a newer release?
 ebook-audiobook logs                              # what went wrong recently
 ebook-audiobook report                            # that, as a bug report
 ```
+
+---
+
+## Languages
+
+Two separate things, kept separate:
+
+**The interface language** follows your browser. To pin it, open **Settings →
+Language**; the choice is remembered and the tray menu follows it. English and
+French today. The installers take `--lang fr` / `-Lang fr`, and `EBAB_LANG`
+overrides everything.
+
+**The narration language** belongs to the book, not to you. A book that
+declares itself French (nearly every EPUB does) is narrated in French, by one
+of the bundled French voices, with numbers, abbreviations and typography read
+the way a French reader would: "1625" becomes *mille six cent vingt-cinq*,
+"M. de Tréville" becomes *Monsieur de Tréville*, "12,50 €" becomes *douze
+euros et cinquante centimes*. You can change a book's narration language on its
+page; it is read again and that language's narrator takes over.
+
+French needs a second speech model, about 3 GB, downloaded from huggingface.co
+**only** when you press **Install** in **Settings → Narration languages** (or
+run `ebook-audiobook languages install fr`). Until then a French book is
+narrated in English and its page says what to install. The same model speaks
+twenty-one other languages, offered as *experimental*: it pronounces them, but
+numbers and abbreviations are read as written. Adding proper support for one is
+a single file in `ebook_audiobook/pipeline/lang/` and a set of bundled voices.
+
+Translating the interface is a `.po` file a translator edits in Poedit; see
+[CONTRIBUTING.md](CONTRIBUTING.md#translations).
 
 ---
 
@@ -550,7 +592,8 @@ traffic this app ever makes, in full:
 | What | When |
 |---|---|
 | Downloading the app | Install and upgrade |
-| The ~1 GB voice model from Hugging Face | Your first render |
+| The ~3 GB English voice model from Hugging Face | Your first render |
+| The ~3 GB multilingual voice model from Hugging Face | Only when you press **Install** under Settings → Narration languages |
 | Asking GitHub for the latest version number | Only when you run `ebook-audiobook update` or press **Check for updates** |
 
 The version check is off by default and never happens on a timer or at start-up.

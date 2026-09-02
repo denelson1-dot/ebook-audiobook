@@ -19,12 +19,13 @@ it has not classified as safe unless told twice.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field
 from pathlib import Path
 
 from . import settings as app_settings
 from .config import paths
 from .jobs.models import Stage
+from .i18n import N_
 from .jobs.store import JobStore, is_junk
 
 # Why a book's working files may or may not be reclaimed right now.
@@ -49,9 +50,21 @@ class BookStorage:
     # Everything else this book owns: the imported ebook, chapters.json, cover.
     keep_bytes: int
     reclaim: str
-    reason: str
+    # Why, as the English sentence with %(name)s placeholders and the values
+    # that fill them — kept apart because a survey is cached across requests,
+    # and each request renders it in its own language. ``reason`` below is the
+    # English, for the CLI and the JSON.
+    reason_id: str
+    reason_params: dict = field(default_factory=dict)
     rendered_segments: int = 0
     total_segments: int = 0
+
+    @property
+    def reason(self) -> str:
+        if not self.reason_id:
+            return ""
+        return self.reason_id % {k: (f"{v:,}" if isinstance(v, int) else v)
+                                 for k, v in self.reason_params.items()}
 
     @property
     def disk_bytes(self) -> int:
@@ -63,7 +76,9 @@ class BookStorage:
             "stage": self.stage, "working_bytes": self.working_bytes,
             "output_bytes": self.output_bytes, "keep_bytes": self.keep_bytes,
             "disk_bytes": self.disk_bytes, "reclaim": self.reclaim,
-            "reason": self.reason, "rendered_segments": self.rendered_segments,
+            "reason": self.reason, "reason_id": self.reason_id,
+            "reason_params": self.reason_params,
+            "rendered_segments": self.rendered_segments,
             "total_segments": self.total_segments,
         }
         return d
@@ -219,22 +234,27 @@ def _other_bytes(root: Path, claimed: set[Path]) -> int:
     return total
 
 
-def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[str, str, int]:
+def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[str, str, dict, int]:
     """Decide whether a book's working files can go, and say why in the UI's words.
 
-    Returns ``(reclaim, reason, rendered_segments)``.
+    Returns ``(reclaim, reason_id, reason_params, rendered_segments)``: the
+    reason as an English sentence with ``%(name)s`` placeholders plus the values
+    for them, so the page can say it in its own language (see BookStorage).
     """
     if busy:
-        return BUSY, "Being narrated right now — these files are in use.", _rendered_segment_count(store)
+        return (BUSY, N_("Being narrated right now — these files are in use."), {},
+                _rendered_segment_count(store))
     if working_bytes <= 0:
-        return NONE, "", 0
+        return NONE, "", {}, 0
 
     rendered = _rendered_segment_count(store)
     if state.stage == Stage.DONE.value:
-        return SAFE, "Finished — the audiobook is written and these are only a re-render shortcut.", rendered
+        return (SAFE, N_("Finished — the audiobook is written and these are only a re-render shortcut."),
+                {}, rendered)
     if rendered == 0:
         # A preview and a normalized EPUB, nothing narrated. Re-made in seconds.
-        return SAFE, "Nothing narrated yet — this is only a preview and a working copy of the book.", rendered
+        return (SAFE, N_("Nothing narrated yet — this is only a preview and a working copy of the book."),
+                {}, rendered)
     total = state.total_segments or 0
     if (state.stage in (Stage.IMPORTED.value, Stage.EXTRACTED.value)
             and not (state.render_started_at and total > rendered)):
@@ -249,14 +269,15 @@ def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[st
         # except that a full render stamps ``render_started_at`` and a preview
         # never does. Twelve thousand narrated sections are a resume, whatever
         # the stage says, so those fall through to the held case below.
-        return SAFE, "Only the audio from a preview — a few seconds' work to make again.", rendered
+        return SAFE, N_("Only the audio from a preview — a few seconds' work to make again."), {}, rendered
 
     if total > rendered:
-        left = total - rendered
-        return HELD, (f"Keeping these lets it carry on from where it stopped. "
-                      f"Delete them and {rendered:,} of {total:,} sections are narrated again."), rendered
-    return HELD, (f"Stopped before the audiobook was written. Deleting means narrating "
-                  f"{rendered:,} sections again."), rendered
+        return (HELD, N_("Keeping these lets it carry on from where it stopped. "
+                         "Delete them and %(rendered)s of %(total)s sections are narrated again."),
+                {"rendered": rendered, "total": total}, rendered)
+    return (HELD, N_("Stopped before the audiobook was written. Deleting means narrating "
+                     "%(rendered)s sections again."),
+            {"rendered": rendered}, rendered)
 
 
 def _is_busy(jid: str, busy_job_id: str | None, is_busy) -> bool:
@@ -299,12 +320,12 @@ def survey(busy_job_id: str | None = None, is_busy=None) -> Survey:
             for owned in (store.imported_source(), store.preview_path(), store.output_path()):
                 if owned is not None:
                     claimed.add(owned)
-            reclaim, reason, rendered = classify(store, state, working,
-                                                 _is_busy(jid, busy_job_id, is_busy))
+            reclaim, reason_id, params, rendered = classify(store, state, working,
+                                                            _is_busy(jid, busy_job_id, is_busy))
             out.books.append(BookStorage(
                 job_id=jid, title=book.title, author=book.author, stage=state.stage,
                 working_bytes=working, output_bytes=output, keep_bytes=keep,
-                reclaim=reclaim, reason=reason,
+                reclaim=reclaim, reason_id=reason_id, reason_params=params,
                 rendered_segments=rendered, total_segments=state.total_segments or 0,
             ))
         except Exception:  # noqa: BLE001 - one unreadable job must not hide the rest
@@ -335,7 +356,7 @@ def free(job_ids, busy_job_id: str | None = None, force: bool = False,
             continue
         state = store.load_state()
         working = store.intermediate_bytes()
-        reclaim, _, _ = classify(store, state, working, False)
+        reclaim, _id, _params, _n = classify(store, state, working, False)
         if reclaim == NONE:
             continue
         if reclaim != SAFE and not force:

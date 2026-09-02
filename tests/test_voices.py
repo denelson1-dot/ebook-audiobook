@@ -87,7 +87,8 @@ def test_the_four_shipped_voices_are_present_and_readable():
     # rather than something that quietly happens to a glob.
     assert [b["id"] for b in BUNDLED] == [
         "male-north-american", "male-north-american-alt",
-        "female-north-american", "male-british", "female-british"]
+        "female-north-american", "male-british", "female-british",
+        "female-french", "male-french"]
     for b in BUNDLED:
         clip = BUNDLED_DIR / b["file"]
         assert clip.is_file(), f"{b['file']} is missing from the package"
@@ -205,3 +206,42 @@ def test_a_voice_may_suggest_settings_or_leave_them_alone():
     # The rest carry a pacing hint only; expressiveness stays at the engine's.
     others = [v for v in lib.list() if v.bundled and v.id != "male-north-american"]
     assert others and all(v.pacing and v.expressiveness is None for v in others)
+
+
+def test_every_bundled_voice_names_its_language():
+    from ebook_audiobook.voices import BUNDLED
+
+    for b in BUNDLED:
+        assert b["language"] in ("en", "fr"), b["id"]
+        assert b["name"].startswith({"en": "English — ", "fr": "French — "}[b["language"]]), b["id"]
+
+
+def test_the_default_narrator_follows_the_interface_language(monkeypatch):
+    from ebook_audiobook import i18n
+    from ebook_audiobook.voices import default_voice_id
+
+    assert default_voice_id() == "male-north-american"
+    assert default_voice_id("fr") == "female-french"
+    i18n.set_process_language("fr")
+    assert default_voice_id() == "female-french"
+    i18n.set_process_language(None)
+    # An unknown language gets the English default rather than nothing.
+    assert default_voice_id("xx") == "male-north-american"
+
+
+def test_a_book_imported_from_a_french_interface_starts_with_the_french_narrator(monkeypatch, synthetic_epub):
+    from ebook_audiobook.jobs.store import JobStore
+    from ebook_audiobook.web import create_app
+
+    monkeypatch.delenv("EBAB_LANG")
+    client = create_app().test_client()
+    r = client.post("/import", data={"path": str(synthetic_epub), "engine": "fake"},
+                    headers={"Accept-Language": "fr"})
+    job = r.headers["Location"].rstrip("/").split("/")[-1]
+    voice = JobStore(job).load_voice()
+    assert voice.extra["voice_id"] == "female-french"
+    assert voice.reference_clip.endswith("female-french.flac")
+
+    r = client.post("/import", data={"path": str(synthetic_epub), "engine": "fake"})
+    job = r.headers["Location"].rstrip("/").split("/")[-1]
+    assert JobStore(job).load_voice().extra["voice_id"] == "male-north-american"

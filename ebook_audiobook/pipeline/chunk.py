@@ -14,7 +14,11 @@ from .. import config
 
 # Sentence boundary: end punctuation + closing quote/paren, followed by space
 # and a likely sentence start. Kept simple on purpose (no NLP dependency).
-_SENTENCE_END = re.compile(r'(?<=[.!?])["\'”’)\]]*\s+(?=[A-Z0-9"\'“‘(])')
+# The start class includes the accented capitals of the Latin-1 range (À, É,
+# Ç…) and an opening guillemet; the closers include the closing one — so a
+# French sentence ends where an English one does. Nothing else changed, so
+# English text splits exactly as before.
+_SENTENCE_END = re.compile(r'(?<=[.!?])["\'”’»)\]]*\s+(?=[A-ZÀ-ÖØ-ÞŒŸ0-9"\'“‘«(])')
 _CLAUSE = re.compile(r'(?<=[,;:])\s+')
 
 

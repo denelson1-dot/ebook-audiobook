@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,18 +24,18 @@
       {# Importing a book is an action, not a place, so it is a button rather than
          a fourth nav item competing with the three real destinations. #}
       <a class="btn primary block" href="{{ url_for('new_page') }}" style="margin-bottom:18px">
-        {{ ic.icon('plus', 15) }} Add a book
+        {{ ic.icon('plus', 15) }} {{ _("Add a book") }}
       </a>
 
       <nav class="nav">
         <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}">
-          {{ ic.icon('library') }} Library <span class="nav-count" id="navBookCount"></span>
+          {{ ic.icon('library') }} {{ _("Library") }} <span class="nav-count" id="navBookCount"></span>
         </a>
         <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}">
-          {{ ic.icon('voices') }} Voices
+          {{ ic.icon('voices') }} {{ _("Voices") }}
         </a>
         <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}">
-          {{ ic.icon('settings') }} Settings
+          {{ ic.icon('settings') }} {{ _("Settings") }}
         </a>
       </nav>
 
@@ -48,15 +48,15 @@
          running, because that is exactly when those files are in use. #}
       <a class="diskstrip {{ 'active' if nav=='storage' }}" id="diskStrip"
          href="{{ url_for('storage_page') }}" hidden>
-        <span class="eyebrow" style="display:block;margin-bottom:5px">Working files</span>
+        <span class="eyebrow" style="display:block;margin-bottom:5px">{{ _("Working files") }}</span>
         <span style="display:flex;align-items:baseline;gap:6px">
           <span class="big" id="diskBig">—</span>
-          <span class="dim" style="font-size:11px">can go</span>
+          <span class="dim" style="font-size:11px">{{ _("can go") }}</span>
         </span>
         <span class="bar" style="display:block;margin:9px 0 8px;height:5px">
           <i id="diskBar" style="width:0;background:var(--warn)"></i>
         </span>
-        <p id="diskWhy">Left behind by books you have already finished.</p>
+        <p id="diskWhy">{{ _("Left behind by books you have already finished.") }}</p>
       </a>
       <a class="diskline" id="diskLine" href="{{ url_for('storage_page') }}" hidden>
         <span class="pip"></span>
@@ -67,18 +67,18 @@
       {# A render runs for hours and only one can run at a time, so its progress
          follows you onto every page instead of living on the job page alone. #}
       <a class="dock" id="renderDock" href="#" hidden>
-        <span class="chip live"><span class="dot pulse"></span><span id="dockStage">Narrating</span></span>
+        <span class="chip live"><span class="dot pulse"></span><span id="dockStage">{{ _("Narrating") }}</span></span>
         <span class="dock-title" id="dockTitle"></span>
         <span class="dim mono" id="dockDetail" style="font-size:11px"></span>
         <span class="bar" style="display:block;margin:11px 0 9px"><i id="dockBar" style="width:0"></i></span>
         <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <span class="mono" id="dockLeft" style="font-size:12.5px"></span>
-          <span class="btn sm ghost" id="dockStop" style="color:var(--danger)">Stop</span>
+          <span class="btn sm ghost" id="dockStop" style="color:var(--danger)">{{ _("Stop") }}</span>
         </span>
       </a>
       <div class="dock-idle" id="dockIdle">
-        <b>Nothing rendering</b>
-        <p>One book is narrated at a time, so the machine only ever has one job.</p>
+        <b>{{ _("Nothing rendering") }}</b>
+        <p>{{ _("One book is narrated at a time, so the machine only ever has one job.") }}</p>
       </div>
 
       {# Closing the window only closes the window — the server keeps running so
@@ -86,8 +86,8 @@
          it, for people who never look at the tray. #}
       <div class="nav-foot">
         {% if can_quit %}
-        <p class="dim" style="font-size:10.5px;line-height:1.4">Closing this window keeps the app running in your menu bar.</p>
-        <button type="button" class="nav-quit" id="quitBtn">{{ ic.icon('power', 14) }} Quit</button>
+        <p class="dim" style="font-size:10.5px;line-height:1.4">{{ _("Closing this window keeps the app running in your menu bar.") }}</p>
+        <button type="button" class="nav-quit" id="quitBtn">{{ ic.icon('power', 14) }} {{ _("Quit") }}</button>
         {% endif %}
       </div>
     </aside>
@@ -100,19 +100,17 @@
            first experience than being told up front. Filled in by app.js from
            /api/prereqs so a page load is never blocked on probing subprocesses. #}
         <div id="prereqBanner" class="card alert-error" hidden>
-          <h3>Something this needs is missing</h3>
+          <h3>{{ _("Something this needs is missing") }}</h3>
           <div id="prereqBody"></div>
         </div>
         {# Not on an empty library: its welcome screen asks the same question. #}
         {% if setup_needed and (nav != 'library' or jobs or request.endpoint == 'new_page') %}
         <div class="card setup-banner">
-          <h3>Where should finished audiobooks go?</h3>
-          <p class="meta" style="margin-top:4px">Choose your audiobooks library folder — the one Plex watches.
-            Books are filed into it as <code>Author / Title (Year) / Title.m4b</code>. You can change it any
-            time in Settings.</p>
+          <h3>{{ _("Where should finished audiobooks go?") }}</h3>
+          <p class="meta" style="margin-top:4px">{{ _("Choose your audiobooks library folder — the one Plex watches. Books are filed into it as <code>Author / Title (Year) / Title.m4b</code>. You can change it any time in Settings.") }}</p>
           <div class="btn-row" style="margin-top:12px">
-            <button type="button" class="btn primary" id="setupChooseBtn">{{ ic.icon('folder', 15) }} Choose library folder…</button>
-            <button type="button" class="btn ghost" id="setupSkipBtn">Skip for now</button>
+            <button type="button" class="btn primary" id="setupChooseBtn">{{ ic.icon('folder', 15) }} {{ _("Choose library folder…") }}</button>
+            <button type="button" class="btn ghost" id="setupSkipBtn">{{ _("Skip for now") }}</button>
           </div>
         </div>
         {% endif %}
@@ -122,6 +120,9 @@
     </main>
   </div>
 
+  {# The interface strings for this language, for the JavaScript that builds
+     sentences at runtime. Empty for English; app.js falls back to the msgid. #}
+  <script>window.EBAB_LANG = {{ lang|tojson }}; window.EBAB_I18N = {{ js_catalog|tojson }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
   <script>
   // Check prerequisites in the background on every page, so a tool that gets
@@ -136,7 +137,7 @@
         <p><strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.detail)}</p>
         ${c.fix ? `<pre class="fix">${escapeHtml(c.fix)}</pre>` : ""}`).join("");
       document.getElementById("prereqBody").innerHTML =
-        body + `<p class="meta" style="margin-top:8px">After installing, restart ebook-audiobook.</p>`;
+        body + `<p class="meta" style="margin-top:8px">${_("After installing, restart ebook-audiobook.")}</p>`;
       document.getElementById("prereqBanner").hidden = false;
     } catch (e) { /* offline or shutting down: not worth surfacing */ }
   })();
@@ -150,10 +151,11 @@
   // resumable — segments are cached on disk — so the warning is about time
   // lost, not work destroyed, and it says so.
   const QUIT_WARNINGS = {
-    render:  ["A render is still going", "Quitting stops it. Finished chapters are kept, so re-rendering later picks up where this left off rather than starting over."],
-    preview: ["A preview is still rendering", "Quitting stops it. You can render another one any time."],
-    extract: ["A book is still being read", "Quitting stops it. The book stays imported and you can read it again."],
-    voice_test: ["A voice sample is still rendering", "Quitting stops it. It only takes a few seconds to redo."],
+    render:  [_("A render is still going"), _("Quitting stops it. Finished chapters are kept, so re-rendering later picks up where this left off rather than starting over.")],
+    preview: [_("A preview is still rendering"), _("Quitting stops it. You can render another one any time.")],
+    extract: [_("A book is still being read"), _("Quitting stops it. The book stays imported and you can read it again.")],
+    voice_test: [_("A voice sample is still rendering"), _("Quitting stops it. It only takes a few seconds to redo.")],
+    model_download: [_("A language model is still downloading"), _("Quitting stops it. The download picks up where it left off next time.")],
   };
 
   document.getElementById("quitBtn").addEventListener("click", async () => {
@@ -161,23 +163,23 @@
     if (r.status === 409) {
       const { kind } = await r.json();
       const [title, detail] = QUIT_WARNINGS[kind] ||
-        ["Something is still running", "Quitting stops it."];
+        [_("Something is still running"), _("Quitting stops it.")];
       const ok = await confirmDialog({
-        title, danger: true, confirmLabel: "Quit anyway",
+        title, danger: true, confirmLabel: _("Quit anyway"),
         bodyHtml: `<p>${escapeHtml(detail)}</p>`,
       });
       if (!ok) return;
       r = await fetch("/quit?force=1", { method: "POST" });
     }
-    if (!r.ok) { toast("Couldn't quit — see the terminal or the logs."); return; }
+    if (!r.ok) { toast(_("Couldn't quit — see the terminal or the logs.")); return; }
     // Shutting down closes the window too, when the window is one we opened.
     // This is for when it isn't — no Chromium installed, so the UI is a tab in
     // the user's own browser, which is not ours to close. The server answers
     // before it stops precisely so there is time to swap this in, rather than
     // letting the browser race it and show its own error page.
     document.body.innerHTML =
-      '<div class="quit-screen"><h1>ebook·audiobook has stopped</h1>' +
-      '<p class="meta">You can close this window.</p></div>';
+      `<div class="quit-screen"><h1>${_("ebook·audiobook has stopped")}</h1>` +
+      `<p class="meta">${_("You can close this window.")}</p></div>`;
   });
   </script>
   {% endif %}
@@ -190,7 +192,7 @@
       // often that the app was never given access to it). postFormResult
       // returns that reason; postForm would have thrown it away.
       const r = await postFormResult("/settings", { audiobooks_root: path });
-      if (r.ok) location.reload(); else toast(r.error || "Couldn't use that folder");
+      if (r.ok) location.reload(); else toast(r.error || _("Couldn't use that folder"));
     }});
   });
   document.getElementById("setupSkipBtn").addEventListener("click", async () => {

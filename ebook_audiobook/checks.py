@@ -8,6 +8,7 @@ whichever place they happen to be looking.
 
 from __future__ import annotations
 
+from .i18n import _
 import platform
 import sys
 from dataclasses import dataclass
@@ -52,8 +53,8 @@ def check_python() -> CheckResult:
         "python",
         ok,
         f"{v.major}.{v.minor}.{v.micro} on {platform.system()} {platform.machine()}"
-        + ("" if ok else " (need >= 3.11)"),
-        fix=None if ok else "Install Python 3.11 or newer from https://python.org/downloads",
+        + ("" if ok else _(" (need >= 3.11)")),
+        fix=None if ok else _("Install Python 3.11 or newer from https://python.org/downloads"),
     )
 
 
@@ -62,10 +63,10 @@ def check_ffmpeg() -> CheckResult:
     if exe is None:
         return CheckResult(
             "ffmpeg", False,
-            "MISSING — normally installed automatically with this app",
+            _("MISSING — normally installed automatically with this app"),
             fix=tools.install_hint("ffmpeg"),
         )
-    origin = "bundled" if tools.ffmpeg_is_bundled() else "system"
+    origin = _("bundled") if tools.ffmpeg_is_bundled() else _("system")
     return CheckResult("ffmpeg", True, f"{_version_line(exe, ['-version'])}  [{origin}]")
 
 
@@ -74,11 +75,11 @@ def check_ffprobe() -> CheckResult:
     exe = tools.ffprobe_path()
     if exe is None:
         return CheckResult(
-            "ffprobe (optional)", True,
-            "not installed — output is verified with ffmpeg instead",
+            _("ffprobe (optional)"), True,
+            _("not installed — output is verified with ffmpeg instead"),
             required=False,
         )
-    return CheckResult("ffprobe (optional)", True,
+    return CheckResult(_("ffprobe (optional)"), True,
                        _version_line(exe, ["-version"]), required=False)
 
 
@@ -86,11 +87,11 @@ def check_calibre() -> CheckResult:
     exe = tools.ebook_convert_path()
     if exe is None:
         return CheckResult(
-            "calibre (ebook-convert)", False,
-            "MISSING — required to read ebooks",
+            _("calibre (ebook-convert)"), False,
+            _("MISSING — required to read ebooks"),
             fix=tools.install_hint("calibre"),
         )
-    return CheckResult("calibre (ebook-convert)", True,
+    return CheckResult(_("calibre (ebook-convert)"), True,
                        f"{_version_line(exe, ['--version'])}  [{exe}]")
 
 
@@ -101,11 +102,11 @@ def check_data_root() -> CheckResult:
         probe = p.tmp / ".write-probe"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
-        return CheckResult("data folder (writable)", True, str(p.root))
+        return CheckResult(_("data folder (writable)"), True, str(p.root))
     except OSError as e:
         return CheckResult(
-            "data folder (writable)", False, f"{p.root}: {e}",
-            fix="Set EBAB_DATA_ROOT to a folder you can write to.",
+            _("data folder (writable)"), False, f"{p.root}: {e}",
+            fix=_("Set EBAB_DATA_ROOT to a folder you can write to."),
         )
 
 
@@ -138,9 +139,9 @@ def engine_install_hint() -> str:
     if intel_mac():
         # There is nothing to re-run: PyTorch stopped building for x86_64 macOS
         # after 2.2.2, so no install can succeed. The installer says the same.
-        return ("  PyTorch stopped building for Intel Macs after 2.2.2, so the speech\n"
-                "  engine can't be installed on this Mac. Importing and reading books\n"
-                "  still works; rendering needs an Apple Silicon Mac, Windows or Linux.")
+        return _("  PyTorch stopped building for Intel Macs after 2.2.2, so the speech\n"
+                 "  engine can't be installed on this Mac. Importing and reading books\n"
+                 "  still works; rendering needs an Apple Silicon Mac, Windows or Linux.")
     return (f'  Re-run the installer — it picks the right PyTorch build for\n'
             f'  this machine. By hand, into this environment:\n'
             f'    "{sys.executable}" -m pip install torch=={TORCH_PIN} '
@@ -158,13 +159,13 @@ def intel_mac() -> bool:
 def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
     """Non-fatal: the pipeline runs with the fake engine without this."""
     if engine == "fake":
-        return CheckResult("tts engine (fake)", True, "no dependencies", required=False)
+        return CheckResult(_("tts engine (fake)"), True, _("no dependencies"), required=False)
     try:
         import torch  # noqa: F401
     except Exception:
         return CheckResult(
-            "tts engine (chatterbox)", False,
-            "not installed — you can import books, but not render audio",
+            _("tts engine (chatterbox)"), False,
+            _("not installed — you can import books, but not render audio"),
             fix=engine_install_hint(),
             required=False,
         )
@@ -176,17 +177,35 @@ def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
         cb = True
     except Exception:
         cb = False
-    detail = (f"torch {torch.__version__}, chatterbox={'yes' if cb else 'no'}, "
-              f"running on {dev.describe()}")
+    detail = _("torch %(torch)s, chatterbox=%(cb)s, running on %(device)s", torch=torch.__version__, cb=_("yes") if cb else _("no"), device=dev.describe())
     if _torch_too_old(torch.__version__):
-        detail += ("  — this PyTorch predates 2.9 and has no kernels for the "
-                   "newest GPUs; re-run the installer to update it")
+        detail += _("  — this PyTorch predates 2.9 and has no kernels for the "
+                    "newest GPUs; re-run the installer to update it")
     # Any device can render; CPU is just slow, so it's not a failure.
     return CheckResult(
-        "tts engine (chatterbox)", cb, detail,
+        _("tts engine (chatterbox)"), cb, detail,
         fix=None if cb else engine_install_hint(),
         required=False,
     )
+
+
+def check_narration_languages() -> CheckResult:
+    """Which languages a book can be narrated in — never a failure, since
+    English is always on offer and the rest is an opt-in download."""
+    from . import narration_langs as nl
+
+    ready = [_(lg.name) for lg in nl.LANGUAGES.values()
+             if lg.tier == "supported" and nl.language_available(lg.code)]
+    waiting = [_(lg.name) for lg in nl.LANGUAGES.values()
+               if lg.tier == "supported" and not nl.language_available(lg.code)]
+    parts = []
+    if ready:
+        parts.append(_("installed: %(names)s", names=", ".join(ready)))
+    if waiting:
+        parts.append(_("not installed: %(names)s (Settings, under Narration languages)",
+                       names=", ".join(waiting)))
+    return CheckResult(_("narration languages"), True, "; ".join(parts) or _("none"),
+                       required=False)
 
 
 def run_all(engine: str = "chatterbox") -> list[CheckResult]:
@@ -197,6 +216,7 @@ def run_all(engine: str = "chatterbox") -> list[CheckResult]:
         check_calibre(),
         check_data_root(),
         check_tts_engine(engine),
+        check_narration_languages(),
     ]
 
 

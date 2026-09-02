@@ -115,6 +115,58 @@ python -m venv /tmp/fresh && /tmp/fresh/bin/pip install dist/*.whl
   anything that only affects the container (bitrate, etc.) belongs in `extra`, so
   that changing it never triggers a re-render.
 
+## Translations
+
+The interface is translated with plain `gettext`: strings are wrapped in `_()`
+(or `ngettext()` for plurals) in Python, templates and JavaScript alike, looked
+up by their English text. `ebook_audiobook/i18n.py` chooses the language —
+`EBAB_LANG`, then the setting, then the browser or desktop, then English — and
+`tools/i18n.py` maintains the catalogs:
+
+```bash
+python tools/i18n.py update      # pull new strings into locale/<lang>/LC_MESSAGES/messages.po
+python tools/i18n.py compile     # .po -> .mo, which is what the app reads
+python tools/i18n.py check       # stale .mo, bad placeholders, untranslated: what CI runs
+python tools/i18n.py report      # what a translator still has to do
+```
+
+Rules that keep it working:
+
+- **Wrap where the sentence is built**, in the request that will show it. The
+  worker thread and the CLI never set a language, so they stay English.
+- **Shared label tables** (`STAGE_LABELS`, `MODE_LABELS`, …) keep English values
+  marked `N_()`; whoever renders one calls `_()` on it then. Anything cached
+  across requests (the prerequisite check, the storage survey) must store the
+  English and translate on the way out, or the next request gets the wrong
+  language.
+- Placeholders are `%(name)s` in all three layers, passed as keyword arguments —
+  `_("No folder at %(root)s.", root=path)` in Python and in a template,
+  `_("…", { root: path })` in JavaScript — and every layer formats the result,
+  so a literal `%` is always written `%%`.
+- Don't put a string literal inside a dynamic `_()` argument (`_(b["name"])`):
+  the extractor would read `"name"` as a message. Assign it to a local first.
+- Never call `locale.setlocale`: it is process-global and thread-unsafe.
+- Commit the `.po` and the `.mo` together. A translator edits the `.po` in
+  Poedit; `compile` then `check` before committing what comes back.
+- Not translated, on purpose: CLI output, the bug report from `ebook-audiobook
+  report`, the "Unknown Title"/"Unknown Author" fallbacks (they name folders and
+  tags), raw exception text, and the shell commands in "how to fix it" hints.
+
+## Narration languages
+
+What the narrator *reads* is separate from what the interface says. A book's
+language comes from its `dc:language`; the voice's language is the engine's
+`language_id`; `ebook_audiobook/narration_langs.py` knows which model pack
+speaks which language and whether it is in the Hugging Face cache (judged from
+disk, never the network). Per-language text preparation lives in
+`ebook_audiobook/pipeline/lang/<code>.py`: punctuation, abbreviations, numbers,
+front/back-matter titles, and the sentences the app narrates itself. English
+is the reference and `tests/data/golden_en.json` pins its output; adding a
+language is one such module, an entry in `narration_langs.LANGUAGES` (tier
+`supported`), bundled voices with that `language` in `voices.py`, and a
+default in `DEFAULT_BUNDLED_BY_LANGUAGE`. `VoiceSettings.language` is part of
+the render key except when it is English, so old caches stay valid.
+
 ## Cutting a release
 
 1. Bump `version` in `pyproject.toml`.

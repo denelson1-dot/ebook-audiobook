@@ -32,6 +32,7 @@ or a user wants to keep their GPU free for something else.
 
 from __future__ import annotations
 
+from .i18n import _
 import os
 import sys
 from dataclasses import dataclass
@@ -81,7 +82,7 @@ class Device:
     def describe(self) -> str:
         label = self.backend or self.kind
         base = f"{self.name} ({label})" if self.name else label
-        return f"{base} — {self.note}" if self.note else base
+        return _("%(device)s — %(note)s", device=base, note=self.note) if self.note else base
 
 
 # AMD's PCI vendor id, for spotting a Radeon without ROCm or torch installed.
@@ -166,8 +167,8 @@ def _gpu_device(torch) -> Device | None:
     try:
         vram = torch.cuda.get_device_properties(0).total_memory
         if vram < MIN_VRAM_BYTES:
-            notes.append(f"only {vram / 1024**3:.1f} GB of VRAM; if it runs out "
-                         f"mid-render the job continues on the CPU")
+            notes.append(_("only %(gb)s GB of VRAM; if it runs out mid-render the job "
+                           "continues on the CPU", gb=f"{vram / 1024**3:.1f}"))
     except Exception:  # noqa: BLE001 - VRAM is a nicety, not a requirement
         pass
     if is_rocm:
@@ -175,7 +176,7 @@ def _gpu_device(torch) -> Device | None:
         if arch and arch in _GFX_OVERRIDES and not os.environ.get(HSA_OVERRIDE_ENV):
             # It enumerated anyway — good — but say why it might not have, so a
             # user comparing notes with a forum thread isn't confused.
-            notes.append(f"{arch} works here without {HSA_OVERRIDE_ENV}")
+            notes.append(_("%(arch)s works here without %(env)s", arch=arch, env=HSA_OVERRIDE_ENV))
     return Device("cuda", name, "; ".join(notes) or None, backend=backend)
 
 
@@ -189,11 +190,11 @@ def _rocm_present_but_unusable() -> Device | None:
     """
     if not amd_gpu_in_sysfs():
         return None
-    hint = (f"ROCm is installed but can't use this Radeon. Two usual causes: the "
-            f"card's architecture isn't on ROCm's supported list — try setting "
-            f"{HSA_OVERRIDE_ENV} (10.3.0 for RX 6000, 11.0.0 for RX 7000) before "
-            f"starting — or the amdgpu kernel driver is older than ROCm 6.4 "
-            f"needs, which a system update fixes. Running on the CPU meanwhile")
+    hint = _("ROCm is installed but can't use this Radeon. Two usual causes: the "
+             "card's architecture isn't on ROCm's supported list — try setting "
+             "%(env)s (10.3.0 for RX 6000, 11.0.0 for RX 7000) before "
+             "starting — or the amdgpu kernel driver is older than ROCm 6.4 "
+             "needs, which a system update fixes. Running on the CPU meanwhile", env=HSA_OVERRIDE_ENV)
     cpu = _cpu_device()
     return Device("cpu", cpu.name, hint, backend="cpu")
 
@@ -223,8 +224,8 @@ def _mps_device(torch) -> Device | None:
     if os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK") != "1":
         # enable_mps_fallback() didn't get to run before torch was imported.
         # Renders can still work, but an unsupported op will end one abruptly.
-        note = ("Metal CPU fallback is off, so an unsupported operation could "
-                "stop a render; set PYTORCH_ENABLE_MPS_FALLBACK=1")
+        note = _("Metal CPU fallback is off, so an unsupported operation could "
+                 "stop a render; set PYTORCH_ENABLE_MPS_FALLBACK=1")
     return Device("mps", name, note, backend="Metal")
 
 
@@ -232,7 +233,7 @@ def _cpu_device() -> Device:
     import platform
 
     name = platform.processor() or platform.machine() or "CPU"
-    return Device("cpu", name, "much slower than a GPU — expect a long render",
+    return Device("cpu", name, _("much slower than a GPU — expect a long render"),
                   backend="cpu")
 
 
@@ -246,7 +247,7 @@ def select_device() -> Device:
     try:
         import torch
     except Exception:  # noqa: BLE001 - torch is an optional dependency
-        return Device("cpu", "CPU", "PyTorch isn't installed, so nothing can render yet",
+        return Device("cpu", "CPU", _("PyTorch isn't installed, so nothing can render yet"),
                       backend="cpu")
 
     if forced in VALID:
@@ -258,8 +259,8 @@ def select_device() -> Device:
         # silently ignoring the request or crashing on an unusable device.
         cpu = _cpu_device()
         return Device("cpu", cpu.name,
-                      f"{ENV_OVERRIDE}={forced} was requested but no usable "
-                      f"{forced} device was found, so this is running on the CPU",
+                      _("%(env)s=%(forced)s was requested but no usable %(forced)s device "
+                        "was found, so this is running on the CPU", env=ENV_OVERRIDE, forced=forced),
                       forced=True, backend="cpu")
     # Anything left in `forced` is a typo. Probe normally, but say the value was
     # ignored — silently honouring nothing looks identical to it having worked.
@@ -267,7 +268,8 @@ def select_device() -> Device:
     if dev is None:
         dev = _cpu_device()
     if forced:
-        note = f"{ENV_OVERRIDE}={forced!r} isn't one of {', '.join(VALID)} — ignored"
+        note = _("%(env)s=%(forced)s isn't one of %(valid)s — ignored",
+                 env=ENV_OVERRIDE, forced=repr(forced), valid=", ".join(VALID))
         return Device(dev.kind, dev.name, f"{note}; {dev.note}" if dev.note else note,
                       backend=dev.backend)
     return dev

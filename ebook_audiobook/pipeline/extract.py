@@ -56,6 +56,7 @@ class RawBook:
     isbn: str | None = None
     series: str | None = None
     series_index: str | None = None
+    language: str = "en"   # from dc:language, normalised to a two-letter code
 
 
 # --- repairing the input before Calibre sees it ------------------------------
@@ -359,7 +360,7 @@ def parse_epub(epub_path: Path) -> RawBook:
             heading, text = _extract_chapter(html)
             if len(text.strip()) < 20:  # skip covers/nav/blank documents
                 continue
-            title_c = toc.get(path) or heading or f"Chapter {len(chapters) + 1}"
+            title_c = toc.get(path) or heading or _fallback_title(meta["language"], len(chapters) + 1)
             chapters.append(RawChapter(title=title_c, text=text))
 
     if not chapters:
@@ -370,6 +371,13 @@ def parse_epub(epub_path: Path) -> RawBook:
     )
 
 
+def _fallback_title(lang: str, n: int) -> str:
+    """"Chapter 3" — in the book's language, since it is narrated."""
+    from .lang import rules_for
+
+    return rules_for(lang).strings["chapter_n"] % {"n": n}
+
+
 def _metadata(soup) -> dict:
     """Best-effort bibliographic metadata from the OPF ``<metadata>`` block.
 
@@ -377,10 +385,18 @@ def _metadata(soup) -> dict:
     foldering — so anything unparseable is simply left as None."""
     import re as _re
 
+    from ..narration_langs import normalize_language_tag
+
     out: dict[str, str | None] = {
         "year": None, "description": None, "isbn": None,
-        "series": None, "series_index": None,
+        "series": None, "series_index": None, "language": "en",
     }
+
+    # dc:language — "fr", "fr-FR", or "fra" once Calibre has rewritten the
+    # file. Anything unknown is English, which is what it always was.
+    lang_tag = soup.find("language")
+    if lang_tag:
+        out["language"] = normalize_language_tag(lang_tag.get_text(strip=True))
 
     date_tag = soup.find("date")  # dc:date
     if date_tag:

@@ -28,6 +28,7 @@ Invocation has its own portability traps, all handled by :func:`run`:
 
 from __future__ import annotations
 
+from .i18n import _
 import os
 import shutil
 import subprocess
@@ -180,9 +181,9 @@ def require_ffmpeg() -> Path:
     ff = ffmpeg_path()
     if ff is None:
         raise MissingToolError(
-            "ffmpeg is required to build audio files but no usable copy was "
-            "found. It normally installs automatically with this app; "
-            "reinstalling should fix it, or install ffmpeg yourself:\n"
+            _("ffmpeg is required to build audio files but no usable copy was "
+              "found. It normally installs automatically with this app; "
+              "reinstalling should fix it, or install ffmpeg yourself:") + "\n"
             + install_hint("ffmpeg")
         )
     return ff
@@ -259,8 +260,8 @@ def require_ebook_convert() -> Path:
     exe = ebook_convert_path()
     if exe is None:
         raise MissingToolError(
-            "Calibre isn't installed — its 'ebook-convert' command is what reads "
-            "your ebook. Install Calibre, then try again:\n" + install_hint("calibre")
+            _("Calibre isn't installed — its 'ebook-convert' command is what reads "
+              "your ebook. Install Calibre, then try again:") + "\n" + install_hint("calibre")
         )
     return exe
 

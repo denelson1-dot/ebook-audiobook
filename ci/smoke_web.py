@@ -33,9 +33,10 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def get(url: str, timeout: float = 20.0) -> tuple[int, str]:
+def get(url: str, timeout: float = 20.0, headers: dict | None = None) -> tuple[int, str]:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        req = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")
@@ -92,6 +93,15 @@ def main() -> int:
         # A 200 from an error handler isn't good enough: check for real markup.
         check("<html" in body.lower() or "<!doctype" in body.lower(),
               f"GET {path} returned HTML, not an error page")
+
+    print("\nthe translations are in the wheel")
+    # A package-data glob that misses locale/ ships an app that is English
+    # whatever the setting says — quiet enough that only this would notice.
+    _, body = get(base + "/", headers={"Accept-Language": "fr"})
+    check('lang="fr"' in body, "Accept-Language: fr renders the page in French")
+    check("Bibliothèque" in body, "the French strings came from the compiled catalog")
+    _, body = get(base + "/")
+    check('lang="en"' in body, "no Accept-Language -> English")
 
     print("\nstatic assets are packaged")
     for path in ("/static/app.css", "/static/app.js"):

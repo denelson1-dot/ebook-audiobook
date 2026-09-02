@@ -17,6 +17,22 @@ def isolated_data_root(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def english_interface(monkeypatch):
+    """Pin the interface to English, whatever the developer's desktop speaks.
+
+    serve() sets the process language from the OS locale, and a test that
+    switches languages must not leak into the next one. EBAB_LANG outranks
+    both, which is exactly why it exists.
+    """
+    from ebook_audiobook import i18n
+
+    monkeypatch.setenv("EBAB_LANG", "en")
+    i18n.set_process_language(None)
+    yield
+    i18n.set_process_language(None)
+
+
+@pytest.fixture(autouse=True)
 def drain_background_worker(isolated_data_root):
     """Let the single background worker finish before the data root is restored.
 

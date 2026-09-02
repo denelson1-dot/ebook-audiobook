@@ -13,11 +13,12 @@ Examples:
 
 from __future__ import annotations
 
+import threading
 import argparse
 import os
 import sys
 
-from . import checks, config, power
+from . import narration_langs, checks, config, power
 from .audio import estimate
 from .config import VoiceSettings
 from .jobs.models import JobState, stage_label
@@ -73,6 +74,8 @@ def _apply_voice(job_id: str, args) -> None:
     if getattr(args, "bitrate", None):
         voice.extra["bitrate_kbps"] = int(args.bitrate)
     store.save_voice(voice)
+    if getattr(args, "language", None):
+        worker.set_job_language(store, args.language)
 
 
 def cmd_check(args) -> int:
@@ -403,6 +406,72 @@ def cmd_render(args) -> int:
     return 0
 
 
+def cmd_languages(args) -> int:
+    """List, install or remove the models that narrate each language."""
+    nl = narration_langs
+    sub = getattr(args, "languages_command", None)
+    if sub in ("install", "remove"):
+        pack_id = args.pack
+        if pack_id in nl.LANGUAGES:
+            pack_id = nl.pack_for(pack_id).id
+        if pack_id not in nl.PACKS:
+            print(f"error: no such pack or language: {args.pack}")
+            return 2
+        pack = nl.PACKS[pack_id]
+        if sub == "remove":
+            freed = nl.remove(pack_id)
+            print(f"removed {pack.id}: {freed / 1e9:.1f} GB freed")
+            return 0
+        if nl.is_installed(pack_id):
+            print(f"{pack.id} is already installed")
+            return 0
+        ok, needed = nl.free_space_ok(pack)
+        if not ok:
+            print(f"error: not enough free space where the model cache lives "
+                  f"({needed / 1e9:.1f} GB needed)")
+            return 1
+        print(f"{pack.id}: about {pack.size_bytes / 1e9:.1f} GB from huggingface.co, "
+              f"into {nl.cache_root()}")
+        if not args.yes and not _confirm("download it now? [y/N] "):
+            return 1
+        stop = threading.Event()
+
+        def ticker():
+            while not stop.wait(2.0):
+                done = nl.bytes_on_disk(pack)
+                print(f"\r  {done / 1e9:5.2f} of {pack.size_bytes / 1e9:.2f} GB", end="", flush=True)
+
+        threading.Thread(target=ticker, daemon=True).start()
+        try:
+            nl.install(pack_id)
+        except nl.DownloadError as e:
+            stop.set()
+            print(f"\nerror: {e}")
+            return 1
+        finally:
+            stop.set()
+        print(f"\r  {pack.size_bytes / 1e9:.2f} GB — installed")
+        return 0
+
+    print(f"model cache: {nl.cache_root()}")
+    for pack in nl.PACKS.values():
+        state = "installed" if nl.is_installed(pack.id) else "not installed"
+        print(f"  {pack.id:14s} {pack.size_bytes / 1e9:4.1f} GB  {state}")
+    print()
+    for lg in nl.LANGUAGES.values():
+        ready = "ready" if nl.language_available(lg.code) else "needs " + lg.pack
+        tier = "" if lg.tier == "supported" else "  (experimental: numbers read as written)"
+        print(f"  {lg.code:3s} {lg.name:12s} {ready}{tier}")
+    return 0
+
+
+def _confirm(prompt: str) -> bool:
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+
 def cmd_list(args) -> int:
     ids = JobStore.list_ids()
     if not ids:
@@ -456,6 +525,9 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--engine", choices=["chatterbox", "fake"], default="chatterbox")
         sp.add_argument("--voice-ref", dest="voice_ref", help="local rights-cleared reference clip")
         sp.add_argument("--bitrate", type=int, help=f"AAC kbps (default {config.DEFAULT_BITRATE_KBPS})")
+        sp.add_argument("--language", choices=sorted(narration_langs.LANGUAGES), default=None,
+                        help="narrate in this language (its model must be installed; "
+                             "see `languages`)")
 
     c = sub.add_parser("check", help="run startup checks")
     c.add_argument("--engine", default="chatterbox")
@@ -491,6 +563,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("list", help="list jobs")
     c.set_defaults(func=cmd_list)
+
+    c = sub.add_parser("languages", help="which languages books can be narrated in")
+    lsub = c.add_subparsers(dest="languages_command")
+    li = lsub.add_parser("install", help="download a language model (about 3 GB; contacts huggingface.co)")
+    li.add_argument("pack", help="a pack id (english, multilingual) or a language code (fr)")
+    li.add_argument("-y", "--yes", action="store_true", help="don't ask first")
+    lr = lsub.add_parser("remove", help="delete a language model from the cache")
+    lr.add_argument("pack", help="a pack id (english, multilingual)")
+    c.set_defaults(func=cmd_languages)
 
     c = sub.add_parser("logs", help="show recent errors (self-limiting log)")
     c.add_argument("--tail", type=int, default=10, help="how many to show (default 10)")

@@ -54,7 +54,8 @@ param(
     [switch]$Cuda128,
     [switch]$NoTts,
     [switch]$Yes,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [string]$Lang = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,18 +67,95 @@ $Repo = "denelson1-dot/ebook-audiobook"
 # calling the GitHub API, which is rate-limited for unauthenticated users.
 $PinnedVersion = "__EBAB_VERSION__"
 
+# --- language ----------------------------------------------------------------
+# -Lang, then EBAB_LANG, then Windows' own display language. The helpers pass
+# every message through Tr, which in French matches the English text (exactly,
+# or with a wildcard for lines that carry a value) and returns the French. Call
+# sites stay English, so the logic is the same in every language.
+if (-not $Lang) { $Lang = $env:EBAB_LANG }
+if (-not $Lang) { try { $Lang = (Get-Culture).TwoLetterISOLanguageName } catch { $Lang = "en" } }
+$Lang = if ("$Lang".ToLower().StartsWith("fr")) { "fr" } else { "en" }
+
+# UTF-8 without a byte-order mark, deliberately: PowerShell 7 reads that as
+# UTF-8, and a mark at the start of the text `irm | iex` hands to the parser
+# would be a syntax error there. Windows PowerShell 5.1 shows the accents in
+# these French lines as mojibake instead; the English, and the logic, are
+# unaffected either way.
+$French = [ordered]@{
+    "Uninstalling ebook-audiobook" = "Désinstallation d'ebook-audiobook"
+    "program removed" = "programme retiré"
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:" = "  Vos livres, réglages et livres audio n'ont PAS été supprimés. Ils sont dans :"
+    "  Delete that folder yourself if you want them gone." = "  Supprimez ce dossier vous-même si vous voulez vous en débarrasser."
+    "ebook-audiobook installer" = "Installateur d'ebook-audiobook"
+    "Turns ebooks you own into narrated audiobooks, entirely offline." = "Transforme vos livres numériques en livres audio narrés, entièrement hors ligne."
+    "Looking for Python 3.11 or newer" = "Recherche de Python 3.11 ou plus récent"
+    "no Python 3.11+ found" = "aucun Python 3.11+ trouvé"
+    "Install Python 3.12 now with winget?" = "Installer Python 3.12 maintenant avec winget ?"
+    "Creating a private environment" = "Création d'un environnement privé"
+    "reusing the existing environment (upgrading in place)" = "réutilisation de l'environnement existant (mise à niveau sur place)"
+    "created" = "créé"
+    "Installing ebook-audiobook" = "Installation d'ebook-audiobook"
+    "installed *" = "installé : *"
+    "Skipping the speech engine (-NoTts)" = "Moteur vocal ignoré (-NoTts)"
+    "you can import books, but rendering audio needs the engine" = "vous pouvez importer des livres, mais produire l'audio demande le moteur"
+    "Setting up the speech engine" = "Mise en place du moteur vocal"
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "impossible de demander à l'application quelle version de PyTorch utiliser ; repli sur la version processeur"
+    "Download and install the speech engine now?" = "Télécharger et installer le moteur vocal maintenant ?"
+    "speech engine ready*" = "moteur vocal prêt*"
+    "The ~1 GB voice model downloads the first time you render." = "Le modèle vocal (~3 Go) se télécharge à la première narration."
+    "skipped - re-run this installer to add it later." = "ignoré - relancez cet installateur pour l'ajouter plus tard."
+    "Checking for Calibre (needed to read ebook files)" = "Recherche de Calibre (nécessaire pour lire les fichiers de livres)"
+    "Calibre found" = "Calibre trouvé"
+    "Calibre is not installed" = "Calibre n'est pas installé"
+    "Install it now with 'winget install calibre.calibre'?" = "L'installer maintenant avec « winget install calibre.calibre » ?"
+    "winget install failed" = "l'installation par winget a échoué"
+    "Calibre installed" = "Calibre installé"
+    "install Calibre before converting a book:" = "installez Calibre avant de convertir un livre :"
+    "or download it from https://calibre-ebook.com/download" = "ou téléchargez-le depuis https://calibre-ebook.com/download"
+    "Creating the launcher" = "Création du lanceur"
+    "command: *" = "commande : *"
+    "added to your PATH (new terminals will find it)" = "ajouté à votre PATH (les nouveaux terminaux le trouveront)"
+    "Start Menu shortcut" = "raccourci dans le menu Démarrer"
+    "Add a Desktop shortcut too?" = "Ajouter aussi un raccourci sur le Bureau ?"
+    "Desktop shortcut" = "raccourci sur le Bureau"
+    "couldn't create shortcuts: *" = "impossible de créer les raccourcis : *"
+    "Verifying the install" = "Vérification de l'installation"
+    "all required components are working" = "tous les composants requis fonctionnent"
+    "some checks failed - run 'ebook-audiobook check' for details" = "certaines vérifications ont échoué - lancez « ebook-audiobook check » pour les détails"
+    "Installed." = "Installé."
+    "  Start it from the Start Menu, or run: " = "  Démarrez-la depuis le menu Démarrer, ou lancez : "
+    "  Your books live in: " = "  Vos livres sont dans : "
+    "  Check setup:  " = "  Vérifier :     "
+    "  Uninstall:    " = "  Désinstaller : "
+    "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Note : ouvrez un NOUVEAU terminal pour que la commande « ebook-audiobook » soit trouvée."
+}
+
+function Tr($msg) {
+    if ($Lang -ne "fr") { return $msg }
+    if ($French.Contains($msg)) { return $French[$msg] }
+    foreach ($key in $French.Keys) {
+        if ($key.EndsWith("*") -and $msg.StartsWith($key.TrimEnd("*"))) {
+            return $French[$key].TrimEnd("*") + $msg.Substring($key.Length - 1)
+        }
+    }
+    return $msg
+}
+
 # --- output helpers ----------------------------------------------------------
-function Write-Step($msg) { Write-Host ""; Write-Host "==> " -ForegroundColor Green -NoNewline; Write-Host $msg -ForegroundColor White }
-function Write-Ok($msg)   { Write-Host "  [ok] " -ForegroundColor Green -NoNewline; Write-Host $msg }
-function Write-Warn($msg) { Write-Host "  [!] " -ForegroundColor Yellow -NoNewline; Write-Host $msg }
-function Write-Dim($msg)  { Write-Host "  $msg" -ForegroundColor DarkGray }
-function Fail($msg) { Write-Host ""; Write-Host "error: $msg" -ForegroundColor Red; exit 1 }
+function Write-Step($msg) { Write-Host ""; Write-Host "==> " -ForegroundColor Green -NoNewline; Write-Host (Tr $msg) -ForegroundColor White }
+function Write-Ok($msg)   { Write-Host "  [ok] " -ForegroundColor Green -NoNewline; Write-Host (Tr $msg) }
+function Write-Warn($msg) { Write-Host "  [!] " -ForegroundColor Yellow -NoNewline; Write-Host (Tr $msg) }
+function Write-Dim($msg)  { Write-Host "  $(Tr $msg)" -ForegroundColor DarkGray }
+function Fail($msg) { Write-Host ""; Write-Host "error: $(Tr $msg)" -ForegroundColor Red; exit 1 }
 
 function Ask($question, $default = "y") {
-    $hint = if ($default -eq "y") { "[Y/n]" } else { "[y/N]" }
+    $question = Tr $question
+    $hint = if ($Lang -eq "fr") { if ($default -eq "y") { "[O/n]" } else { "[o/N]" } }
+            else { if ($default -eq "y") { "[Y/n]" } else { "[y/N]" } }
     if ($Yes) { Write-Host "  $question $hint y (auto)"; return ($default -eq "y") }
     $reply = Read-Host "  $question $hint"
     if ([string]::IsNullOrWhiteSpace($reply)) { $reply = $default }
+    if ($reply -match '^(o|oui)$') { $reply = "y" }
     return ($reply.Trim().ToLower() -in @("y", "yes"))
 }
 
@@ -109,15 +187,15 @@ if ($Uninstall) {
     }
     Write-Ok "program removed"
     Write-Host ""
-    Write-Host "  Your books, settings, and audiobooks were NOT deleted. They're in:"
+    Write-Host (Tr "  Your books, settings, and audiobooks were NOT deleted. They're in:")
     Write-Host "    $DataDir"
-    Write-Host "  Delete that folder yourself if you want them gone."
+    Write-Host (Tr "  Delete that folder yourself if you want them gone.")
     exit 0
 }
 
 Write-Host ""
-Write-Host "ebook-audiobook installer" -ForegroundColor White
-Write-Host "Turns ebooks you own into narrated audiobooks, entirely offline." -ForegroundColor DarkGray
+Write-Host (Tr "ebook-audiobook installer") -ForegroundColor White
+Write-Host (Tr "Turns ebooks you own into narrated audiobooks, entirely offline.") -ForegroundColor DarkGray
 
 # --- 1. Python ---------------------------------------------------------------
 Write-Step "Looking for Python 3.11 or newer"
@@ -507,12 +585,12 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host ""
-Write-Host "Installed." -ForegroundColor Green
+Write-Host (Tr "Installed.") -ForegroundColor Green
 Write-Host ""
-Write-Host "  Start it from the Start Menu, or run: " -NoNewline; Write-Host "ebook-audiobook" -ForegroundColor White
-Write-Host "  Your books live in: " -NoNewline; Write-Host $DataDir -ForegroundColor DarkGray
-Write-Host "  Check setup:  " -NoNewline; Write-Host "ebook-audiobook check" -ForegroundColor DarkGray
-Write-Host "  Uninstall:    " -NoNewline; Write-Host "iex `"& { `$(irm https://github.com/$Repo/releases/latest/download/install.ps1) } -Uninstall`"" -ForegroundColor DarkGray
+Write-Host (Tr "  Start it from the Start Menu, or run: ") -NoNewline; Write-Host "ebook-audiobook" -ForegroundColor White
+Write-Host (Tr "  Your books live in: ") -NoNewline; Write-Host $DataDir -ForegroundColor DarkGray
+Write-Host (Tr "  Check setup:  ") -NoNewline; Write-Host "ebook-audiobook check" -ForegroundColor DarkGray
+Write-Host (Tr "  Uninstall:    ") -NoNewline; Write-Host "iex `"& { `$(irm https://github.com/$Repo/releases/latest/download/install.ps1) } -Uninstall`"" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." -ForegroundColor DarkGray
+Write-Host (Tr "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found.") -ForegroundColor DarkGray
 Write-Host ""

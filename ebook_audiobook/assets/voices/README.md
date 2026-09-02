@@ -1,13 +1,26 @@
 # Bundled narrator voices
 
-Five reference clips shipped with the application, so a new install has
-usable voices without anyone having to find or record one.
+Seven reference clips shipped with the application, so a new install has
+usable voices without anyone having to find or record one: five English,
+two French. Each carries the language it was recorded in, and each language
+has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
+`ebook_audiobook/voices.py`).
 
 ## Provenance and licence
 
 Public domain. No attribution required, no copyright restriction, no
 licence text to reproduce. Supplied by the project maintainer, converted
-here from the original MP3s to 24 kHz mono FLAC.
+here to 24 kHz mono FLAC.
+
+- **English** (`male-north-american`, `male-north-american-alt`,
+  `female-north-american`, `male-british`, `female-british`): from the
+  original MP3s.
+- **French** (`female-french`, `male-french`): 60-second narration samples
+  read by Nadine Eckert-Boulet and Gilles G. Le Blanc, from WAV. The female
+  voice is the default narrator when the interface is in French. (The "floor"
+  figure `tools/prepare_voices.py` prints is meaningless for these: it is the
+  level of the quietest frames, and a continuous 60-second narration has no
+  silence to measure, only breaths and word tails.)
 
 Recording the provenance is the point of this file: audio shipped with no
 note of where it came from is very hard to reconstruct later, and "we

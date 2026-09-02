@@ -13,7 +13,7 @@ import os
 
 import numpy as np
 
-from .. import device, quiet
+from .. import device, narration_langs, quiet
 from .adapter import AudioClip, TTSAdapter, VoiceConfig
 
 # Imported for its side effect: the engine's import-time noise is filtered out
@@ -65,9 +65,15 @@ class ChatterboxAdapter(TTSAdapter):
     def _load_on(self, device_kind: str) -> None:
         """Load (or reload) the model onto one specific device."""
         with _quiet_io():
-            from chatterbox.tts import ChatterboxTTS
+            # Two models, one interface: the English weights the app has always
+            # used, and the multilingual ones for everything else. Chosen by the
+            # voice's language, so an English book never pays for the switch.
+            if self.voice.language == "en":
+                from chatterbox.tts import ChatterboxTTS as Model
+            else:
+                from chatterbox.mtl_tts import ChatterboxMultilingualTTS as Model
 
-            self._model = ChatterboxTTS.from_pretrained(device=device_kind)
+            self._model = Model.from_pretrained(device=device_kind)
             # Embed the reference voice ONCE here (not per chunk). Subsequent
             # generate() calls reuse self._model.conds, which is both faster and
             # more consistent than re-embedding the clip every segment. With no
@@ -87,9 +93,13 @@ class ChatterboxAdapter(TTSAdapter):
         _hush_loggers()
         dev = device.select_device()
         # Progress bars are disabled, so give a heads-up: load is ~10s, and the
-        # very first run also downloads the model (~1 GB) from Hugging Face.
-        print(f"loading TTS model on {dev.describe()} (first run downloads ~1 GB)...",
-              file=sys.stderr, flush=True)
+        # very first run also downloads the model from Hugging Face.
+        pack = narration_langs.pack_for(self.voice.language)
+        if narration_langs.is_installed(pack.id):
+            print(f"loading TTS model on {dev.describe()}...", file=sys.stderr, flush=True)
+        else:
+            print(f"loading TTS model on {dev.describe()} (first run downloads about "
+                  f"{pack.size_bytes / 1e9:.1f} GB)...", file=sys.stderr, flush=True)
         try:
             import chatterbox as _cb
 
@@ -123,7 +133,10 @@ class ChatterboxAdapter(TTSAdapter):
             torch_tag = "torch" + ".".join(torch.__version__.split(".")[:2])
         except Exception:  # noqa: BLE001
             torch_tag = "torch?"
-        self._version = f"chatterbox-{pkg_ver}-{torch_tag}-{self._load_device}"
+        # The multilingual model is a different model, so its segments are
+        # different segments. The language itself is in the voice key.
+        model = "chatterbox" if self.voice.language == "en" else "chatterbox-mtl"
+        self._version = f"{model}-{pkg_ver}-{torch_tag}-{self._load_device}"
 
     def _fall_back_to_cpu(self) -> bool:
         """Move the model to the CPU after the GPU ran out of memory.
@@ -210,6 +223,8 @@ class ChatterboxAdapter(TTSAdapter):
             "min_p": self.voice.min_p,
             "top_p": self.voice.top_p,
         }
+        if self.voice.language != "en":
+            gen_kwargs["language_id"] = self.voice.language
         wav = self._generate(text, gen_kwargs)
 
         # Normalize to mono float32 numpy.

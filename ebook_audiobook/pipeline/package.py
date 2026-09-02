@@ -14,6 +14,7 @@ from pathlib import Path
 import soundfile as sf
 
 from .. import config, tools
+from ..narration_langs import ISO639_2
 
 
 class PackagingError(RuntimeError):
@@ -87,6 +88,7 @@ def package_m4b(
     bitrate_kbps: int = config.DEFAULT_BITRATE_KBPS,
     workdir: Path | None = None,
     timeout: int | None = None,
+    language: str | None = None,
 ) -> Path:
     try:
         ffmpeg = tools.require_ffmpeg()
@@ -117,6 +119,11 @@ def package_m4b(
         cmd += ["-i", str(cover_path)]
 
     cmd += ["-map", "0:a", "-map_metadata", "1"]
+    # The language the narration is spoken in, as the ISO 639-2 code players
+    # read: on the audio stream (the mdhd atom) and on the file.
+    iso = ISO639_2.get(language or "")
+    if iso:
+        cmd += ["-metadata", f"language={iso}", "-metadata:s:a:0", f"language={iso}"]
     if have_cover:
         cmd += ["-map", "2:v", "-c:v", "mjpeg", "-disposition:v", "attached_pic"]
     cmd += ["-c:a", "aac", "-b:a", f"{bitrate_kbps}k", "-ac", "1",

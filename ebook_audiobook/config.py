@@ -157,6 +157,10 @@ DEFAULT_EXAGGERATION = 0.5
 DEFAULT_CFG_WEIGHT = 0.5
 DEFAULT_TEMPERATURE = 0.8
 DEFAULT_REPETITION_PENALTY = 1.2
+# The multilingual model's own default is higher; the engine's authors tuned
+# each model separately. Applied when a job switches language, and visible on
+# the slider rather than hidden inside the adapter.
+DEFAULT_REPETITION_PENALTY_MULTILINGUAL = 2.0
 DEFAULT_MIN_P = 0.05
 DEFAULT_TOP_P = 1.0
 
@@ -183,6 +187,9 @@ class VoiceSettings:
     min_p: float = DEFAULT_MIN_P
     top_p: float = DEFAULT_TOP_P
     seed: int = 0
+    # The language the narrator speaks: the engine's language_id. "en" selects
+    # the English model; anything else the multilingual one.
+    language: str = "en"
     # Encode-only / miscellaneous settings (e.g. bitrate_kbps). NOT hashed into
     # the render key.
     extra: dict = field(default_factory=dict)
@@ -190,13 +197,21 @@ class VoiceSettings:
     # Fields that change the rendered audio (used for content-addressing).
     _RENDER_FIELDS = (
         "engine", "reference_clip", "exaggeration", "cfg_weight",
-        "temperature", "repetition_penalty", "min_p", "top_p", "seed",
+        "temperature", "repetition_penalty", "min_p", "top_p", "seed", "language",
     )
 
     def render_key(self) -> dict:
         """The audio-affecting subset, for hashing. ``reference_clip`` is folded
-        in by content elsewhere (see hashing.voice_key)."""
-        return {f: getattr(self, f) for f in self._RENDER_FIELDS}
+        in by content elsewhere (see hashing.voice_key).
+
+        ``language`` is left out when it is English: every render made before
+        the field existed was English, and keeping their payload byte-identical
+        is what keeps their cached audio valid.
+        """
+        key = {f: getattr(self, f) for f in self._RENDER_FIELDS}
+        if key.get("language") == "en":
+            del key["language"]
+        return key
 
     def to_dict(self) -> dict:
         return {
@@ -209,6 +224,7 @@ class VoiceSettings:
             "min_p": self.min_p,
             "top_p": self.top_p,
             "seed": self.seed,
+            "language": self.language,
             "extra": self.extra,
         }
 
@@ -224,5 +240,6 @@ class VoiceSettings:
             min_p=d.get("min_p", DEFAULT_MIN_P),
             top_p=d.get("top_p", DEFAULT_TOP_P),
             seed=d.get("seed", 0),
+            language=d.get("language") or "en",
             extra=d.get("extra", {}),
         )
