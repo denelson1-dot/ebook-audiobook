@@ -1,11 +1,69 @@
-# ebook-audiobook
+<p align="center">
+  <img src="ebook_audiobook/assets/icon-128.png" width="88" height="88" alt="">
+</p>
 
-Turn a DRM-free ebook you own into a single, high-quality narrated audiobook
-(`.m4b`) — chaptered, tagged, and filed ready for your Plex library. See
-[Listening to it](#listening-to-it) for which players show the chapters.
+<h1 align="center">ebook·audiobook</h1>
 
-Everything runs **on your own machine**. No cloud APIs, no accounts, no
-telemetry, nothing leaves the computer.
+<p align="center">
+  <strong>Turn an ebook you own into a narrated audiobook, entirely on your own machine.</strong><br>
+  One chaptered, tagged <code>.m4b</code> per book — filed straight into your Plex library.
+</p>
+
+<p align="center">
+  <a href="https://github.com/denelson1-dot/ebook-audiobook/releases/latest"><img src="https://img.shields.io/github/v/release/denelson1-dot/ebook-audiobook?label=release&color=d98a5a" alt="Latest release"></a>
+  <a href="https://github.com/denelson1-dot/ebook-audiobook/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/denelson1-dot/ebook-audiobook/ci.yml?branch=main&label=CI" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-555" alt="Windows, macOS, Linux">
+  <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python 3.11+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f7d4f" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#using-it">Using it</a> ·
+  <a href="#listening-to-it">Listening to it</a> ·
+  <a href="#how-long-it-takes">How long it takes</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#responsible-use-and-privacy">Privacy</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/library.png" alt="The library: one book being narrated, four finished, one waiting" width="100%">
+</p>
+
+No cloud, no account, no telemetry. The voice model runs on your GPU (NVIDIA,
+AMD or Apple Silicon) or, more slowly, on the CPU, and nothing you convert ever
+leaves the computer.
+
+## Why this one
+
+- **A real audiobook, not a text-to-speech dump.** One `.m4b` per book with a
+  chapter marker per chapter, the cover embedded, and the tags Plex and
+  Audiobookshelf look for. Filed as `Author / Title (Year) / Title.m4b`.
+- **A narrator you'd choose.** Five public-domain voices ship with it, tuned by
+  ear. Or clone a rights-cleared clip of your own in about ten seconds of audio.
+- **Honest about the hours.** A render takes a while, so the app measures your
+  machine, tells you how long, and keeps the progress on every screen. Close the
+  window and it carries on in the tray.
+- **Nothing is ever lost.** Every sentence is cached by content, so a stopped
+  render resumes where it left off and a changed setting re-narrates only what
+  changed.
+- **It cleans up after itself, on your say-so.** The working audio behind a
+  book runs to gigabytes; the app knows which of it is safe to free and which
+  is holding a resume, and never deletes either unasked.
+- **One command to install**, on Windows, macOS and Linux. It sets up its own
+  Python, picks the right PyTorch build for your hardware, and bundles ffmpeg.
+
+## What it looks like
+
+<p align="center">
+  <img src="docs/screenshots/book.png" alt="A book before narration: which sections to read, which voice, and what it will cost in time and disk" width="100%">
+  <br><sub>The book page. What gets narrated on the left, who narrates it on the right, and a bar along the bottom that always says what you are about to commit to.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/storage.png" alt="The storage page: which working files are safe to free and which are holding a resume" width="100%">
+  <br><sub>Storage. Working files that are safe to free, and the ones that would cost hours of narration to lose, told apart.</sub>
+</p>
 
 ---
 
@@ -32,12 +90,6 @@ Then start it:
 ```bash
 ebook-audiobook
 ```
-
-> **While this repository is private**, GitHub does not serve release assets to
-> anonymous requests, so the plain one-liner can't fetch the wheel. The installer
-> falls back to the [`gh` CLI](https://cli.github.com/) when it's installed and
-> signed in, which makes the same command work for anyone with repo access. Once
-> the repository is public, no such fallback is needed.
 
 That opens the app in its own window — no terminal to leave sitting there, and
 no tab lost among your others. You'll also find it in the Start Menu on Windows,
