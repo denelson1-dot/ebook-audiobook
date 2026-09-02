@@ -130,7 +130,7 @@ class Runner:
             return self._cancel_requested(task.job_id)
 
         if task.kind == "extract":
-            worker.extract_job(task.job_id)
+            worker.extract_job(task.job_id, keep_language=task.kwargs.get("keep_language", False))
         elif task.kind == "preview":
             worker.render_job(
                 task.job_id,

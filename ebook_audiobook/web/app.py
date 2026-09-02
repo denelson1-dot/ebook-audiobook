@@ -884,8 +884,9 @@ def create_app() -> Flask:
         except narration_langs.LanguagePackMissing as e:
             return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
         # The text is prepared per language, so read the book again; the
-        # sections' on/off choices are carried across by the extraction.
-        runner.submit(job_id, "extract")
+        # sections' on/off choices are carried across by the extraction, and
+        # the language just chosen is not second-guessed by the book's metadata.
+        runner.submit(job_id, "extract", keep_language=True)
         return {"ok": True, "language": lang}
 
     @app.post("/job/<job_id>/preview")

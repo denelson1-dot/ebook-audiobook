@@ -1,0 +1,43 @@
+{
+ "input": "Mr. Smith paid $5.50 to Dr. Jones on the 21st of May, 1999 — “a bargain,” she said…[12]\nIn 2005 the 3rd edition sold 12,000 copies (about 50% of the print run); e.g. the U.S. market.\nTemperatures reached 30° & rising. St. Mary's Mt. Everest vs. the “Great” Northern Railway.\nProf. Ada wrote: “It works.” Then 42 people left. The 2nd day, 1st place, 100th time.\n\nA new paragraph, with an en–dash and a soft­hyphen and a non breaking space.\nHe whispered ‘quietly’ and it cost £3 — not $3! Really? Yes. “Absolutely.” (Indeed.)\n",
+ "normalize_text": "Mister Smith paid five dollars and fifty cents to Doctor Jones on the twenty-first of May, nineteen ninety-nine, \"a bargain,\" she said...\nIn two thousand five the third edition sold twelve thousand copies (about fifty percent of the print run); for example the U.S. market.\nTemperatures reached thirty degrees and rising. Saint Mary's Mount Everest versus the \"Great\" Northern Railway.\nProfessor Ada wrote: \"It works.\" Then forty-two people left. The second day, first place, one hundredth time.\n\nA new paragraph, with an en, dash and a softhyphen and a non breaking space.\nHe whispered 'quietly' and it cost £three, not three dollars! Really? Yes. \"Absolutely.\" (Indeed.)",
+ "titles": {
+  "Chapter IV": "Chapter four",
+  "Part II: The Return": "Part two: The Return",
+  "Chapter I": "Chapter I",
+  "Epilogue V": "Epilogue V",
+  "XIV": "fourteen",
+  "Chapter 3": "Chapter three"
+ },
+ "sentences": [
+  "Mister Smith paid five dollars and fifty cents to Doctor Jones on the twenty-first of May, nineteen ninety-nine, \"a bargain,\" she said...",
+  "In two thousand five the third edition sold twelve thousand copies (about fifty percent of the print run); for example the U.S. market.",
+  "Temperatures reached thirty degrees and rising.",
+  "Saint Mary's Mount Everest versus the \"Great\" Northern Railway.",
+  "Professor Ada wrote: \"It works.",
+  "Then forty-two people left.",
+  "The second day, first place, one hundredth time.",
+  "A new paragraph, with an en, dash and a softhyphen and a non breaking space.",
+  "He whispered 'quietly' and it cost £three, not three dollars!",
+  "Really?",
+  "Yes.",
+  "\"Absolutely.",
+  "(Indeed.)"
+ ],
+ "chunks": [
+  [
+   "Mister Smith paid five dollars and fifty cents to Doctor Jones on the twenty-first of May, nineteen ninety-nine, \"a bargain,\" she said... In two thousand five the third edition sold twelve thousand copies (about fifty percent of the print run); for example the U.S. market. Temperatures reached thirty degrees and rising. Saint Mary's Mount Everest versus the \"Great\" Northern Railway.",
+   "sentence"
+  ],
+  [
+   "Professor Ada wrote: \"It works. Then forty-two people left. The second day, first place, one hundredth time.",
+   "paragraph"
+  ],
+  [
+   "A new paragraph, with an en, dash and a softhyphen and a non breaking space. He whispered 'quietly' and it cost £three, not three dollars! Really? Yes. \"Absolutely. (Indeed.)",
+   "paragraph"
+  ]
+ ],
+ "voice_key_fake": "49c1d32db812d340",
+ "segment_id": "b1528829582c4ec64361"
+}

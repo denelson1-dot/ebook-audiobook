@@ -33,6 +33,9 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "inflect>=7.0",
+    # Numbers in words for the languages inflect does not speak (French first);
+    # pure Python, imported only by pipeline/lang/<code>.py.
+    "num2words>=0.5.13",
     "numpy>=1.26",
     "soundfile>=0.12",
     "mutagen>=1.47",

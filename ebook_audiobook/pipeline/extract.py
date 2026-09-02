@@ -360,7 +360,7 @@ def parse_epub(epub_path: Path) -> RawBook:
             heading, text = _extract_chapter(html)
             if len(text.strip()) < 20:  # skip covers/nav/blank documents
                 continue
-            title_c = toc.get(path) or heading or f"Chapter {len(chapters) + 1}"
+            title_c = toc.get(path) or heading or _fallback_title(meta["language"], len(chapters) + 1)
             chapters.append(RawChapter(title=title_c, text=text))
 
     if not chapters:
@@ -369,6 +369,13 @@ def parse_epub(epub_path: Path) -> RawBook:
         title=title, author=author, cover_bytes=cover_bytes, cover_ext=cover_ext,
         chapters=chapters, **meta,
     )
+
+
+def _fallback_title(lang: str, n: int) -> str:
+    """"Chapter 3" — in the book's language, since it is narrated."""
+    from .lang import rules_for
+
+    return rules_for(lang).strings["chapter_n"] % {"n": n}
 
 
 def _metadata(soup) -> dict:

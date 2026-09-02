@@ -34,6 +34,7 @@ from .jobs.store import JobStore
 from .pipeline import assemble, extract, layout, package
 from .pipeline import cover as cover_mod
 from .pipeline.chunk import chunk_structured
+from .pipeline.lang import rules_for
 from .pipeline.normalize import apply_pronunciation, normalize_text, normalize_title
 from .tts import get_adapter
 
@@ -278,33 +279,18 @@ def narration_notice(store: JobStore) -> str | None:
 
 # --- extract -----------------------------------------------------------------
 
-# Title fragments that mark front/back matter a listener usually wants to skip.
-# Matched case-insensitively as whole-ish phrases against the normalized title.
-_SKIP_TITLE_HINTS = (
-    "copyright", "isbn", "all rights reserved", "title page", "half title",
-    "table of contents", "contents", "colophon", "dedication",
-    "acknowledgement", "acknowledgment", "about the author", "about the publisher",
-    "also by", "praise for", "advance praise", "other books", "other titles",
-    "by the same author", "more from", "more by",
-    "index", "bibliography", "notes", "footnotes", "endnotes", "glossary",
-    "newsletter", "sign up", "sign-up", "imprint", "frontispiece", "epigraph",
-    # Back-matter promos: "What's next on your reading list?", "Up next", etc.
-    "reading list", "what's next", "whats next", "up next", "keep reading",
-    "recommended reading",
-)
-
-
 _INTRO_CHAPTER_ID = "intro"
 
 
-def _intro_chapter(book: Book) -> Chapter | None:
+def _intro_chapter(book: Book, lang: str = "en") -> Chapter | None:
     """A synthetic opening section that announces the book before chapter one.
 
     The title is spoken as the standard chapter-title segment (and doubles as the
-    .m4b's opening marker); the body announces the author. Returns None when
-    there's no usable metadata to announce. Included by default; the user can
-    uncheck it like any other section.
+    .m4b's opening marker); the body announces the author, in the narration
+    language. Returns None when there's no usable metadata to announce. Included
+    by default; the user can uncheck it like any other section.
     """
+    words = rules_for(lang).strings
     title = (book.title or "").strip()
     author = (book.author or "").strip()
     has_title = bool(title) and title.lower() != "unknown title"
@@ -312,7 +298,7 @@ def _intro_chapter(book: Book) -> Chapter | None:
     if not has_title and not has_author:
         return None
     if has_title:
-        marker, body = title, (f"By {author}." if has_author else "")
+        marker, body = title, (words["by_author"] % {"author": author} if has_author else "")
     else:
         marker, body = author, ""  # author-only: just announce the author once
     return Chapter(chapter_id=_INTRO_CHAPTER_ID, sequence=0, title=marker,
@@ -322,28 +308,39 @@ def _intro_chapter(book: Book) -> Chapter | None:
 _OUTRO_CHAPTER_ID = "outro"
 
 
-def _outro_chapter(book: Book) -> Chapter | None:
+def _outro_chapter(book: Book, lang: str = "en") -> Chapter | None:
     """A synthetic closing section that signs off the book after the last chapter.
 
     Set apart by a long lead-in pause (``config.PAUSE_BEFORE_OUTRO``) so a
     listener who isn't looking at a screen clearly hears the book has ended. The
-    marker ("The End") is display-only; the body reads one flowing sentence.
-    Returns None when there's no usable metadata. Included by default.
+    marker ("The End") is display-only; the body reads one flowing sentence, in
+    the narration language. Returns None when there's no usable metadata.
+    Included by default.
     """
+    words = rules_for(lang).strings
     title = (book.title or "").strip()
     author = (book.author or "").strip()
     has_title = bool(title) and title.lower() != "unknown title"
     has_author = bool(author) and author.lower() != "unknown author"
     if not has_title and not has_author:
         return None
-    subject = title if has_title else "this book"
-    body = f"This concludes {subject}"
-    body += f", by {author}." if has_author else "."
-    return Chapter(chapter_id=_OUTRO_CHAPTER_ID, sequence=0, title="The End",
+    subject = title if has_title else words["this_book"]
+    body = words["concludes"] % {"subject": subject}
+    body += words["by_author_tail"] % {"author": author} if has_author else "."
+    return Chapter(chapter_id=_OUTRO_CHAPTER_ID, sequence=0, title=words["the_end"],
                    text=body, char_count=len(body), include=True, speak_title=False)
 
 
-def _default_included(title: str) -> bool:
+def _plain(s: str) -> str:
+    """Lowercase, accents stripped: "TABLE DES MATIÈRES" and "Table des
+    matieres" are the same title to a hint list."""
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").strip().lower())
+                   if not unicodedata.combining(c))
+
+
+def _default_included(title: str, lang: str = "en") -> bool:
     """Whether a freshly-extracted section should default to being rendered.
 
     Front/back matter (copyright, ISBN, TOC, dedication, acknowledgements, …) is
@@ -351,16 +348,20 @@ def _default_included(title: str) -> bool:
     off into publisher boilerplate. The match is on the section title only — a
     legitimately short chapter still narrates. The user overrides any choice in
     the UI.
+
+    The English hints always apply: a French EPUB is full of English
+    boilerplate ("Copyright", "Contents"). The book's own language adds its own.
     """
-    t = (title or "").strip().lower()
-    return not any(hint in t for hint in _SKIP_TITLE_HINTS)
+    t = _plain(title)
+    hints = set(rules_for("en").skip_title_hints) | set(rules_for(lang).skip_title_hints)
+    return not any(hint in t for hint in hints)
 
 
-def extract_job(job_id: str) -> list[Chapter]:
+def extract_job(job_id: str, keep_language: bool = False) -> list[Chapter]:
     store = JobStore(job_id)
     store.set_stage(Stage.EXTRACTING, "extracting")
     try:
-        return _extract_job(store)
+        return _extract_job(store, keep_language=keep_language)
     except Exception as e:  # noqa: BLE001 - surface the reason to the user
         # Record why extraction stopped so the job page can show it (the web
         # runner otherwise swallows the exception).
@@ -371,8 +372,16 @@ def extract_job(job_id: str) -> list[Chapter]:
         raise
 
 
-def _extract_job(store: JobStore) -> list[Chapter]:
+def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
+    """Read the book and prepare its text for the narrator.
+
+    ``keep_language``: the job's narration language was chosen on purpose (a
+    re-read after the picker changed it), so the book's own metadata must not
+    move it back. On a first read the book's language wins, when its model is
+    installed.
+    """
     book = store.load_book()
+    previous = {c.chapter_id: c.include for c in store.load_chapters()}
     epub = store.dir / "normalized.epub"
     extract.run_ebook_convert(Path(book.source_path), epub)
     raw = extract.parse_epub(epub)
@@ -405,16 +414,20 @@ def _extract_job(store: JobStore) -> list[Chapter]:
     # Narrate in the book's own language when its model is installed; when it
     # is not, the voice stays English — what always happened — and the job
     # page says what installing would change.
-    if book.language != "en" and narration_langs.language_available(book.language):
+    if (not keep_language and book.language != "en"
+            and narration_langs.language_available(book.language)):
         set_job_language(store, book.language)
+    # The text is prepared for whoever will read it: numbers, abbreviations and
+    # the app's own announcements follow the *narration* language.
+    lang = store.load_voice().language or "en"
 
     chapters: list[Chapter] = []
-    intro = _intro_chapter(book)
+    intro = _intro_chapter(book, lang)
     if intro:
         chapters.append(intro)
     for i, rc in enumerate(raw.chapters):
-        norm = normalize_text(rc.text)
-        title = normalize_title(rc.title)
+        norm = normalize_text(rc.text, lang)
+        title = normalize_title(rc.title, lang)
         chapters.append(
             Chapter(
                 chapter_id=f"ch{i:04d}",
@@ -422,12 +435,17 @@ def _extract_job(store: JobStore) -> list[Chapter]:
                 title=title,
                 text=norm,
                 char_count=len(norm),
-                include=_default_included(title),
+                include=_default_included(title, book.language),
             )
         )
-    outro = _outro_chapter(book)
+    outro = _outro_chapter(book, lang)
     if outro:
         chapters.append(outro)
+    # A re-read keeps the sections the person switched on or off: the ids are
+    # positional, so the same source gives the same ids.
+    for ch in chapters:
+        if ch.chapter_id in previous:
+            ch.include = previous[ch.chapter_id]
     # Renumber the display order so the injected intro/outro don't collide with
     # the real chapters' sequences.
     for seq, ch in enumerate(chapters):
