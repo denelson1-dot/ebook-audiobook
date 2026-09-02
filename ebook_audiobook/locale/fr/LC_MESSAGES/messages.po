@@ -235,34 +235,34 @@ msgid "%(env)s=%(forced)s isn't one of %(valid)s — ignored"
 msgstr "%(env)s=%(forced)s ne fait pas partie de %(valid)s — ignoré"
 
 #. NOTE: byte units — French says o, Ko, Mo, Go, To
-#: ebook_audiobook/i18n.py:260
+#: ebook_audiobook/i18n.py:278
 msgid "B"
 msgstr "o"
 
-#: ebook_audiobook/i18n.py:260
+#: ebook_audiobook/i18n.py:278
 msgid "KB"
 msgstr "Ko"
 
-#: ebook_audiobook/i18n.py:260
+#: ebook_audiobook/i18n.py:278
 msgid "MB"
 msgstr "Mo"
 
-#: ebook_audiobook/i18n.py:260
+#: ebook_audiobook/i18n.py:278
 msgid "GB"
 msgstr "Go"
 
-#: ebook_audiobook/i18n.py:260 ebook_audiobook/i18n.py:266
+#: ebook_audiobook/i18n.py:278 ebook_audiobook/i18n.py:284
 msgid "TB"
 msgstr "To"
 
 #. NOTE: hours and minutes of listening time, e.g. "8h 04m"
-#: ebook_audiobook/i18n.py:283
+#: ebook_audiobook/i18n.py:301
 #, python-format
 msgid "%(h)dh %(m)02dm"
 msgstr "%(h)d h %(m)02d min"
 
 #. NOTE: minutes of listening time, e.g. "12m"
-#: ebook_audiobook/i18n.py:285
+#: ebook_audiobook/i18n.py:303
 #, python-format
 msgid "%(m)dm"
 msgstr "%(m)d min"
@@ -396,27 +396,35 @@ msgstr ""
 msgid "You're on the latest version (%(current)s)."
 msgstr "Vous avez la dernière version (%(current)s)."
 
-#: ebook_audiobook/voices.py:40
-msgid "Male, North American"
-msgstr "Homme, nord-américain"
+#: ebook_audiobook/voices.py:43
+msgid "English — Male, North American"
+msgstr "Anglais — Homme, nord-américain"
 
-#: ebook_audiobook/voices.py:42
-msgid "Male, North American (alt)"
-msgstr "Homme, nord-américain (bis)"
+#: ebook_audiobook/voices.py:45
+msgid "English — Male, North American (alt)"
+msgstr "Anglais — Homme, nord-américain (bis)"
 
-#: ebook_audiobook/voices.py:44
-msgid "Female, North American"
-msgstr "Femme, nord-américaine"
+#: ebook_audiobook/voices.py:47
+msgid "English — Female, North American"
+msgstr "Anglais — Femme, nord-américaine"
 
-#: ebook_audiobook/voices.py:46
-msgid "Male, British"
-msgstr "Homme, britannique"
+#: ebook_audiobook/voices.py:49
+msgid "English — Male, British"
+msgstr "Anglais — Homme, britannique"
 
-#: ebook_audiobook/voices.py:48
-msgid "Female, British"
-msgstr "Femme, britannique"
+#: ebook_audiobook/voices.py:51
+msgid "English — Female, British"
+msgstr "Anglais — Femme, britannique"
 
-#: ebook_audiobook/voices.py:129
+#: ebook_audiobook/voices.py:53
+msgid "French — Female"
+msgstr "Français — Femme"
+
+#: ebook_audiobook/voices.py:55
+msgid "French — Male"
+msgstr "Français — Homme"
+
+#: ebook_audiobook/voices.py:142
 msgid "Default narrator"
 msgstr "Narrateur par défaut"
 
@@ -2425,4 +2433,10 @@ msgstr "Impossible de générer un échantillon"
 
 #~ msgid "name"
 #~ msgstr "Nommez-la"
+
+#~ msgid "Male, North American"
+#~ msgstr "Homme, nord-américain"
+
+#~ msgid "Male, British"
+#~ msgstr "Homme, britannique"
 
