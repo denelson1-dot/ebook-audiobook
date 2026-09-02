@@ -65,9 +65,13 @@ _EURO = re.compile(rf"({_DIGITS})(?:,(\d{{1,2}}))?\s?€")
 _DOLLAR = re.compile(rf"\$\s?({_DIGITS})(?:[.,](\d{{1,2}}))?|({_DIGITS})(?:,(\d{{1,2}}))?\s?\$")
 _PERCENT = re.compile(rf"({_DIGITS})(?:,(\d+))?\s?%")
 _ORDINAL = re.compile(r"\b(\d+)(ers|er|res|re|ères|ère|èmes|ème|es|e)\b")
-_ROMAN_ORDINAL = re.compile(r"\b([IVXLC]{1,7})(ers|er|res|re|ères|ère|èmes|ème|es|e)\b")
-_DECIMAL = re.compile(rf"(?<![\w,.])({_DIGITS}),(\d+)(?![\w,])")
-_INTEGER = re.compile(rf"(?<![\w,.])({_DIGITS})(?![\w,.])")
+# A Roman ordinal needs a real numeral: two letters or more, or a lone I, V or
+# X. A lone L or C is a word — "Le", "Ce" — not the fiftieth of anything.
+_ROMAN_ORDINAL = re.compile(r"\b((?:[IVXLC]{2,7})|[IVX])(ers|er|res|re|ères|ère|èmes|ème|es|e)\b")
+# A comma after a number is a decimal only when digits follow it: "1625, le
+# bourg" is a year and a pause.
+_DECIMAL = re.compile(rf"(?<![\w,.])({_DIGITS}),(\d+)(?![\w.]|,\d)")
+_INTEGER = re.compile(rf"(?<![\w,.])({_DIGITS})(?![\w.]|,\d)")
 
 
 def _n(value, **kw) -> str:
