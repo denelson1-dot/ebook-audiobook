@@ -218,7 +218,23 @@ jobs:
         run: |
           VERSION="${{ needs.build.outputs.version }}"
           REPO="${{ github.repository }}"
-          cat > NOTES.md <<EOF
+          # What changed, from the changelog's entry for this version — the part
+          # of the notes that is different every release. The install guide
+          # below it is the same each time, on purpose: it is what a newcomer
+          # landing on the release page needs.
+          python3 - "$VERSION" > WHATSNEW.md <<'PY'
+          import re, sys
+          version = sys.argv[1]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(rf"^## {re.escape(version)}[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+          body = m.group(1).strip() if m else ""
+          if body:
+              # Demote the entry's sub-headings so they sit under "What's new".
+              body = re.sub(r"^### ", "#### ", body, flags=re.M)
+              print(f"## What's new in {version}\n\n{body}\n")
+          PY
+          cat WHATSNEW.md > NOTES.md
+          cat >> NOTES.md <<EOF
           ### Which download do I need?
 
           | Your computer | File |
