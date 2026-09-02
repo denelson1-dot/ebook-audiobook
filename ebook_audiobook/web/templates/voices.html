@@ -18,6 +18,8 @@
 
 {% block body %}
 
+{% if error %}<div class="alert-error" style="margin-bottom:18px">{{ error }}</div>{% endif %}
+
 <div class="note info" style="margin-bottom:18px">
   {{ ic.icon('shield', 16) }}
   <span><b>Use only voices you have the right to use.</b> Your own recording, or one whose owner has agreed
@@ -57,6 +59,7 @@
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <h3 style="font-size:14px;font-weight:600">{{ v.name }}</h3>
             {% if v.bundled %}<span class="tag">shipped</span>{% elif v.is_default %}<span class="tag">engine default</span>{% endif %}
+            {% if v.id == default_voice_id %}<span class="chip ok">new books start here</span>{% endif %}
           </div>
           <p class="dim mono" style="font-size:11px;margin-top:3px">
             {{ 'ships with the app · public domain' if v.bundled
@@ -75,9 +78,15 @@
 
       <div class="btn-row" style="margin-top:auto">
         <button class="btn sm test-btn" data-vid="{{ v.id }}" style="flex:1">{{ ic.icon('play', 12) }} Audition</button>
+        {% if v.id != default_voice_id and not v.is_default %}
+        <form method="post" action="{{ url_for('voices_set_default', voice_id=v.id) }}" title="Use this voice for books you add from now on">
+          <button class="btn sm ghost" type="submit">Use for new books</button>
+        </form>
+        {% endif %}
         {% if v.removable %}
         <form method="post" action="{{ url_for('voices_delete', voice_id=v.id) }}"
-              onsubmit="return confirm('Delete “{{ v.name }}”? Books already narrated with it are unaffected.')">
+              data-confirm="Delete “{{ v.name }}”?"
+              data-confirm-detail="Books already narrated with it are unaffected.">
           <button class="btn sm danger" type="submit">{{ ic.icon('trash', 13) }}</button>
         </form>
         {% endif %}
@@ -105,8 +114,11 @@ document.getElementById("clipBrowse").addEventListener("click", () => {
     }});
 });
 
-// Audition: kick off a render, poll global status, then play the sample. It uses
-// the same single worker as everything else, so it queues behind a render.
+// Audition: kick off a render, wait for the sample file, then play it. It uses
+// the same single worker as everything else, so it queues behind a render —
+// which is why the wait is for *this voice's file* (the server removes the old
+// one when the audition is requested) and not for the worker to fall idle:
+// during a render that would mean four minutes of spinner and then a 404.
 document.querySelectorAll(".test-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     const vid = btn.dataset.vid;
@@ -115,18 +127,28 @@ document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.innerHTML = '<span class="spinner"></span> Rendering…';
     try {
       await postForm(`/voices/${vid}/test`, {});
+      const url = `/voices/${encodeURIComponent(vid)}/sample.wav`;
+      let ready = false;
       for (let i = 0; i < 240; i++) {
         await new Promise(r => setTimeout(r, 1000));
-        const s = await getJSON("/api/status");
-        if (!s.busy) break;
+        const h = await fetch(url + "?probe=" + Date.now(), { method: "HEAD" });
+        if (h.ok) { ready = true; break; }
+      }
+      if (!ready) {
+        toast("Still waiting — a render is ahead of it. Try again once that finishes.");
+        return;
       }
       const audio = document.querySelector(`audio[data-audio="${CSS.escape(vid)}"]`);
-      audio.src = `/voices/${vid}/sample.wav?t=` + Date.now();
+      audio.src = url + "?t=" + Date.now();
       audio.style.display = "block";
-      audio.play().catch(() => {});
+      // Safari refuses to play this long after the click; the controls are
+      // right there, so say so rather than fail in silence.
+      audio.play().catch(() => toast("Sample ready — press play to hear it"));
     } catch (e) { toast("Couldn't render a sample"); }
-    btn.disabled = false;
-    btn.innerHTML = original;
+    finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
   });
 });
 </script>

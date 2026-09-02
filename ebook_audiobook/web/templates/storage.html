@@ -3,7 +3,7 @@
 {% import "_icons.html" as ic %}
 {% block title %}Storage · ebook·audiobook{% endblock %}
 
-{% set total = survey.total_bytes or 1 %}
+{% set total = survey.folder_bytes or 1 %}
 {% macro pct(n) %}{{ (100.0 * n / total)|round(2) }}{% endmacro %}
 
 {% block head %}
@@ -11,7 +11,7 @@
   <div>
     <h1 class="page-title">Storage</h1>
     <p class="page-sub">{{ survey.books|length }} book{{ 's' if survey.books|length != 1 }} ·
-      <span class="mono">{{ survey.total_bytes|humanbytes }}</span> in your ebook·audiobook folder</p>
+      <span class="mono">{{ survey.folder_bytes|humanbytes }}</span> in your ebook·audiobook folder</p>
   </div>
   <div class="head-actions">
     <button type="button" class="btn" id="showFolder">{{ ic.icon('folder', 14) }} Show me the folder</button>
@@ -29,22 +29,30 @@
   <div style="display:flex;align-items:flex-end;gap:24px;margin-bottom:14px;flex-wrap:wrap">
     <div>
       <div class="eyebrow" style="margin-bottom:5px">
-        {% if survey.safe_bytes %}Temporary, and safe to delete{% else %}Nothing to reclaim{% endif %}
+        {% if survey.safe_bytes %}Temporary, and safe to delete
+        {% elif survey.held_bytes %}Nothing to reclaim without losing work
+        {% else %}Nothing to reclaim{% endif %}
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
         <span class="mono" style="font-size:40px;font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--warn)">
           {{ survey.safe_bytes|humanbytes }}</span>
         <span class="meta" style="max-width:52ch">
           {% if survey.safe_bytes %}
-            of the <span class="mono">{{ survey.total_bytes|humanbytes }}</span> here is raw narration audio
-            from books you have already finished.
+            of the <span class="mono">{{ survey.folder_bytes|humanbytes }}</span> here is raw narration audio
+            from books that are finished, or were only ever previewed.
+          {% elif survey.held_bytes %}
+            The working files here all belong to books that stopped part-way. They are what lets those
+            books carry on; tick one below only if you would rather narrate it again from the start.
           {% else %}
             Every book here is either still being worked on or has already been tidied up.
           {% endif %}
         </span>
       </div>
     </div>
-    {% if survey.safe_bytes %}
+    {# Present whenever there is anything to tick — including when everything is
+       held back, or a stopped book's row would show a checkbox with no button
+       anywhere on the page that acts on it. #}
+    {% if survey.safe_bytes or survey.held_bytes %}
     <button type="button" class="btn primary lg" id="freeAll" style="margin-left:auto">
       {{ ic.icon('sparkle', 15) }} <span id="freeAllText">Free up {{ survey.safe_bytes|humanbytes }}</span>
     </button>
@@ -56,6 +64,8 @@
     {% if survey.held_bytes %}<span style="width:{{ pct(survey.held_bytes) }}%;background:var(--warn);opacity:.4"></span>{% endif %}
     {% if survey.output_bytes %}<span style="width:{{ pct(survey.output_bytes) }}%;background:var(--accent)"></span>{% endif %}
     {% if survey.keep_bytes %}<span style="width:{{ pct(survey.keep_bytes) }}%;background:var(--text-3)"></span>{% endif %}
+    {% if survey.app_bytes %}<span style="width:{{ pct(survey.app_bytes) }}%;background:var(--text-3);opacity:.45"></span>{% endif %}
+    {% if survey.other_bytes %}<span style="width:{{ pct(survey.other_bytes) }}%;background:var(--text-3);opacity:.25"></span>{% endif %}
   </div>
   <div class="legend">
     <span style="color:var(--text)"><i style="background:var(--warn)"></i> Working files you can free
@@ -66,6 +76,14 @@
       <b class="mono">{{ survey.output_bytes|humanbytes }}</b></span>
     <span><i style="background:var(--text-3)"></i> Your ebooks, voices and choices
       <b class="mono">{{ survey.keep_bytes|humanbytes }}</b></span>
+    {% if survey.app_bytes %}
+    <span><i style="background:var(--text-3);opacity:.45"></i> The app itself — its engine and models
+      <b class="mono">{{ survey.app_bytes|humanbytes }}</b></span>
+    {% endif %}
+    {% if survey.other_bytes %}
+    <span><i style="background:var(--text-3);opacity:.25"></i> Other — temporary files, the window's browser profile
+      <b class="mono">{{ survey.other_bytes|humanbytes }}</b></span>
+    {% endif %}
   </div>
 </section>
 
@@ -76,7 +94,8 @@
       <span class="meta" style="margin-left:auto" id="selCount"></span>
     </div>
     {% for b in survey.books %}
-      <div class="strow {{ 'held' if b.reclaim == held else ('none' if b.reclaim == none else '') }}">
+      {# 'none' as a quoted string: bare none is Jinja's None literal, not the variable. #}
+      <div class="strow {{ 'held' if b.reclaim == held else ('none' if b.reclaim == 'none' else '') }}">
         {% if b.reclaim == safe %}
           <input type="checkbox" class="pickjob" value="{{ b.job_id }}" data-bytes="{{ b.working_bytes }}" checked>
         {% elif b.reclaim == held %}
@@ -195,8 +214,13 @@ if (freeBtn) freeBtn.addEventListener("click", async () => {
   const r = await fetch("/storage/free", { method: "POST", body });
   if (!r.ok) { toast("Couldn't free that up"); return; }
   const d = await r.json();
-  toast(`Freed ${humanBytes(d.freed_bytes)}`);
-  setTimeout(() => location.reload(), 800);
+  // The server can refuse a book that has started rendering since this page
+  // was drawn; say so rather than claim a clean sweep.
+  const skipped = (d.skipped || []).length;
+  toast(skipped
+    ? `Freed ${humanBytes(d.freed_bytes)} — ${skipped} book${skipped === 1 ? " was" : "s were"} left alone because ${skipped === 1 ? "it is" : "they are"} in use`
+    : `Freed ${humanBytes(d.freed_bytes)}`);
+  setTimeout(() => location.reload(), skipped ? 2400 : 800);
 });
 </script>
 {% endblock %}

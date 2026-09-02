@@ -176,3 +176,47 @@ def _node_check(source: str, label: str) -> None:
         assert r.returncode == 0, f"{label} does not parse:\n{r.stderr.strip()}"
     finally:
         Path(path).unlink(missing_ok=True)
+
+
+# --- a title with an apostrophe must not disable a confirmation --------------------
+
+def test_no_template_builds_javascript_out_of_user_text():
+    """`onsubmit="return confirm('Delete {{ title }}?')"` looks escaped — Jinja
+    turns the apostrophe into &#39; — but the HTML parser decodes it back before
+    the attribute is compiled as JavaScript. "The Hitchhiker's Guide" then ends
+    the string early, the handler fails to compile, and the form submits with
+    no question asked. Deleting a book is irreversible. Confirmations live in
+    data-confirm attributes and are read as text by app.js.
+    """
+    offenders = []
+    for f in sorted(TEMPLATES.glob("*.html")):
+        text = f.read_text("utf-8")
+        for m in re.finditer(r'\bon[a-z]+="[^"]*"', text):
+            # A url_for() is the app's own text (job ids are hex); anything
+            # else interpolated into a handler is suspect.
+            exprs = [e for e in JINJA.findall(m.group(0)) if "url_for(" not in e]
+            if exprs:
+                offenders.append(f"{f.name}: {m.group(0)[:70]}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_every_confirmed_form_has_a_handler_and_every_delete_asks():
+    templates = {f.name: f.read_text("utf-8") for f in TEMPLATES.glob("*.html")}
+    assert 'form.dataset.confirm' in APP_JS
+    for name, text in templates.items():
+        for m in re.finditer(r"<form[^>]*_delete[^>]*>", text, re.S):
+            assert "data-confirm=" in m.group(0), f"{name}: a delete form with no confirmation"
+
+
+def test_escape_helper_is_defined_once_and_globally():
+    """It moved into app.js so every page (and the file browser) can use it;
+    a second copy in an inline script would shadow it silently."""
+    assert "function escapeHtml(" in APP_JS
+    for f in TEMPLATES.glob("*.html"):
+        assert "function escapeHtml(" not in f.read_text("utf-8"), f.name
+
+
+def test_geometry_is_only_reported_from_the_app_window():
+    """With no Chromium installed the UI is a tab in the user's own browser —
+    Safari on a Mac — and its position must not be remembered as ours."""
+    assert "display-mode: standalone" in APP_JS

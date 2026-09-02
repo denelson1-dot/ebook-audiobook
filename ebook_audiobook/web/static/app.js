@@ -17,6 +17,14 @@ function baseName(p) {
 
 // Shared helpers for the ebook-audiobook UI. No framework — plain fetch + DOM.
 
+// For anything that goes into innerHTML and did not originate in this code:
+// book and chapter titles come from the ebook, file names from the disk,
+// error text from whatever failed. All of them can contain "<".
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
 async function getJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(await r.text());
@@ -29,6 +37,20 @@ async function postForm(url, data) {
   const ct = r.headers.get("content-type") || "";
   return ct.includes("json") ? r.json() : r.text();
 }
+// Like postForm, but a refusal is an answer, not an exception: the routes that
+// validate (a library folder that isn't writable, say) reply 400 with
+// {ok:false, error} and the caller wants that error, not a thrown one.
+async function postFormResult(url, data) {
+  let r;
+  try {
+    r = await fetch(url, { method: "POST", body: new URLSearchParams(data || {}) });
+  } catch (e) {
+    return { ok: false, status: 0, error: "Couldn't reach the app" };
+  }
+  let body = {};
+  try { body = await r.json(); } catch (e) { body = { error: r.statusText }; }
+  return { status: r.status, ...body, ok: r.ok && body.ok !== false };
+}
 async function postJSON(url, obj) {
   const r = await fetch(url, {
     method: "POST",
@@ -39,6 +61,24 @@ async function postJSON(url, obj) {
   const ct = r.headers.get("content-type") || "";
   return ct.includes("json") ? r.json() : r.text();
 }
+
+// Forms that delete ask first. The question lives in data-confirm rather than
+// in an inline onsubmit="confirm('…{{ title }}…')": a title with an apostrophe
+// — The Hitchhiker's Guide — ends the JS string early there, the handler fails
+// to compile, and the form submits with no question at all. An attribute is
+// escaped as an attribute, and read as text.
+document.addEventListener("submit", (e) => {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement) || !form.dataset.confirm) return;
+  e.preventDefault();
+  const detail = form.dataset.confirmDetail;
+  confirmDialog({
+    title: form.dataset.confirm,
+    bodyHtml: detail ? `<p>${escapeHtml(detail)}</p>` : "",
+    confirmLabel: form.dataset.confirmLabel || "Delete",
+    danger: true,
+  }).then((ok) => { if (ok) form.submit(); });  // submit() bypasses this listener
+});
 
 // Open one of the app's folders in the system file manager.
 // Takes the same names the /reveal route understands — never a path, so there is
@@ -168,7 +208,7 @@ function confirmDialog(opts) {
     back.className = "modal-backdrop open";
     back.innerHTML = `
       <div class="modal confirm" role="dialog" aria-modal="true">
-        <header><h3>${opts.title || "Confirm"}</h3></header>
+        <header><h3>${escapeHtml(opts.title || "Confirm")}</h3></header>
         <div class="confirm-body">${opts.bodyHtml || ""}</div>
         <footer>
           <button class="btn ghost" data-cancel>Cancel</button>
@@ -235,6 +275,8 @@ function openFsBrowser(opts) {
     crumbEl.textContent = data.cwd + (data.error ? "  (" + data.error + ")" : "");
     const rows = [];
     if (data.parent) rows.push(row("dir", ICON.up, "Back to " + baseName(data.parent), data.parent, true));
+    // Names are real file names, escaped in row(): a file called
+    // <img src=x onerror=…>.epub is a valid name.
     for (const d of data.dirs) rows.push(row("dir", ICON.folder, d.name, d.path, true));
     for (const fl of data.files) rows.push(row("file", ICON.file, fl.name, fl.path, false, fl.disabled, fl.reason));
     listEl.innerHTML = "";
@@ -248,11 +290,11 @@ function openFsBrowser(opts) {
     const el = document.createElement("div");
     el.className = "fs-item " + kind + (disabled ? " disabled" : "");
     if (disabled) {
-      el.innerHTML = `${ICON.blocked}<span>${name}<span class="fs-reason">${reason || "unsupported"}</span></span>`;
+      el.innerHTML = `${ICON.blocked}<span>${escapeHtml(name)}<span class="fs-reason">${escapeHtml(reason || "unsupported")}</span></span>`;
       el.title = reason || "unsupported";
       return el;  // not selectable
     }
-    el.innerHTML = `${icon}<span>${name}</span>`;
+    el.innerHTML = `${icon}<span>${escapeHtml(name)}</span>`;
     el.addEventListener("click", () => { isDirRow ? load(path) : (opts.onPick(path), close()); });
     return el;
   }
@@ -274,12 +316,20 @@ function startSidebar() {
   if (!dock) return;
 
   let rendering = false;
+  const idleTitle = idle ? idle.querySelector("b") : null;
+  const idleText = idleTitle ? idleTitle.textContent : "";
 
   function paintStatus(s) {
     const job = s && s.job;
     rendering = !!(s && s.busy && job);
     dock.hidden = !rendering;
     idle.hidden = rendering;
+    // Busy with no book: a voice audition. Still worth a word, or the sidebar
+    // says nothing is happening while the machine is plainly working.
+    if (idleTitle) {
+      idleTitle.textContent = (s && s.busy && s.kind === "voice_test")
+        ? "Rendering a voice sample" : idleText;
+    }
     if (!rendering) return;
 
     dock.href = "/job/" + job.job_id;
@@ -334,7 +384,7 @@ function startSidebar() {
     document.getElementById("diskBar").style.width = Math.round(share * 100) + "%";
     const n = d.safe_count;
     document.getElementById("diskWhy").textContent =
-      `Left behind by ${n} finished book${n === 1 ? "" : "s"}. Deleting them changes nothing you can hear.`;
+      `Left behind by ${n} book${n === 1 ? "" : "s"} that ${n === 1 ? "is" : "are"} finished, or only ever previewed. Deleting them changes nothing you can hear.`;
   }
 
   async function tick() {
@@ -349,19 +399,31 @@ function startSidebar() {
       e.stopPropagation();
       const id = (dock.href || "").split("/job/")[1];
       if (!id) return;
-      await postForm(`/job/${id}/cancel`, {});
-      toast("Stopping…");
+      try {
+        await postForm(`/job/${id}/cancel`, {});
+        toast("Stopping…");
+      } catch (e) {
+        toast("Couldn't reach the app to stop it");
+      }
       tick();
     });
   }
 
   // Remember where this window is, so relaunching reopens it here.
   //
+  // Only when this *is* the app window. With no Chromium installed the UI is a
+  // tab in the user's own browser — Safari, on a Mac — and what this would
+  // record then is the position of their personal browser window, to be handed
+  // to --window-position the day they install Chrome. Chromium's --app windows
+  // report display-mode: standalone; ordinary tabs report "browser".
+  //
   // Browsers fire `resize` but there is no "moved" event, so position has to be
   // sampled. It rides the tick that is already running rather than starting a
   // timer of its own, and only posts when something actually changed.
   let lastGeom = "";
+  const isAppWindow = !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
   function reportGeometry() {
+    if (!isAppWindow) return;
     // A minimised or hidden window reports zeroes; remembering those would
     // reopen something invisible.
     if (!window.outerWidth || !window.outerHeight) return;
@@ -372,7 +434,10 @@ function startSidebar() {
     const key = [g.x, g.y, g.width, g.height].join(",");
     if (key === lastGeom) return;
     lastGeom = key;
-    fetch("/api/window", { method: "POST", body: new URLSearchParams(g) }).catch(() => {});
+    // keepalive: the last call comes from pagehide, and a plain fetch started
+    // while the page is being torn down is cancelled with it.
+    fetch("/api/window", { method: "POST", body: new URLSearchParams(g), keepalive: true })
+      .catch(() => {});
   }
 
   tick();

@@ -249,9 +249,13 @@ async function checkUpdates() {
     const d = await r.json();
     text.textContent = d.message || "";
     if (d.available) {
-      text.innerHTML = `${d.message} <a href="${d.notes_url}" target="_blank" rel="noopener">Release notes</a>`;
+      // The one response in this app that comes from outside the machine, so
+      // the one that is not trusted as markup.
+      const url = /^https:\/\//.test(d.notes_url || "") ? d.notes_url : "";
+      text.innerHTML = escapeHtml(d.message) + (url
+        ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Release notes</a>` : "");
       document.getElementById("updateHint").innerHTML =
-        `Upgrade by running <code>ebook-audiobook update --apply</code>, or: <code>${d.command}</code>`;
+        `Upgrade by running <code>ebook-audiobook update --apply</code>, or: <code>${escapeHtml(d.command)}</code>`;
     }
   } catch { text.textContent = "Couldn't check right now."; }
 }
@@ -281,9 +285,10 @@ async function refreshDiagnostics() {
       el.textContent = `No errors logged. (Log capped at ${Math.round(d.max_bytes / 1024)} KB, kept ${d.max_age_days} days.)`;
       return;
     }
+    // Error text quotes file names and parser output from the ebook itself.
     el.innerHTML = `<strong>${d.errors.length} recent error(s)</strong>, log is ${kb} KB:<br>` +
       d.errors.slice(0, 5).map((e) =>
-        `<span class="mono">${e.ts} · ${e.op} · ${e.error}</span>`).join("<br>");
+        `<span class="mono">${escapeHtml(e.ts)} · ${escapeHtml(e.op)} · ${escapeHtml(e.error)}</span>`).join("<br>");
   } catch { el.textContent = "Couldn't read the log."; }
 }
 document.getElementById("clearLogBtn").addEventListener("click", async () => {

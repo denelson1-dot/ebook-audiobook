@@ -356,3 +356,150 @@ def test_the_render_mode_is_remembered_on_the_job(client, tmp_path):
                           "power_mode": "balanced"})
     assert r.get_json()["ok"], r.get_json()
     assert JobStore("powerjob").load_state().power_mode == "balanced"
+
+
+def test_fs_browser_hides_dotfiles_and_appledouble_sidecars(client, tmp_path):
+    """Finder leaves .DS_Store everywhere, and on an external or network volume
+    macOS writes a ``._Book.epub`` beside every ``Book.epub``. The sidecar has
+    the extension and none of the content, so listed it looks like a second
+    copy of the book and then fails to import."""
+    books = tmp_path / "books"
+    books.mkdir()
+    (books / "Book.epub").write_bytes(b"x")
+    (books / "._Book.epub").write_bytes(b"x")
+    (books / ".DS_Store").write_bytes(b"x")
+    (books / ".hidden").mkdir()
+    r = client.get("/api/fs?kind=ebook&path=" + str(books))
+    data = r.get_json()
+    assert [f["name"] for f in data["files"]] == ["Book.epub"]
+    assert [d["name"] for d in data["dirs"]] == []
+
+
+# --- the window's geometry ---------------------------------------------------------
+
+def test_window_geometry_rejects_nonsense_without_a_server_error(client):
+    """int(float('inf')) is an OverflowError, which is not a ValueError; the
+    route used to 500 on it. Every rejection here is a 400."""
+    for bad in ("inf", "-inf", "nan", "abc", ""):
+        r = client.post("/api/window", data={"x": bad, "y": "0", "width": "800", "height": "600"})
+        assert r.status_code == 400, bad
+    r = client.post("/api/window", data={"x": "10", "y": "20", "width": "100", "height": "600"})
+    assert r.status_code == 400  # too small to be a window
+    r = client.post("/api/window", data={"x": "10", "y": "20", "width": "1200", "height": "800"})
+    assert r.status_code == 200
+
+
+# --- one render at a time, per book ---------------------------------------------------
+
+def _seed_readable_job(job_id="busyjob"):
+    store = JobStore(job_id).ensure()
+    store.save_book(Book(job_id=job_id, source_path="/none.epub", source_hash=job_id))
+    store.save_chapters([Chapter(chapter_id="ch0000", sequence=0, title="One",
+                                 text="Some text here.", char_count=15)])
+    store.save_state(JobState(job_id=job_id, stage=Stage.EXTRACTED.value))
+    return store
+
+
+def test_a_second_render_request_is_refused_while_one_is_running(client, monkeypatch):
+    """A double-click or a retried request must not queue a second full pass
+    over the same book, re-packaging it for nothing."""
+    from ebook_audiobook.web.runner import runner
+
+    _seed_readable_job()
+    monkeypatch.setattr(runner, "is_busy", lambda job_id=None: job_id == "busyjob")
+    submitted = []
+    monkeypatch.setattr(runner, "submit", lambda *a, **k: submitted.append(a))
+
+    r = client.post("/job/busyjob/render", data={"output_mode": "folder"})
+    assert r.status_code == 409
+    r = client.post("/job/busyjob/preview", data={"seconds": "30"})
+    assert r.status_code == 409
+    assert submitted == []
+
+
+def test_preview_length_is_clamped(client, monkeypatch):
+    """Zero would divide the progress by nothing after a full model load."""
+    from ebook_audiobook.web.runner import runner
+
+    _seed_readable_job()
+    monkeypatch.setattr(runner, "is_busy", lambda job_id=None: False)
+    submitted = []
+    monkeypatch.setattr(runner, "submit", lambda *a, **k: submitted.append(k))
+
+    client.post("/job/busyjob/preview", data={"seconds": "0"})
+    client.post("/job/busyjob/preview", data={"seconds": "99999"})
+    assert [k["seconds"] for k in submitted] == [5.0, 300.0]
+
+
+# --- whether the estimates are current is the server's call --------------------------
+
+def test_status_says_whether_the_measurement_matches_the_saved_settings(client):
+    from ebook_audiobook import config, hashing
+
+    store = _seed_readable_job("measured")
+    voice = store.load_voice()
+    st = store.load_state()
+    st.chars_per_audio_second = 14.0
+    st.measured_voice_key = hashing.voice_key(voice, config.SAMPLE_RATE)
+    store.save_state(st)
+    assert client.get("/job/measured/status").get_json()["measured_here"] is True
+
+    client.post("/job/measured/settings", data={"cfg_weight": "0.2"})
+    assert client.get("/job/measured/status").get_json()["measured_here"] is False
+
+
+# --- the sidebar during a voice audition ---------------------------------------------
+
+def test_status_during_a_voice_audition_has_no_book_and_no_error(client, monkeypatch):
+    from ebook_audiobook.web.runner import runner
+
+    monkeypatch.setattr(runner, "current", "voicetest-male-british:voice_test")
+    monkeypatch.setattr(runner, "is_busy", lambda job_id=None: True)
+    d = client.get("/api/status").get_json()
+    assert d["busy"] is True and d["kind"] == "voice_test" and d["job"] is None
+
+
+# --- voices: the default narrator, and a bad clip ---------------------------------------
+
+def test_the_default_narrator_for_new_books_can_be_chosen(client):
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.voices import default_voice_id
+
+    r = client.post("/voices/female-british/default")
+    assert r.status_code == 302
+    assert app_settings.load_settings().default_voice_id == "female-british"
+    assert default_voice_id() == "female-british"
+    assert b"new books start here" in client.get("/voices").data
+
+    assert client.post("/voices/no-such-voice/default").status_code == 404
+
+
+def test_a_bad_voice_clip_is_reported_on_the_page(client, tmp_path):
+    """abort(400) landed the user on Flask's bare error page with no way back."""
+    r = client.post("/voices/add", data={"name": "Nope", "path": str(tmp_path / "missing.txt")})
+    assert r.status_code == 400
+    assert b"alert-error" in r.data and b"Add a voice" in r.data  # the page, with the reason
+
+
+def test_an_audition_starts_by_forgetting_the_previous_sample(client, monkeypatch):
+    """The page waits for the sample file to appear, so an old one would be
+    mistaken for the new one — and played — the instant the request returns."""
+    from ebook_audiobook.web.runner import runner
+
+    monkeypatch.setattr(runner, "submit", lambda *a, **k: None)
+    old = paths().voices / "_sample_male-british.wav"
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_bytes(b"old")
+    assert client.post("/voices/male-british/test").get_json()["ok"] is True
+    assert not old.exists()
+
+
+# --- the first-run nudge ------------------------------------------------------------------
+
+def test_flipping_an_unrelated_switch_does_not_dismiss_the_setup_prompt(client):
+    from ebook_audiobook import settings as app_settings
+
+    client.post("/settings", data={"autoplay_preview": "0"})
+    assert app_settings.load_settings().setup_dismissed is False
+    client.post("/settings", data={"audiobooks_root": ""})
+    assert app_settings.load_settings().setup_dismissed is True

@@ -256,7 +256,8 @@ NASA = Nassa</div>
           </button>
           <a class="btn ghost sm" href="{{ url_for('storage_page') }}">All books…</a>
           <form method="post" action="{{ url_for('delete_job', job_id=job_id) }}" style="margin-left:auto"
-                onsubmit="return confirm('Delete “{{ book.title }}” and everything belonging to it?')">
+                data-confirm="Delete “{{ book.title }}”?"
+                data-confirm-detail="Everything belonging to it goes: the imported ebook, the working files, and the finished audiobook if there is one.">
             <button class="btn danger sm" type="submit">{{ ic.icon('trash', 13) }} Delete</button>
           </form>
         </div>
@@ -350,8 +351,23 @@ form.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('inpu
 syncRanges();
 
 function formData() { return new URLSearchParams(new FormData(form)); }
+// Whether the form holds changes the server has not seen. While it does, the
+// server's opinion of whether the estimates are current is about the *saved*
+// settings and must not overwrite the page's own.
+let dirty = false;
 async function saveSettings() {
-  await fetch(`/job/${jobId}/settings`, { method: "POST", body: formData() });
+  let r;
+  try {
+    r = await fetch(`/job/${jobId}/settings`, { method: "POST", body: formData() });
+  } catch (e) {
+    toast("Couldn't reach the app to save the settings");
+    throw e;
+  }
+  if (!r.ok) {
+    toast("Couldn't save the settings");
+    throw new Error("settings not saved: " + r.status);
+  }
+  dirty = false;
 }
 
 const saveBtn = document.getElementById("saveBtn");
@@ -481,7 +497,9 @@ function paintChapterMinutes() {
 // ---- Render (with a disk-space / temp-files plan dialog) ----------------------
 async function renderPlanBody() {
   const { chars, count } = includedChars();
-  const audioSecs = chars / CHARS_PER_AUDIO_SECOND;
+  // The same rate the footer uses, or the two disagree the moment a voice has
+  // been measured — and the disk-space warning below is computed from this.
+  const audioSecs = chars / effectiveAudioRate();
   const sizeBytes = audioSecs * (currentBitrate() * 1000 / 8);
   const tempBytes = audioSecs * WAV_BYTES_PER_AUDIO_SECOND * 2;
   // Ask about the destination too: the working files land in the data folder,
@@ -536,30 +554,40 @@ async function renderPlanBody() {
   return { bodyHtml: `<div class="plan-table">${rows}</div>${explain}${powerBlock}${warn}`, tight };
 }
 
+// One plan dialog at a time: the button is only disabled by the next poll, and
+// a second click while /api/space is being asked would stack a second dialog
+// and, confirmed, a second render.
+let planOpen = false;
 document.getElementById("renderBtn").addEventListener("click", async () => {
   const { chars } = includedChars();
   if (!chars) { toast("Choose at least one section to narrate."); return; }
-  const plan = await renderPlanBody();
-  const ok = await confirmDialog({
-    title: "Ready to narrate",
-    bodyHtml: plan.bodyHtml,
-    confirmLabel: plan.tight ? "Narrate anyway" : "Start",
-    danger: plan.tight,
-  });
-  if (!ok) return;
-  const picked = document.querySelector('input[name="planPower"]:checked');
-  if (picked) powerMode = picked.value;
-  await saveSettings();
-  const body = { output_mode: outputMode, power_mode: powerMode };
-  if (outputMode === "folder") body.output_dir = outDirInput.value;
-  const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
-  if (!r.ok) {
-    let msg = "Couldn't start";
-    try { msg = (await r.json()).error || msg; } catch {}
-    toast(msg);
-    return;
+  if (planOpen) return;
+  planOpen = true;
+  try {
+    const plan = await renderPlanBody();
+    const ok = await confirmDialog({
+      title: "Ready to narrate",
+      bodyHtml: plan.bodyHtml,
+      confirmLabel: plan.tight ? "Narrate anyway" : "Start",
+      danger: plan.tight,
+    });
+    if (!ok) return;
+    const picked = document.querySelector('input[name="planPower"]:checked');
+    if (picked) powerMode = picked.value;
+    await saveSettings();
+    const body = { output_mode: outputMode, power_mode: powerMode };
+    if (outputMode === "folder") body.output_dir = outDirInput.value;
+    const r = await fetch(`/job/${jobId}/render`, { method: "POST", body: new URLSearchParams(body) });
+    if (!r.ok) {
+      let msg = "Couldn't start";
+      try { msg = (await r.json()).error || msg; } catch {}
+      toast(msg);
+      return;
+    }
+    toast("Narrating…"); bump();
+  } finally {
+    planOpen = false;
   }
-  toast("Narrating…"); bump();
 });
 // Measuring: narrate a few seconds with the current settings and use the real
 // numbers. Cheap, and the audio it makes is kept for the full render.
@@ -584,10 +612,12 @@ document.getElementById("staleMeasure").addEventListener("click", () => startMea
 // Changing anything that affects the audio makes the current figures stale, and
 // the offer to remeasure appears the moment it stops being true.
 form.addEventListener("input", (e) => {
+  dirty = true;
   if (e.target.name === "bitrate") return;  // encode-only: changes size, not length
   if (measuredHere) { measuredHere = false; computeEstimate(); }
 });
 form.addEventListener("change", (e) => {
+  dirty = true;
   if (e.target.name !== "voice_id") return;
   // Each shipped clip has a pacing that suits it — they all read a little
   // deliberately at the engine default. Moving the slider rather than applying
@@ -629,10 +659,6 @@ if (cleanupBtn) cleanupBtn.addEventListener("click", async () => {
 
 // Chapters are extracted in the background after import, so the page may load
 // before they exist. Fetch and populate the list + dropdown once available.
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-}
 async function ensureChapters() {
   const sel = document.getElementById("previewChapter");
   if (sel.options.length > 0) return;  // already populated (server-rendered or earlier)
@@ -658,7 +684,7 @@ async function ensureChapters() {
 
 function chapterRowHtml(c) {
   const synthetic = c.chapter_id === "intro" || c.chapter_id === "outro";
-  const mins = Math.round(c.char_count / CHARS_PER_AUDIO_SECOND / 60);
+  const mins = Math.round(c.char_count / effectiveAudioRate() / 60);
   return `<div class="chrow ${c.include ? "" : "excluded"}">
     <input type="checkbox" class="ch-include" data-ch="${c.chapter_id}" data-chars="${c.char_count}"${c.include ? " checked" : ""}>
     <span class="mono dim" style="font-size:11.5px">${String(c.sequence).padStart(2, "0")}</span>
@@ -843,10 +869,17 @@ function updateRemaining(s) {
   el.textContent = etaText; el.style.display = "";
 }
 
+// Whatever happens inside one poll, the next one is scheduled: a single
+// exception in the DOM work below must not leave the page frozen with a
+// progress bar that never moves and buttons that never come back.
 async function poll() {
+  let ms = 4000;
+  try { ms = await pollOnce(); } catch (e) { console.error(e); }
+  finally { schedule(ms); }
+}
+async function pollOnce() {
   await ensureChapters();
-  let s;
-  try { s = await getJSON(`/job/${jobId}/status`); } catch { return schedule(4000); }
+  const s = await getJSON(`/job/${jobId}/status`);
 
   // Pick up freshly-measured rates so the estimates and the plan dialog populate.
   let ratesChanged = false;
@@ -854,9 +887,27 @@ async function poll() {
     renderRate = s.chars_per_render_second; ratesChanged = true;
   }
   if (s.chars_per_audio_second && s.chars_per_audio_second !== audioRate) {
-    audioRate = s.chars_per_audio_second; measuredHere = true; ratesChanged = true;
+    audioRate = s.chars_per_audio_second; ratesChanged = true;
+  }
+  // Whether the figures match the saved settings is the server's call — it
+  // has the voice key the measurement was taken with. Re-measuring with a
+  // voice measured before produces the same rate to the decimal, so a change
+  // in the number is not a signal that can be relied on. While the form holds
+  // unsaved edits, the page's own answer stands.
+  if (!dirty && typeof s.measured_here === "boolean" && s.measured_here !== measuredHere) {
+    measuredHere = s.measured_here; ratesChanged = true;
   }
   if (ratesChanged) computeEstimate();
+
+  // A book that produced no sections at all would otherwise spin on
+  // "Reading the book…" forever, since there is nothing to fetch.
+  if (!document.querySelector(".ch-include") && !["imported", "extracting"].includes(s.stage)) {
+    const pending = document.getElementById("chaptersPending");
+    if (pending && !pending.dataset.empty) {
+      pending.dataset.empty = "1";
+      pending.textContent = "No readable sections were found in this book.";
+    }
+  }
 
   document.getElementById("stageText").textContent = statusLabel(s);
   document.getElementById("stageBadge").className = "badge " + s.stage;
@@ -885,16 +936,17 @@ async function poll() {
   document.getElementById("selectAllCh").disabled = working;
   document.querySelectorAll(".ch-include").forEach(el => el.disabled = working);
 
-  if (s.output_path && s.output_path.endsWith(".m4b")) {
-    document.getElementById("resultLinks").innerHTML =
-      `<a class="btn primary" href="/job/${jobId}/download">Save the .m4b</a>`;
-    revealOutputBtn.hidden = false;
-  }
-  if (s.finished_at) {
-    document.getElementById("finishedText").textContent =
-      "Finished " + new Date(s.finished_at).toLocaleString() +
-      (s.output_bytes ? " · " + humanBytes(s.output_bytes) : "");
-  }
+  // The finished file is offered only while nothing is replacing it. During a
+  // re-render the previous .m4b is still on disk, but a "Save" button and a
+  // "Finished <date>" line under a live progress bar say the wrong thing.
+  const hasResult = !working && s.output_path && s.output_path.endsWith(".m4b");
+  document.getElementById("resultLinks").innerHTML = hasResult
+    ? `<a class="btn primary" href="/job/${jobId}/download">Save the .m4b</a>` : "";
+  revealOutputBtn.hidden = !hasResult;
+  document.getElementById("finishedText").textContent = (hasResult && s.finished_at)
+    ? "Finished " + new Date(s.finished_at).toLocaleString() +
+      (s.output_bytes ? " · " + humanBytes(s.output_bytes) : "")
+    : "";
 
   const a = document.getElementById("previewAudio");
   if (isPreview) {
@@ -906,14 +958,16 @@ async function poll() {
     lastPreviewAt = "";
   } else {
     if (s.preview_at !== lastPreviewAt) {
-      const isNew = lastPreviewAt !== "" || previewRanHere;
       lastPreviewAt = s.preview_at;
       a.src = `/job/${jobId}/preview.wav?t=${encodeURIComponent(s.preview_at)}`;
-      if (isNew && previewRanHere && AUTOPLAY_PREVIEW) {
-        // Generating one was an explicit request to hear it. The browser may
-        // still refuse; the click that started the render usually counts as the
-        // gesture that permits this, and if not the controls are right there.
-        a.play().catch(() => {});
+      a.style.display = "block";
+      if (previewRanHere && AUTOPLAY_PREVIEW) {
+        // Generating one was an explicit request to hear it. Chromium allows
+        // this after the click that started the render; Safari does not — its
+        // permission expires with the click, and this runs seconds later — so
+        // when the browser refuses, say the preview is there rather than let a
+        // thirty-second wait end in silence.
+        a.play().catch(() => toast("Preview ready — press play to hear it"));
       }
       previewRanHere = false;
     }
@@ -931,7 +985,7 @@ async function poll() {
 
   let ms = working ? 1000 : 5000;
   if (fast > 0) { fast--; ms = 1000; }
-  schedule(ms);
+  return ms;
 }
 function schedule(ms) { setTimeout(poll, ms); }
 poll();
