@@ -334,9 +334,14 @@ def test_tray_refresh_is_safe_with_no_tray_running():
     tray.refresh()  # must not raise
 
 
-def test_tray_refresh_rebuilds_the_menu():
+def test_tray_refresh_rebuilds_the_menu(monkeypatch):
     """Every backend caches its menu, so a dynamic label is frozen at whatever
-    was true at startup unless something explicitly rebuilds it."""
+    was true at startup unless something explicitly rebuilds it.
+
+    Off macOS: there the call is handed to the AppKit run loop, which this
+    test does not run — see test_on_macos_refresh_runs_on_the_appkit_thread."""
+    monkeypatch.setattr(tray, "IS_MACOS", False)
+
     class _Icon:
         def __init__(self):
             self.updates = 0
