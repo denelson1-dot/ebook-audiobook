@@ -183,3 +183,33 @@ def test_library_pruning_recognises_the_root_by_identity_not_spelling(tmp_path, 
     assert not book_dir.exists()
     assert not (real_root / "Author").exists()
     assert real_root.exists()  # never the root itself
+
+def test_moved_data_folder_paths_are_healed_on_load(tmp_path, monkeypatch):
+    """A book imported when the data lived under <repo>/local-data must still be
+    readable after the data folder moves: the recorded absolute paths are
+    re-rooted under today's data folder when the files are there."""
+    from ebook_audiobook.config import relocate
+
+    p = paths().ensure()
+    (p.imports / "abc.epub").write_bytes(b"book")
+    old = tmp_path / "old-root" / "local-data"  # never existed here
+
+    assert relocate(str(old / "imports" / "abc.epub")) == str(p.imports / "abc.epub")
+    assert relocate(str(old / "imports" / "gone.epub")) == str(old / "imports" / "gone.epub")
+    assert relocate(None) is None
+    users_own = tmp_path / "mine.epub"
+    users_own.write_bytes(b"x")
+    assert relocate(str(users_own)) == str(users_own)  # still there: untouched
+
+    store = JobStore("moved").ensure()
+    (store.dir / "cover.jpg").write_bytes(b"jpg")
+    store.save_book(Book(job_id="moved", source_path=str(old / "imports" / "abc.epub"),
+                         source_hash="abc", cover_path=str(old / "jobs" / "moved" / "cover.jpg")))
+    book = store.load_book()
+    assert book.source_path == str(p.imports / "abc.epub")
+    assert book.cover_path == str(store.dir / "cover.jpg")
+    assert store.imported_source() == p.imports / "abc.epub"
+
+    (p.voices / "jk.wav").write_bytes(b"wav")
+    store.save_voice(VoiceSettings(reference_clip=str(old / "voices" / "jk.wav")))
+    assert store.load_voice().reference_clip == str(p.voices / "jk.wav")
