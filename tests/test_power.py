@@ -140,7 +140,7 @@ def test_an_irreversible_priority_drop_taints_the_thread(monkeypatch):
     thread — otherwise one quiet render slows every job that follows."""
     monkeypatch.setattr(power, "_lower_thread_priority", lambda d: (True, False))
     monkeypatch.setattr(power, "_limit_torch_threads", lambda d: None)
-    monkeypatch.setattr(power, "_darwin_background", lambda e: False)
+    monkeypatch.setattr(power, "_darwin_qos", lambda q: False)
 
     assert not power.thread_is_tainted()
     power.apply(power.profile_for("quiet"))
@@ -151,7 +151,7 @@ def test_a_reversible_priority_drop_does_not_taint(monkeypatch):
     """Windows and macOS can put it back, so the thread stays reusable."""
     monkeypatch.setattr(power, "_lower_thread_priority", lambda d: (True, True))
     monkeypatch.setattr(power, "_limit_torch_threads", lambda d: None)
-    monkeypatch.setattr(power, "_darwin_background", lambda e: False)
+    monkeypatch.setattr(power, "_darwin_qos", lambda q: False)
     power.apply(power.profile_for("quiet"))
     assert not power.thread_is_tainted()
 
@@ -177,7 +177,7 @@ def test_apply_reports_what_actually_took_effect(monkeypatch):
     what was attempted."""
     monkeypatch.setattr(power, "_limit_torch_threads", lambda d: 3)
     monkeypatch.setattr(power, "_lower_thread_priority", lambda d: (True, True))
-    monkeypatch.setattr(power, "_darwin_background", lambda e: True)
+    monkeypatch.setattr(power, "_darwin_qos", lambda q: True)
     notes = power.apply(power.profile_for("quiet"))
     joined = " | ".join(notes)
     assert "3" in joined and "priority" in joined
@@ -189,7 +189,7 @@ def test_apply_survives_a_platform_that_refuses_everything(monkeypatch):
     """A locked-down container must not stop a render from happening at all."""
     monkeypatch.setattr(power, "_limit_torch_threads", lambda d: None)
     monkeypatch.setattr(power, "_lower_thread_priority", lambda d: (False, True))
-    monkeypatch.setattr(power, "_darwin_background", lambda e: False)
+    monkeypatch.setattr(power, "_darwin_qos", lambda q: False)
     notes = power.apply(power.profile_for("quiet"))
     assert all("priority" not in n for n in notes)  # didn't claim what it didn't do
 
@@ -203,9 +203,99 @@ def test_priority_change_never_raises_when_the_os_refuses(monkeypatch):
     assert applied is False
 
 
-def test_darwin_background_is_a_noop_off_macos(monkeypatch):
+def test_darwin_qos_is_a_noop_off_macos(monkeypatch):
     monkeypatch.setattr(power.sys, "platform", "linux")
-    assert power._darwin_background(True) is False
+    assert power._darwin_qos("background") is False
+
+
+# --- macOS: per-thread QoS, never process-wide niceness ------------------------
+
+def test_macos_never_nices_the_process(monkeypatch):
+    """Darwin has no per-thread niceness: setpriority(PRIO_PROCESS, 0, …) there
+    lowers the whole process, web server included, and an unprivileged process
+    can never raise it back. One quiet render would slow every later one."""
+    monkeypatch.setattr(power.sys, "platform", "darwin")
+
+    def forbidden(*a, **k):
+        pytest.fail("setpriority must not be called on macOS")
+
+    monkeypatch.setattr(power.os, "setpriority", forbidden, raising=False)
+    monkeypatch.setattr(power.os, "getpriority", forbidden, raising=False)
+    applied, reversible = power._lower_thread_priority(10)
+    assert (applied, reversible) == (False, True)
+
+
+class _FakeLibSystem:
+    """Records pthread_set_qos_class_self_np calls instead of making them."""
+
+    def __init__(self):
+        self.calls = []
+
+        def set_qos(cls, rel):
+            self.calls.append((cls, rel))
+            return 0
+
+        self.pthread_set_qos_class_self_np = _FakeFn(set_qos)
+
+
+class _FakeFn:
+    def __init__(self, fn):
+        self._fn = fn
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *a):
+        return self._fn(*a)
+
+
+@pytest.fixture
+def fake_libsystem(monkeypatch):
+    lib = _FakeLibSystem()
+    monkeypatch.setattr(power.sys, "platform", "darwin")
+    monkeypatch.setattr(power.ctypes, "CDLL", lambda *a, **k: lib)
+    return lib
+
+
+@pytest.mark.parametrize("qos,expected", [
+    ("background", power._QOS_BACKGROUND),
+    ("utility", power._QOS_UTILITY),
+    (None, power._QOS_DEFAULT),
+])
+def test_darwin_qos_sets_the_named_class_on_this_thread(fake_libsystem, qos, expected):
+    """The values are from <sys/qos.h>; a wrong one is silently ignored by the
+    kernel, which is the worst kind of failure for a feature nobody can see."""
+    assert power._darwin_qos(qos) is True
+    assert fake_libsystem.calls == [(expected, 0)]
+
+
+def test_darwin_qos_rejects_an_unknown_class(fake_libsystem):
+    assert power._darwin_qos("turbo") is False
+    assert fake_libsystem.calls == []
+
+
+def test_quiet_and_balanced_use_different_qos_classes():
+    """Balanced must not send the render to the efficiency cores: that is the
+    2x-slower mode, and the labels promise balanced is only 10–25% slower."""
+    assert power.PROFILES["quiet"].darwin_qos == "background"
+    assert power.PROFILES["balanced"].darwin_qos == "utility"
+    assert power.PROFILES["full"].darwin_qos is None
+
+
+def test_on_macos_a_quiet_render_is_reversible_and_reports_qos(fake_libsystem, monkeypatch):
+    """The whole point of using QoS on Darwin: the thread can be reused."""
+    monkeypatch.setattr(power, "_limit_torch_threads", lambda d: None)
+    notes = power.apply(power.profile_for("quiet"))
+    assert not power.thread_is_tainted()
+    assert any("efficiency cores" in n for n in notes)
+    assert all("priority" not in n for n in notes)  # nothing was niced
+    assert fake_libsystem.calls == [(power._QOS_BACKGROUND, 0)]
+
+
+def test_on_macos_full_speed_restores_the_default_qos(fake_libsystem, monkeypatch):
+    monkeypatch.setattr(power, "_limit_torch_threads", lambda d: None)
+    power.apply(power.profile_for("quiet"))
+    power.apply(power.profile_for("full"))
+    assert fake_libsystem.calls[-1] == (power._QOS_DEFAULT, 0)
 
 
 def test_describe_is_readable():
