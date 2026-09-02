@@ -31,6 +31,11 @@
 - **Voices carry a language**, are named with it ("English — Male, North
   American", "French — Female"), and a book's page offers the ones that speak
   its language.
+- **Four new English narrators** replace the original five (kept under
+  `assets/voices/archive/`, not shipped). The voice ids carried over, so a book
+  on one of them keeps its choice and re-narrates with the new clip;
+  `male-north-american-alt` was retired — pick a voice again for a book that
+  used it.
 - The `.m4b` is tagged with the narration language players read.
 - The installers take `--lang fr` / `-Lang fr` and follow the desktop's
   language; `README.fr.md` is the French README.

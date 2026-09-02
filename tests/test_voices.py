@@ -86,8 +86,7 @@ def test_the_four_shipped_voices_are_present_and_readable():
     # Named explicitly, so dropping one is a decision someone has to make here
     # rather than something that quietly happens to a glob.
     assert [b["id"] for b in BUNDLED] == [
-        "male-north-american", "male-north-american-alt",
-        "female-north-american", "male-british", "female-british",
+        "male-north-american", "female-north-american", "male-british", "female-british",
         "female-french", "male-french"]
     for b in BUNDLED:
         clip = BUNDLED_DIR / b["file"]
@@ -159,10 +158,9 @@ def test_importing_a_book_adopts_the_default_voice_and_its_pacing(synthetic_epub
 
     assert voice.extra["voice_id"] == "male-north-american"
     assert voice.reference_clip and voice.reference_clip.endswith("male-north-american.flac")
-    # The default voice carries settings tuned by ear, not the engine's generic
-    # ones — a book should sound right before anybody touches a slider.
-    assert voice.cfg_weight == 0.50
-    assert voice.exaggeration == 0.60
+    # The default voice carries its own pacing hint, not the engine's generic
+    # one — a book should sound right before anybody touches a slider.
+    assert voice.cfg_weight == 0.42
 
 
 def test_the_engine_s_own_voice_is_not_offered_as_a_choice():
@@ -201,11 +199,12 @@ def test_a_book_on_the_engine_voice_keeps_it_across_a_save(synthetic_epub):
 
 def test_a_voice_may_suggest_settings_or_leave_them_alone():
     lib = VoiceLibrary()
-    tuned = lib.get("male-north-american")
-    assert (tuned.pacing, tuned.expressiveness) == (0.50, 0.60)
-    # The rest carry a pacing hint only; expressiveness stays at the engine's.
-    others = [v for v in lib.list() if v.bundled and v.id != "male-north-american"]
-    assert others and all(v.pacing and v.expressiveness is None for v in others)
+    # Every shipped clip carries a pacing hint; expressiveness stays at the
+    # engine's unless a clip is tuned for one (none of the current six are).
+    shipped = [v for v in lib.list() if v.bundled]
+    assert shipped and all(v.pacing and v.expressiveness is None for v in shipped)
+    # The engine's own voice suggests nothing.
+    assert lib.get("default").pacing is None
 
 
 def test_every_bundled_voice_names_its_language():
