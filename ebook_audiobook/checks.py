@@ -135,11 +135,24 @@ def engine_install_hint() -> str:
     """
     from .torchbuild import TORCH_PIN
 
+    if intel_mac():
+        # There is nothing to re-run: PyTorch stopped building for x86_64 macOS
+        # after 2.2.2, so no install can succeed. The installer says the same.
+        return ("  PyTorch stopped building for Intel Macs after 2.2.2, so the speech\n"
+                "  engine can't be installed on this Mac. Importing and reading books\n"
+                "  still works; rendering needs an Apple Silicon Mac, Windows or Linux.")
     return (f'  Re-run the installer — it picks the right PyTorch build for\n'
             f'  this machine. By hand, into this environment:\n'
             f'    "{sys.executable}" -m pip install torch=={TORCH_PIN} '
             f'torchaudio=={TORCH_PIN}\n'
             f'  (see the README for which package index to use)')
+
+
+def intel_mac() -> bool:
+    """An x86_64 macOS process — a real Intel Mac, or an Intel Python running
+    under Rosetta on Apple Silicon. Either way this interpreter can't have the
+    Apple Silicon build of the engine."""
+    return sys.platform == "darwin" and platform.machine() == "x86_64"
 
 
 def check_tts_engine(engine: str = "chatterbox") -> CheckResult:

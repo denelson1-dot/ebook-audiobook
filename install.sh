@@ -317,6 +317,24 @@ fi
 [ -n "$PYTHON" ] || die "Python 3.11+ is required. Install it from https://python.org/downloads and re-run this installer."
 ok "$($PYTHON -V) at $PYTHON"
 
+# On a Mac the architecture that matters is the Python's, not the shell's. A
+# terminal running under Rosetta reports x86_64 from `uname -m` on an Apple
+# Silicon machine, while an arm64 Python found on its PATH still installs the
+# Apple Silicon engine — and the reverse: an x86_64 Python on an M-series Mac
+# cannot, whatever uname says. pip resolves wheels against the interpreter.
+if [ "$PLATFORM" = "macos" ]; then
+  PY_ARCH="$("$PYTHON" -c 'import platform; print(platform.machine())' 2>/dev/null || true)"
+  if [ -n "$PY_ARCH" ] && [ "$PY_ARCH" != "$ARCH" ]; then
+    warn "this Python is $PY_ARCH while the system reports $ARCH; going by the Python"
+    ARCH="$PY_ARCH"
+  fi
+  if [ "$ARCH" = "x86_64" ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
+    warn "this is an Apple Silicon Mac, but this Python runs under Rosetta as x86_64."
+    say "      An arm64 Python (e.g. Homebrew's, at /opt/homebrew/bin/python3) gets the"
+    say "      Apple Silicon speech engine; an Intel Python cannot install it at all."
+  fi
+fi
+
 # Debian and Ubuntu split venv/ensurepip out of the base python3 package, so a
 # stock system Python cannot create a working virtualenv. This is the single most
 # common reason a Linux install fails, so handle it properly: offer the one apt
