@@ -56,6 +56,7 @@ class RawBook:
     isbn: str | None = None
     series: str | None = None
     series_index: str | None = None
+    language: str = "en"   # from dc:language, normalised to a two-letter code
 
 
 # --- repairing the input before Calibre sees it ------------------------------
@@ -377,10 +378,18 @@ def _metadata(soup) -> dict:
     foldering — so anything unparseable is simply left as None."""
     import re as _re
 
+    from ..narration_langs import normalize_language_tag
+
     out: dict[str, str | None] = {
         "year": None, "description": None, "isbn": None,
-        "series": None, "series_index": None,
+        "series": None, "series_index": None, "language": "en",
     }
+
+    # dc:language — "fr", "fr-FR", or "fra" once Calibre has rewritten the
+    # file. Anything unknown is English, which is what it always was.
+    lang_tag = soup.find("language")
+    if lang_tag:
+        out["language"] = normalize_language_tag(lang_tag.get_text(strip=True))
 
     date_tag = soup.find("date")  # dc:date
     if date_tag:

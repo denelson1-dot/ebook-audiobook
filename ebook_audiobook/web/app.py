@@ -18,7 +18,7 @@ from werkzeug.utils import secure_filename
 
 from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
                 tools, worker)
-from .. import hashing, i18n
+from .. import hashing, i18n, narration_langs
 from ..i18n import _
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
@@ -157,16 +157,66 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
-def _offerable_voices(current_id: str | None = None) -> list[dict]:
-    """The voices a person may pick from.
+def _offerable_voices(current_id: str | None = None, language: str = "en") -> list[dict]:
+    """The voices a person may pick from: the ones that speak ``language``.
 
     The engine's own untuned voice is deliberately not among them: it exists as
     a fallback, not as a choice, and the shipped narrators are better in every
-    case. It is still shown when a job already uses it, because silently
-    swapping a book's voice would silently re-render the book.
+    case. It — and a voice of another language — is still shown when the job
+    already uses it, because silently swapping a book's voice would silently
+    re-render the book.
     """
     return [v.to_dict() for v in VoiceLibrary().list()
-            if not v.is_default or v.id == current_id]
+            if (v.language == language and not v.is_default) or v.id == current_id]
+
+
+def _narration_language_choices() -> list[dict]:
+    """Every language the engine can speak, said in the interface language,
+    with whether its model is on this machine."""
+    # Names head a list here, so they are capitalised; in a sentence ("en
+    # français") the catalog's lowercase form is the right one.
+    return [{"code": lg.code, "name": _capitalized(_(lg.name)), "tier": lg.tier,
+             "available": narration_langs.language_available(lg.code)}
+            for lg in narration_langs.LANGUAGES.values()]
+
+
+def _capitalized(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+def _engine_present() -> bool:
+    """Whether the speech engine is installed at all, judged without importing
+    it: torch takes seconds to load and this is asked on a two-second poll."""
+    import importlib.util
+
+    return (importlib.util.find_spec("torch") is not None
+            and importlib.util.find_spec("chatterbox") is not None)
+
+
+def _languages_report() -> dict:
+    nl = narration_langs
+    download = None
+    current = runner.current or ""
+    if current.endswith(":model_download"):
+        pack_id = current.split(":", 1)[0].removeprefix("langpack-")
+        pack = nl.PACKS.get(pack_id)
+        if pack:
+            download = {"pack": pack.id, "done_bytes": nl.bytes_on_disk(pack),
+                        "total_bytes": pack.size_bytes}
+    return {
+        "ok": True,
+        "engine_ok": _engine_present(),
+        "cache_root": str(nl.cache_root()),
+        "download": download,
+        "last_error": nl.last_error if nl.last_error.get("message") else None,
+        "packs": [{
+            "id": p.id, "label": _capitalized(_(p.label)), "size_bytes": p.size_bytes,
+            "installed": nl.is_installed(p.id), "bytes_on_disk": nl.bytes_on_disk(p),
+            "languages": [_(nl.LANGUAGES[c].name) for c in sorted(p.languages)
+                          if c in nl.LANGUAGES],
+        } for p in nl.PACKS.values()],
+        "languages": _narration_language_choices(),
+    }
 
 
 def _busy_job_id() -> str | None:
@@ -658,12 +708,16 @@ def create_app() -> Flask:
             has_cover=bool(book.cover_path and Path(book.cover_path).is_file()),
             tint=cover_tint(book.title),
             # The client renders a stage into words too (it polls faster than a
-            # page reload), so it gets the same table rather than a second copy.
-            stage_labels=STAGE_LABELS,
+            # page reload), so it gets the same table rather than a second copy —
+            # already said in this request's language.
+            stage_labels={k: stage_label(k) for k in STAGE_LABELS},
             chapters=chapters,
             voice=voice,
-            voices=_offerable_voices(voice.extra.get("voice_id")),
+            voices=_offerable_voices(voice.extra.get("voice_id"), voice.language),
             selected_voice_id=voice.extra.get("voice_id", "default"),
+            narration_language=voice.language,
+            narration_languages=_narration_language_choices(),
+            narration_notice=worker.narration_notice(store),
             default_chapter_id=default_ch,
             bitrate=bitrate,
             pron_text=pron_text,
@@ -805,11 +859,43 @@ def create_app() -> Flask:
         store.save_voice(voice)
         return {"ok": True}
 
+    def _language_pack_missing(job_id: str):
+        """A 409 saying which model to install, or None when the job's language
+        can be narrated here. Asked before anything is queued, so a French
+        book on a machine without the French model is refused in a sentence
+        rather than in a failed model load ten seconds later."""
+        try:
+            narration_langs.require_installed(JobStore(job_id).load_voice().language)
+        except narration_langs.LanguagePackMissing as e:
+            return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
+        return None
+
+    @app.post("/job/<job_id>/language")
+    def set_language(job_id):
+        """Narrate this book in another language, and read it again for that."""
+        store = _job_or_404(job_id)
+        if runner.is_busy(job_id):
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
+        lang = (request.form.get("language") or "").strip().lower()
+        if lang not in narration_langs.LANGUAGES:
+            return {"ok": False, "error": _("That isn't a language this can narrate.")}, 400
+        try:
+            worker.set_job_language(store, lang)
+        except narration_langs.LanguagePackMissing as e:
+            return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
+        # The text is prepared per language, so read the book again; the
+        # sections' on/off choices are carried across by the extraction.
+        runner.submit(job_id, "extract")
+        return {"ok": True, "language": lang}
+
     @app.post("/job/<job_id>/preview")
     def start_preview(job_id):
         _job_or_404(job_id)
         if runner.is_busy(job_id):
             return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         # Bounded: zero would divide the progress by nothing after a full model
         # load, and an hour-long "preview" is a render by another name.
         seconds = min(300.0, max(5.0, _f(request.form, "seconds", 30)))
@@ -837,6 +923,9 @@ def create_app() -> Flask:
             return {"ok": False, "error": _("The book hasn't been read yet.")}, 409
         if runner.is_busy():
             return {"ok": False, "error": _("Something else is running.")}, 409
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         runner.submit(job_id, "measure")
         return {"ok": True}
 
@@ -851,6 +940,9 @@ def create_app() -> Flask:
             return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         if not any(c.include for c in store.load_chapters()):
             return {"ok": False, "error": _("Select at least one section to render.")}, 400
+        missing = _language_pack_missing(job_id)
+        if missing:
+            return missing
         mode = request.form.get("output_mode") or worker.default_output_mode()
         raw = (request.form.get("output_dir") or "").strip() or None
         # Resolve + write-check the real destination now, so a bad folder (or an
@@ -1125,6 +1217,56 @@ def create_app() -> Flask:
             return _voices_page(_("Couldn't add that voice: %(e)s", e=e), 400)
         return redirect(url_for("voices_page"))
 
+    @app.get("/api/languages")
+    def api_languages():
+        """Which languages books can be narrated in, and what is on disk.
+
+        Not cached: the Settings page polls it while a model downloads, and the
+        figures are read from the cache folder, not from the network.
+        """
+        return _languages_report()
+
+    @app.post("/api/languages/install")
+    def api_languages_install():
+        """Start the one download in this app that is not the engine's own
+        first-run one — and only ever from the button that says Install."""
+        nl = narration_langs
+        pack = nl.PACKS.get(request.form.get("pack", ""))
+        if pack is None:
+            return {"ok": False, "error": _("No such language model.")}, 400
+        if not _engine_present():
+            return {"ok": False, "error": _(
+                "The speech engine isn't installed, so there is nothing to add a "
+                "language to. Install it first (re-run the installer).")}, 409
+        if runner.is_busy():
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        if nl.is_installed(pack.id):
+            return {"ok": True, "installed": True}
+        ok, needed = nl.free_space_ok(pack)
+        if not ok:
+            return {"ok": False, "error": _(
+                "Not enough free space where the model cache lives: about %(size)s is needed.",
+                size=human_bytes(needed))}, 400
+        runner.submit(f"langpack-{pack.id}", "model_download", pack=pack.id)
+        return {"ok": True}
+
+    @app.post("/api/languages/cancel")
+    def api_languages_cancel():
+        pack = request.form.get("pack", "")
+        runner.cancel(f"langpack-{pack}")
+        return {"ok": True}
+
+    @app.post("/api/languages/remove")
+    def api_languages_remove():
+        nl = narration_langs
+        pack = nl.PACKS.get(request.form.get("pack", ""))
+        if pack is None:
+            return {"ok": False, "error": _("No such language model.")}, 400
+        if runner.is_busy():
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        freed = nl.remove(pack.id)
+        return {"ok": True, "freed_bytes": freed}
+
     @app.post("/voices/<voice_id>/default")
     def voices_set_default(voice_id):
         """Which narrator a newly imported book starts with.
@@ -1178,11 +1320,14 @@ def create_app() -> Flask:
             "app": runtime.APP_ID,
             "busy": runner.is_busy(),
             "current": runner.current,
-            # "render" | "preview" | "extract" | "voice_test" | None — the Quit
-            # control words its warning differently for a six-hour render than
-            # for a ten-second voice sample.
+            # "render" | "preview" | "extract" | "voice_test" | "model_download"
+            # | None — the Quit control words its warning differently for a
+            # six-hour render than for a ten-second voice sample.
             "kind": runner.current_kind(),
             "job": None,
+            # A language model coming down: the sidebar says so, and how far.
+            "download": _languages_report()["download"]
+            if runner.current_kind() == "model_download" else None,
         }
         # Enough about the running job for the sidebar dock to show it on every
         # page. A render lasts hours; making the user navigate back to the job

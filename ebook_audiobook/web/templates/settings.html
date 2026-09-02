@@ -136,6 +136,14 @@
     </section>
 
     <section class="panel">
+      <div class="panel-head"><h3>{{ _("Narration languages") }}</h3></div>
+      <div class="panel-body">
+        <p class="meta" style="line-height:1.55">{{ _("Books are narrated in English out of the box. Narrating in another language needs a second speech model, about 3 GB, downloaded from huggingface.co when — and only when — you press Install. Each language has its own narrators; a book's page offers the ones that speak its language.") }}</p>
+        <div id="langPacks" style="margin-top:12px">{{ _("Loading…") }}</div>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3>{{ _("Updates") }}</h3></div>
       <div class="panel-body">
         <p class="meta" style="line-height:1.55">{{ _("Nothing here contacts the internet on its own. Asking whether there is a newer version means sending a request to GitHub, which carries your IP address — so it happens when you press the button, and not before.") }}</p>
@@ -251,6 +259,66 @@ document.getElementById("backupBtn").addEventListener("click", () => {
   document.getElementById("backupHint").textContent =
     _("Building the archive… the download starts when it's ready.");
 });
+
+// --- narration languages ---------------------------------------------------------
+// Rows built from /api/languages; polled every two seconds while a model is
+// coming down, since the only progress there is is the size of the cache.
+let langPollTimer = null;
+async function refreshLanguages() {
+  const box = document.getElementById("langPacks");
+  let d;
+  try { d = await getJSON("/api/languages"); } catch (e) { box.textContent = _("Couldn't read the model cache."); return; }
+  const rows = d.packs.map((p) => {
+    const downloading = d.download && d.download.pack === p.id;
+    let status, actions;
+    if (p.installed) {
+      status = `<span class="chip ok">${_("installed")}</span> <span class="meta mono">${humanBytes(p.bytes_on_disk)}</span>`;
+      actions = p.id === "english" ? "" :
+        `<button type="button" class="btn sm ghost" data-remove="${p.id}">${_("Remove")}</button>`;
+    } else if (downloading) {
+      const pct = Math.round(100 * d.download.done_bytes / d.download.total_bytes);
+      status = `<span class="chip live"><span class="dot pulse"></span>${_("downloading")}</span>
+        <span class="meta mono">${humanBytes(d.download.done_bytes)} / ${humanBytes(d.download.total_bytes)}</span>
+        <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>`;
+      actions = `<button type="button" class="btn sm ghost" data-cancel="${p.id}">${_("Cancel")}</button>`;
+    } else {
+      status = p.id === "english"
+        ? `<span class="meta">${_("downloads with the first narration")}</span>`
+        : `<span class="meta">${_("not installed")}</span>`;
+      actions = p.id === "english" || !d.engine_ok ? "" :
+        `<button type="button" class="btn sm primary" data-install="${p.id}">${_("Install (%(size)s)", { size: humanBytes(p.size_bytes) })}</button>`;
+    }
+    const langs = p.id === "english" ? "" :
+      `<p class="hint" style="margin-top:4px">${escapeHtml(p.languages.join(", "))}</p>`;
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><b style="font-size:13px">${escapeHtml(p.label)}</b>${langs}
+        <div style="margin-top:6px">${status}</div></div>
+      <div>${actions}</div></div>`;
+  });
+  let note = "";
+  if (!d.engine_ok) note = `<p class="hint" style="margin-top:8px">${_("Install the speech engine first (re-run the installer); a language model is of no use without it.")}</p>`;
+  else if (d.last_error && !d.download) note = `<p class="hint" style="margin-top:8px;color:var(--danger)">${escapeHtml(d.last_error.message)}</p>`;
+  box.innerHTML = rows.join("") + note;
+  clearTimeout(langPollTimer);
+  if (d.download) langPollTimer = setTimeout(refreshLanguages, 2000);
+}
+document.getElementById("langPacks").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const pack = btn.dataset.install || btn.dataset.cancel || btn.dataset.remove;
+  const action = btn.dataset.install ? "install" : btn.dataset.cancel ? "cancel" : "remove";
+  if (action === "remove") {
+    const ok = await confirmDialog({ title: _("Remove this language model?"), danger: true,
+      confirmLabel: _("Remove"),
+      bodyHtml: `<p>${_("Books in its languages can't be narrated until it is downloaded again.")}</p>` });
+    if (!ok) return;
+  }
+  const r = await postFormResult(`/api/languages/${action}`, { pack });
+  if (!r.ok) toast(r.error || _("Couldn't do that"));
+  else if (action === "install") toast(_("Downloading — this takes a while"));
+  refreshLanguages();
+});
+refreshLanguages();
 
 // --- updates --------------------------------------------------------------
 async function checkUpdates() {

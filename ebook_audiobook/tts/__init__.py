@@ -21,6 +21,7 @@ def get_adapter(voice: VoiceSettings, sample_rate: int) -> TTSAdapter:
         top_p=voice.top_p,
         seed=voice.seed,
         sample_rate=sample_rate,
+        language=voice.language or "en",
     )
     if voice.engine == "fake":
         return FakeAdapter(cfg)

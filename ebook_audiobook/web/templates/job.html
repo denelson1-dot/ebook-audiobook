@@ -102,6 +102,29 @@
             </select>
           </div>
 
+          {# The language the narrator speaks. Two lists: languages whose text
+             this app prepares (numbers, abbreviations, headings), and the rest
+             the model can say but reads as written. A language whose model is
+             not on this machine is shown, greyed, with where to get it. #}
+          <div class="field">
+            <label for="narrationLang">{{ _("Language of the narration") }}</label>
+            <select id="narrationLang" name="narration_language" data-current="{{ narration_language }}">
+              {% for l in narration_languages if l.tier == 'supported' %}
+              <option value="{{ l.code }}" {{ 'selected' if l.code == narration_language }} {{ 'disabled' if not l.available and l.code != narration_language }}>{{ l.name }}{% if not l.available %} {{ _("— not installed") }}{% endif %}</option>
+              {% endfor %}
+              <optgroup label="{{ _("Experimental — numbers and abbreviations are read as written") }}">
+              {% for l in narration_languages if l.tier != 'supported' %}
+              <option value="{{ l.code }}" {{ 'selected' if l.code == narration_language }} {{ 'disabled' if not l.available and l.code != narration_language }}>{{ l.name }}{% if not l.available %} {{ _("— not installed") }}{% endif %}</option>
+              {% endfor %}
+              </optgroup>
+            </select>
+            {% if narration_notice %}
+            <p class="hint" style="color:var(--warn)">{{ narration_notice }}</p>
+            {% else %}
+            <p class="hint">{{ _("Changing it reads the book again and switches to that language's narrator.") }}</p>
+            {% endif %}
+          </div>
+
           <div class="field">
             <label>{{ _("Expressiveness") }} <span class="dim">{{ _("— flat to theatrical") }}</span></label>
             <div class="range">
@@ -593,11 +616,25 @@ document.getElementById("staleMeasure").addEventListener("click", () => startMea
 // Changing anything that affects the audio makes the current figures stale, and
 // the offer to remeasure appears the moment it stops being true.
 form.addEventListener("input", (e) => {
+  if (e.target.name === "narration_language") return;
   dirty = true;
   if (e.target.name === "bitrate") return;  // encode-only: changes size, not length
   if (measuredHere) { measuredHere = false; computeEstimate(); }
 });
+// The narration language is not a slider: changing it re-reads the book and
+// swaps the narrator, so it saves on its own and reloads, and a language whose
+// model is missing is refused with the sentence that says where to get it.
+const narrationLang = document.getElementById("narrationLang");
+narrationLang.addEventListener("change", async (e) => {
+  e.stopPropagation();
+  const r = await postFormResult(`/job/${jobId}/language`, { language: narrationLang.value });
+  if (r.ok) { toast(_("Reading the book again in that language…")); location.reload(); return; }
+  narrationLang.value = narrationLang.dataset.current;
+  toast(r.error || _("Couldn't change the language"));
+});
+
 form.addEventListener("change", (e) => {
+  if (e.target.name === "narration_language") return;
   dirty = true;
   if (e.target.name !== "voice_id") return;
   // Each shipped clip has a pacing that suits it — they all read a little

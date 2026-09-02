@@ -189,6 +189,25 @@ def check_tts_engine(engine: str = "chatterbox") -> CheckResult:
     )
 
 
+def check_narration_languages() -> CheckResult:
+    """Which languages a book can be narrated in — never a failure, since
+    English is always on offer and the rest is an opt-in download."""
+    from . import narration_langs as nl
+
+    ready = [_(lg.name) for lg in nl.LANGUAGES.values()
+             if lg.tier == "supported" and nl.language_available(lg.code)]
+    waiting = [_(lg.name) for lg in nl.LANGUAGES.values()
+               if lg.tier == "supported" and not nl.language_available(lg.code)]
+    parts = []
+    if ready:
+        parts.append(_("installed: %(names)s", names=", ".join(ready)))
+    if waiting:
+        parts.append(_("not installed: %(names)s (Settings, under Narration languages)",
+                       names=", ".join(waiting)))
+    return CheckResult(_("narration languages"), True, "; ".join(parts) or _("none"),
+                       required=False)
+
+
 def run_all(engine: str = "chatterbox") -> list[CheckResult]:
     return [
         check_python(),
@@ -197,6 +216,7 @@ def run_all(engine: str = "chatterbox") -> list[CheckResult]:
         check_calibre(),
         check_data_root(),
         check_tts_engine(engine),
+        check_narration_languages(),
     ]
 
 

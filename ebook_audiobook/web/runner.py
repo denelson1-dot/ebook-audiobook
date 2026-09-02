@@ -14,7 +14,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .. import power, worker
+from .. import narration_langs, power, worker
 from ..jobs.store import JobStore
 
 
@@ -52,7 +52,7 @@ def _terminal_progress(job_id: str):
 @dataclass
 class _Task:
     job_id: str
-    kind: str  # "extract" | "preview" | "render"
+    kind: str  # "extract" | "preview" | "render" | "measure" | "voice_test" | "model_download"
     kwargs: dict = field(default_factory=dict)
 
 
@@ -158,6 +158,11 @@ class Runner:
             )
         elif task.kind == "voice_test":
             worker.render_voice_sample(task.kwargs["voice_id"])
+        elif task.kind == "model_download":
+            # Through the one worker on purpose: a download and a render on the
+            # same disk at the same time helps neither, and Quit already knows
+            # how to warn about whatever this thread is doing.
+            narration_langs.install(task.kwargs["pack"], should_cancel=cancelled)
 
     def submit(self, job_id: str, kind: str, **kwargs) -> None:
         with self._lock:

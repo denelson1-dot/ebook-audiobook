@@ -25,6 +25,7 @@ class VoiceConfig:
     top_p: float = 1.0
     seed: int = 0
     sample_rate: int = 24_000
+    language: str = "en"   # the engine's language_id; "en" is the English model
 
 
 @dataclass

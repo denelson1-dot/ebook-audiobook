@@ -79,13 +79,20 @@ class Book:
     isbn: str | None = None          # ISBN identifier, if present
     series: str | None = None        # series name (rarely available)
     series_index: str | None = None  # position in series, e.g. "2"
+    # The language the text is written in (two-letter code), from the ebook's
+    # own metadata. What the narrator *speaks* is the voice's language — see
+    # VoiceSettings.language — and the two differ only when the model for this
+    # one is not installed.
+    language: str = "en"
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Book":
-        return cls(**{k: d.get(k) for k in cls.__dataclass_fields__})
+        # Only the keys present, so a field added since this book.json was
+        # written gets its default rather than None.
+        return cls(**{k: d.get(k) for k in cls.__dataclass_fields__ if k in d})
 
 
 @dataclass

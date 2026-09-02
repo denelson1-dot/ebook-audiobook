@@ -111,6 +111,9 @@ def test_sanitize_trims_trailing_separators():
 def test_metadata_absent_is_all_none():
     opf = '<package><metadata><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">T</dc:title></metadata></package>'
     meta = extract._metadata(BeautifulSoup(opf, "xml"))
+    # Everything optional is None; the language alone has a default, English,
+    # because a book is always narrated in *some* language.
+    assert meta.pop("language") == "en"
     assert all(v is None for v in meta.values())
 
 

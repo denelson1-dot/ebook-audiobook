@@ -366,7 +366,9 @@ function startSidebar() {
     // says nothing is happening while the machine is plainly working.
     if (idleTitle) {
       idleTitle.textContent = (s && s.busy && s.kind === "voice_test")
-        ? _("Rendering a voice sample") : idleText;
+        ? _("Rendering a voice sample")
+        : (s && s.busy && s.kind === "model_download")
+          ? _("Downloading a language model") : idleText;
     }
     if (!rendering) return;
 

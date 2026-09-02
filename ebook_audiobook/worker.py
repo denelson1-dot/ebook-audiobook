@@ -12,6 +12,7 @@ These functions are synchronous and drive the CLI directly; the web UI runs
 from __future__ import annotations
 
 from .i18n import N_, _
+from . import narration_langs
 import errno
 import shutil
 import tempfile
@@ -202,20 +203,77 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
     from .voices import VoiceLibrary, default_voice_id
 
     voice = VoiceSettings(engine=engine)
-    lib = VoiceLibrary()
-    vid = default_voice_id()
-    clip = lib.clip_path(vid)
-    if clip:
-        voice.reference_clip = str(clip)
-        chosen = lib.get(vid)
-        if chosen and chosen.pacing is not None:
-            voice.cfg_weight = chosen.pacing
-        if chosen and chosen.expressiveness is not None:
-            voice.exaggeration = chosen.expressiveness
-    voice.extra["voice_id"] = vid
+    _choose_narrator(voice, VoiceLibrary(), default_voice_id())
     store.save_voice(voice)
     store.save_state(JobState(job_id=job_id, stage=Stage.IMPORTED.value, created_at=_now_iso()))
     return job_id
+
+
+def _choose_narrator(voice: VoiceSettings, lib, voice_id: str) -> None:
+    """Point ``voice`` at a library voice: its clip, its suggested sliders, its id."""
+    clip = lib.clip_path(voice_id)
+    chosen = lib.get(voice_id)
+    voice.reference_clip = str(clip) if clip else None
+    if chosen:
+        if chosen.pacing is not None:
+            voice.cfg_weight = chosen.pacing
+        if chosen.expressiveness is not None:
+            voice.exaggeration = chosen.expressiveness
+    voice.extra["voice_id"] = voice_id
+
+
+def set_job_language(store: JobStore, lang: str) -> None:
+    """Narrate this job in ``lang``.
+
+    Sets the book's language, the voice's language, and — when the current
+    narrator does not speak it — that language's default narrator, so the
+    change is one a person can hear rather than a French book read in an
+    English accent. Refuses, with a message that says what to install, when
+    the language's model is not on this machine. The caller re-extracts: the
+    text is prepared differently per language.
+    """
+    from .voices import DEFAULT_BUNDLED_BY_LANGUAGE, VoiceLibrary, default_voice_id
+
+    narration_langs.require_installed(lang)
+    book = store.load_book()
+    book.language = lang
+    store.save_book(book)
+
+    voice = store.load_voice()
+    if voice.language != lang:
+        # Each model was tuned with its own repetition penalty. Move the slider
+        # only if it still sits at the other model's default, so a value the
+        # user chose is never overwritten.
+        if lang == "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL:
+            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY
+        elif lang != "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY:
+            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL
+        voice.language = lang
+        lib = VoiceLibrary()
+        current = lib.get(voice.extra.get("voice_id", ""))
+        if not current or current.language != lang:
+            wanted = DEFAULT_BUNDLED_BY_LANGUAGE.get(lang) or default_voice_id(lang)
+            if not lib.get(wanted):
+                wanted = default_voice_id(lang)
+            _choose_narrator(voice, lib, wanted)
+    store.save_voice(voice)
+
+
+def narration_notice(store: JobStore) -> str | None:
+    """Why a book is not being narrated in its own language, if it isn't.
+
+    Stored nowhere: computed for the page, in the page's language.
+    """
+    book = store.load_book()
+    voice = store.load_voice()
+    if book.language == voice.language or narration_langs.language_available(book.language):
+        return None  # narrated in its language, or in another one on purpose
+    lang = narration_langs.LANGUAGES.get(book.language)
+    if lang is None:
+        return None
+    return _("This book is in %(language)s. Narrating it in %(language)s needs the "
+             "additional language model — see Settings, under Narration languages.",
+             language=_(lang.name))
 
 
 # --- extract -----------------------------------------------------------------
@@ -342,7 +400,13 @@ def _extract_job(store: JobStore) -> list[Chapter]:
     book.isbn = raw.isbn
     book.series = raw.series
     book.series_index = raw.series_index
+    book.language = raw.language
     store.save_book(book)
+    # Narrate in the book's own language when its model is installed; when it
+    # is not, the voice stays English — what always happened — and the job
+    # page says what installing would change.
+    if book.language != "en" and narration_langs.language_available(book.language):
+        set_job_language(store, book.language)
 
     chapters: list[Chapter] = []
     intro = _intro_chapter(book)
@@ -502,6 +566,9 @@ def render_job(
     voice = store.load_voice()
     if not chapters:
         raise RuntimeError("no chapters — run extract first")
+    # Before any expensive work: a language whose model is not here fails now,
+    # with a message about Settings, not after the model load has failed.
+    narration_langs.require_installed(voice.language)
 
     is_preview = preview_max_seconds is not None
 
@@ -747,6 +814,7 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
     if not chapters:
         raise RuntimeError("no chapters — read the book first")
     voice = store.load_voice()
+    narration_langs.require_installed(voice.language)
 
     prior_stage = _resumable_stage(store.load_state().stage)
 
@@ -931,6 +999,7 @@ def _assemble_and_package(store: JobStore, book: Book, chapters: list[Chapter], 
     package.package_m4b(
         out, chapter_audios, book.title, book.author,
         cover_path=cover, bitrate_kbps=bitrate, workdir=store.dir,
+        language=voice.language,
     )
 
     # Plex-friendly tags (stik=2, album artist, covr, year/desc/ISBN) as a
