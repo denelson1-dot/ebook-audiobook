@@ -1,7 +1,7 @@
 # Bundled narrator voices
 
-Seven reference clips shipped with the application, so a new install has
-usable voices without anyone having to find or record one: five English,
+Six reference clips shipped with the application, so a new install has
+usable voices without anyone having to find or record one: four English,
 two French. Each carries the language it was recorded in, and each language
 has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
 `ebook_audiobook/voices.py`).
@@ -9,15 +9,16 @@ has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
 ## Provenance and licence
 
 Public domain. No attribution required, no copyright restriction, no
-licence text to reproduce. Supplied by the project maintainer, converted
-here to 24 kHz mono FLAC.
+licence text to reproduce. Supplied by the project maintainer as 60-second
+narration samples (WAV), one reader each, converted here to 24 kHz mono FLAC.
 
-- **English** (`male-north-american`, `male-north-american-alt`,
-  `female-north-american`, `male-british`, `female-british`): from the
-  original MP3s.
-- **French** (`female-french`, `male-french`): 60-second narration samples
-  read by Nadine Eckert-Boulet and Gilles G. Le Blanc, from WAV. The female
-  voice is the default narrator when the interface is in French. (The "floor"
+- **English** — `male-north-american`: Mark F. Smith; `female-north-american`:
+  Elizabeth Klett; `male-british`: Peter Yearsley; `female-british`:
+  Ruth Golding. These replaced the original five English clips on 2026-09-02;
+  those are kept under `archive/` and are not shipped.
+- **French** — `female-french`: Nadine Eckert-Boulet; `male-french`:
+  Gilles G. Le Blanc. The female voice is the default narrator when the
+  interface is in French. (The "floor"
   figure `tools/prepare_voices.py` prints is meaningless for these: it is the
   level of the quietest frames, and a continuous 60-second narration has no
   silence to measure, only breaths and word tails.)
