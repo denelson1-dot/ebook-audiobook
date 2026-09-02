@@ -88,6 +88,23 @@
 
   <div class="stack">
     <section class="panel">
+      <div class="panel-head"><h3>{{ _("Language") }}</h3></div>
+      <div class="panel-body">
+        <div class="field" style="max-width:320px">
+          {# Native names, never translated: someone who picked the wrong
+             language must still be able to find their own. #}
+          <select id="langSelect">
+            <option value="" {% if not language_setting %}selected{% endif %}>{{ _("Automatic — follow the browser") }}</option>
+            {% for l in languages %}
+            <option value="{{ l.code }}" {% if l.code == language_setting %}selected{% endif %}>{{ l.native }}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">{{ _("Also used by the menu-bar icon, whose title changes the next time the app starts.") }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3>Previews</h3></div>
       <div class="panel-body">
         <label class="switch">
@@ -195,6 +212,12 @@ if (clearBtn) clearBtn.addEventListener("click", async () => {
 
 // Saves on pick — no separate button, and deliberately posts only power_mode so
 // the library folder above is left untouched.
+// Language: saves on pick and reloads, since every word on the page changes.
+document.getElementById("langSelect").addEventListener("change", async (e) => {
+  await postForm("/settings", { language: e.target.value });
+  location.reload();
+});
+
 document.querySelectorAll('input[name="power_mode"]').forEach((radio) => {
   radio.addEventListener("change", async () => {
     document.querySelectorAll(".power-mode").forEach((el) =>

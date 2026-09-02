@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,18 +24,18 @@
       {# Importing a book is an action, not a place, so it is a button rather than
          a fourth nav item competing with the three real destinations. #}
       <a class="btn primary block" href="{{ url_for('new_page') }}" style="margin-bottom:18px">
-        {{ ic.icon('plus', 15) }} Add a book
+        {{ ic.icon('plus', 15) }} {{ _("Add a book") }}
       </a>
 
       <nav class="nav">
         <a href="{{ url_for('index') }}" class="{{ 'active' if nav=='library' }}">
-          {{ ic.icon('library') }} Library <span class="nav-count" id="navBookCount"></span>
+          {{ ic.icon('library') }} {{ _("Library") }} <span class="nav-count" id="navBookCount"></span>
         </a>
         <a href="{{ url_for('voices_page') }}" class="{{ 'active' if nav=='voices' }}">
-          {{ ic.icon('voices') }} Voices
+          {{ ic.icon('voices') }} {{ _("Voices") }}
         </a>
         <a href="{{ url_for('settings_page') }}" class="{{ 'active' if nav=='settings' }}">
-          {{ ic.icon('settings') }} Settings
+          {{ ic.icon('settings') }} {{ _("Settings") }}
         </a>
       </nav>
 
@@ -87,7 +87,7 @@
       <div class="nav-foot">
         {% if can_quit %}
         <p class="dim" style="font-size:10.5px;line-height:1.4">Closing this window keeps the app running in your menu bar.</p>
-        <button type="button" class="nav-quit" id="quitBtn">{{ ic.icon('power', 14) }} Quit</button>
+        <button type="button" class="nav-quit" id="quitBtn">{{ ic.icon('power', 14) }} {{ _("Quit") }}</button>
         {% endif %}
       </div>
     </aside>
@@ -122,6 +122,9 @@
     </main>
   </div>
 
+  {# The interface strings for this language, for the JavaScript that builds
+     sentences at runtime. Empty for English; app.js falls back to the msgid. #}
+  <script>window.EBAB_LANG = {{ lang|tojson }}; window.EBAB_I18N = {{ js_catalog|tojson }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
   <script>
   // Check prerequisites in the background on every page, so a tool that gets

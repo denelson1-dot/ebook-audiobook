@@ -12,13 +12,13 @@ import threading
 import uuid
 from pathlib import Path
 
-from flask import (Flask, Response, abort, current_app, jsonify, redirect,
+from flask import (Flask, Response, abort, current_app, g, jsonify, redirect,
                    render_template, request, send_file, url_for)
 from werkzeug.utils import secure_filename
 
 from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
                 tools, worker)
-from .. import hashing
+from .. import hashing, i18n
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
 from ..jobs.models import STAGE_LABELS, Stage, stage_label
@@ -78,14 +78,8 @@ def _safe_upload_name(filename: str) -> str:
 
 
 def human_bytes(n) -> str:
-    if n is None:
-        return "—"
-    f = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if f < 1024 or unit == "TB":
-            return f"{f:.0f} {unit}" if unit == "B" else f"{f:.1f} {unit}"
-        f /= 1024
-    return f"{f:.1f} TB"
+    """In the request's language: "1.5 MB" here, "1,5 Mo" in French."""
+    return i18n.human_bytes(n)
 
 
 # Muted, deliberately unsaturated grounds for books whose ebook carries no cover
@@ -104,18 +98,8 @@ def cover_tint(title: str) -> str:
 
 
 def fmt_listening(output_bytes: int | None, kbps: int) -> str | None:
-    """How long a finished audiobook plays, from the one thing we always have.
-
-    The shelf shows this instead of a file size on its own: "8h 04m" is what
-    somebody actually wants to know about an audiobook.
-    """
-    if not output_bytes or kbps <= 0:
-        return None
-    secs = output_bytes / (kbps * 125)  # kbps -> bytes per second
-    h, m = int(secs // 3600), int(round((secs % 3600) / 60))
-    if m == 60:
-        h, m = h + 1, 0
-    return f"{h}h {m:02d}m" if h else f"{m}m"
+    """How long a finished audiobook plays — "8h 04m" — in the request's language."""
+    return i18n.fmt_listening(output_bytes, kbps)
 
 
 def fmt_dt(iso) -> str:
@@ -236,6 +220,17 @@ def create_app() -> Flask:
     app.jinja_env.filters["dt"] = fmt_dt
     app.jinja_env.filters["stage"] = stage_label
     app.jinja_env.filters["tint"] = cover_tint
+    # Interface language: Jinja's own i18n extension over stdlib gettext. The
+    # callables look the language up per request, so one environment serves
+    # every language. newstyle matters: _("… %(n)s …", n=x) formats with the
+    # variables escaped and the msgid trusted as markup, which is what lets a
+    # paragraph keep its inline <code> as one translatable piece — the price is
+    # that a literal % in a template string must be written %%.
+    app.jinja_env.add_extension("jinja2.ext.i18n")
+    app.jinja_env.install_gettext_callables(
+        i18n.gettext, i18n.ngettext, newstyle=True,
+        pgettext=i18n.pgettext, npgettext=i18n.npgettext)
+    app.jinja_env.policies["ext.i18n.trimmed"] = True
     p = paths().ensure()
 
     # A prior process may have been killed mid-render, leaving jobs frozen in a
@@ -247,10 +242,29 @@ def create_app() -> Flask:
         except Exception:
             continue
 
+    @app.before_request
+    def _choose_language():
+        # EBAB_LANG, then the saved setting, then what the browser asks for.
+        s = app_settings.load_settings()
+        g.settings = s
+        g.lang = i18n.resolve(
+            s.language, request.accept_languages.best_match(list(i18n.SUPPORTED)))
+
+    @app.after_request
+    def _declare_language(resp):
+        if resp.mimetype == "text/html":
+            resp.headers["Content-Language"] = getattr(g, "lang", i18n.DEFAULT)
+        return resp
+
     @app.context_processor
     def inject_globals():
-        s = app_settings.load_settings()
+        s = getattr(g, "settings", None) or app_settings.load_settings()
+        lang = getattr(g, "lang", None) or i18n.DEFAULT
         return {
+            "lang": lang,
+            "language_setting": s.language,
+            "languages": i18n.language_choices(),
+            "js_catalog": i18n.js_catalog(lang),
             "home_dir": str(Path.home()),
             "data_root": str(paths().root),
             "audiobooks_root": s.audiobooks_root,
@@ -428,17 +442,22 @@ def create_app() -> Flask:
             s.autoplay_preview = request.form.get("autoplay_preview") == "1"
         if "auto_free_working_files" in request.form:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
+        if "language" in request.form:
+            s.language = i18n.normalize(request.form.get("language"))
         if "audiobooks_root" in request.form:
             # Choosing (or clearing) the folder answers the first-run question.
             # Flipping an unrelated switch does not, and must not silently
             # dismiss a prompt the user never saw.
             s.setup_dismissed = True
         app_settings.save_settings(s)
+        # The tray has no browser to ask; it follows the setting, or the desktop.
+        i18n.set_process_language(i18n.resolve(s.language, i18n.detect_os_language()))
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
                 "power_mode": s.power_mode,
                 "check_for_updates": s.check_for_updates,
                 "auto_free_working_files": s.auto_free_working_files,
-                "autoplay_preview": s.autoplay_preview}
+                "autoplay_preview": s.autoplay_preview,
+                "language": s.language}
 
     # ----- updates, backup, diagnostics -------------------------------------
 

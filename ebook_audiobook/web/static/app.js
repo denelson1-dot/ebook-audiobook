@@ -15,6 +15,34 @@ function baseName(p) {
   return parts.length ? parts[parts.length - 1] : p;
 }
 
+// --- interface language -------------------------------------------------------
+// The server puts this page's catalog in window.EBAB_I18N (empty for English)
+// and its language code in window.EBAB_LANG. Strings are looked up by their
+// English text, exactly as in Python and the templates, so one .po file holds
+// all three. Placeholders are %(name)s everywhere for the same reason.
+//
+// Plural rules are gettext *indexes*, mirroring each language's Plural-Forms
+// header — not Intl.PluralRules, whose CLDR categories ("many" for a million
+// in French) would index past a two-form entry.
+const PLURAL_RULES = {
+  en: (n) => (n !== 1 ? 1 : 0),
+  fr: (n) => (n > 1 ? 1 : 0),
+};
+function _fmt(s, params) {
+  return params ? s.replace(/%\((\w+)\)[sd]/g, (m, k) => (k in params ? params[k] : m)) : s;
+}
+function _(msgid, params) {
+  const t = (window.EBAB_I18N || {})[msgid];
+  return _fmt(typeof t === "string" ? t : msgid, params);
+}
+function ngettext(singular, plural, n, params) {
+  const rule = PLURAL_RULES[window.EBAB_LANG] || PLURAL_RULES.en;
+  const t = (window.EBAB_I18N || {})[singular];
+  const forms = Array.isArray(t) ? t : [singular, plural];
+  const form = forms[rule(n)] ?? forms[forms.length - 1];
+  return _fmt(form, Object.assign({ n }, params));
+}
+
 // Shared helpers for the ebook-audiobook UI. No framework — plain fetch + DOM.
 
 // For anything that goes into innerHTML and did not originate in this code:

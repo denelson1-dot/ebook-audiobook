@@ -80,6 +80,9 @@ tts = [
 dev = [
     "pytest>=8.0",
     "build>=1.2",
+    # tools/i18n.py: extracts the interface strings and compiles the .po files.
+    # Never imported by the app, which reads the compiled .mo with stdlib gettext.
+    "babel>=2.16",
 ]
 
 [project.urls]
@@ -108,9 +111,11 @@ include = ["ebook_audiobook*"]
 # fine and simply has no tray icon and a generic window, which nothing notices.
 # assets/voices/* is listed separately because a glob does not cross a directory
 # boundary — "assets/*" alone ships the icons and silently drops every narrator.
+# locale/*/LC_MESSAGES/* is the compiled translations; without it the app runs in
+# English whatever the setting says, and only ci/smoke_web.py would notice.
 [tool.setuptools.package-data]
 "ebook_audiobook.web" = ["templates/*.html", "static/*"]
-"ebook_audiobook" = ["assets/*", "assets/voices/*"]
+"ebook_audiobook" = ["assets/*", "assets/voices/*", "locale/*/LC_MESSAGES/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

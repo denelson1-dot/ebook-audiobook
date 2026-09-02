@@ -115,6 +115,39 @@ python -m venv /tmp/fresh && /tmp/fresh/bin/pip install dist/*.whl
   anything that only affects the container (bitrate, etc.) belongs in `extra`, so
   that changing it never triggers a re-render.
 
+## Translations
+
+The interface is translated with plain `gettext`: strings are wrapped in `_()`
+(or `ngettext()` for plurals) in Python, templates and JavaScript alike, looked
+up by their English text. `ebook_audiobook/i18n.py` chooses the language —
+`EBAB_LANG`, then the setting, then the browser or desktop, then English — and
+`tools/i18n.py` maintains the catalogs:
+
+```bash
+python tools/i18n.py update      # pull new strings into locale/<lang>/LC_MESSAGES/messages.po
+python tools/i18n.py compile     # .po -> .mo, which is what the app reads
+python tools/i18n.py check       # stale .mo, bad placeholders, untranslated: what CI runs
+python tools/i18n.py report      # what a translator still has to do
+```
+
+Rules that keep it working:
+
+- **Wrap where the sentence is built**, in the request that will show it. The
+  worker thread and the CLI never set a language, so they stay English.
+- **Shared label tables** (`STAGE_LABELS`, `MODE_LABELS`, …) keep English values
+  marked `N_()`; whoever renders one calls `_()` on it then. Anything cached
+  across requests (the prerequisite check, the storage survey) must store the
+  English and translate on the way out, or the next request gets the wrong
+  language.
+- Placeholders are `%(name)s` in all three layers; a literal `%` in a template
+  string is `%%` (newstyle gettext formats the result).
+- Never call `locale.setlocale`: it is process-global and thread-unsafe.
+- Commit the `.po` and the `.mo` together. A translator edits the `.po` in
+  Poedit; `compile` then `check` before committing what comes back.
+- Not translated, on purpose: CLI output, the bug report from `ebook-audiobook
+  report`, the "Unknown Title"/"Unknown Author" fallbacks (they name folders and
+  tags), raw exception text, and the shell commands in "how to fix it" hints.
+
 ## Cutting a release
 
 1. Bump `version` in `pyproject.toml`.

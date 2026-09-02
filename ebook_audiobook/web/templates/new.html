@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% set nav = 'library' %}
 {% import "_icons.html" as ic %}
-{% block title %}Add a book · ebook·audiobook{% endblock %}
+{% block title %}{{ _("Add a book") }} · ebook·audiobook{% endblock %}
 
 {% block head %}
 <header class="page-head">
   <div>
-    <h1 class="page-title">Add a book</h1>
-    <p class="page-sub">A DRM-free ebook from your computer. EPUB works best; AZW3, MOBI, AZW, FB2 and PDF also work.</p>
+    <h1 class="page-title">{{ _("Add a book") }}</h1>
+    <p class="page-sub">{{ _("A DRM-free ebook from your computer. EPUB works best; AZW3, MOBI, AZW, FB2 and PDF also work.") }}</p>
   </div>
 </header>
 {% endblock %}
@@ -19,38 +19,36 @@
   <div class="card">
     <form method="post" action="{{ url_for('import_ebook') }}" id="importForm">
       <div class="field">
-        <label>Ebook file</label>
+        <label>{{ _("Ebook file") }}</label>
         <div class="btn-row">
-          <button type="button" class="btn" id="browseBtn">{{ ic.icon('folder', 15) }} Browse…</button>
-          <span class="meta mono" id="chosen">Nothing chosen yet</span>
+          <button type="button" class="btn" id="browseBtn">{{ ic.icon('folder', 15) }} {{ _("Browse…") }}</button>
+          <span class="meta mono" id="chosen">{{ _("Nothing chosen yet") }}</span>
         </div>
         <input type="hidden" name="path" id="pathInput">
-        <p class="hint">The file is copied into this app's own folder. Nothing is uploaded anywhere.</p>
+        <p class="hint">{{ _("The file is copied into this app's own folder. Nothing is uploaded anywhere.") }}</p>
       </div>
 
       <details class="advanced">
-        <summary>Narration engine <span class="dim">— you almost certainly want the default</span></summary>
+        <summary>{{ _("Narration engine") }} <span class="dim">{{ _("— you almost certainly want the default") }}</span></summary>
         <div class="field" style="max-width:300px;margin-top:10px">
           <select name="engine">
-            <option value="chatterbox">Chatterbox — real narration</option>
-            <option value="fake">Silent — for testing the pipeline</option>
+            <option value="chatterbox">{{ _("Chatterbox — real narration") }}</option>
+            <option value="fake">{{ _("Silent — for testing the pipeline") }}</option>
           </select>
-          <p class="hint">The silent engine runs the whole process end to end without a GPU, producing a real
-            <code>.m4b</code> of silence. It exists to prove the plumbing works.</p>
+          <p class="hint">{{ _("The silent engine runs the whole process end to end without a GPU, producing a real <code>.m4b</code> of silence. It exists to prove the plumbing works.") }}</p>
         </div>
       </details>
 
       <div class="btn-row" style="margin-top:16px">
-        <button type="submit" class="btn primary lg" id="importBtn" disabled>Read this book</button>
-        <span class="meta">Takes a few seconds. Narrating comes after.</span>
+        <button type="submit" class="btn primary lg" id="importBtn" disabled>{{ _("Read this book") }}</button>
+        <span class="meta">{{ _("Takes a few seconds. Narrating comes after.") }}</span>
       </div>
     </form>
   </div>
 
   <div class="note info">
     {{ ic.icon('shield', 15) }}
-    <span><b>Books you own, without DRM.</b> This cannot open a file bought with copy protection still on it,
-      and it does not try to.</span>
+    <span>{{ _("<b>Books you own, without DRM.</b> This cannot open a file bought with copy protection still on it, and it does not try to.") }}</span>
   </div>
 </div>
 {% endblock %}

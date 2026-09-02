@@ -54,6 +54,12 @@ jobs:
       - name: Test
         run: python -m pytest -v --tb=short
 
+      # The .po is what a translator edits; the .mo is what the app reads. This
+      # fails if they disagree, if a translation lost a placeholder, or if a
+      # string in the source has no entry yet.
+      - name: Translations are compiled and complete
+        run: python tools/i18n.py check
+
   # An installed wheel is a different artifact from a source checkout: it can be
   # missing data files, have broken entry points, or resolve its data directory
   # to the wrong place. Test the thing users actually receive.
@@ -89,6 +95,8 @@ jobs:
               "ebook_audiobook/web/templates/job.html",
               "ebook_audiobook/web/static/app.css",
               "ebook_audiobook/web/static/app.js",
+              # Without this the app runs in English whatever the setting says.
+              "ebook_audiobook/locale/fr/LC_MESSAGES/messages.mo",
           ]
           missing = [r for r in required if r not in names]
           if missing:

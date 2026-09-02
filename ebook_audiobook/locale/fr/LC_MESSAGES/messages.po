@@ -1,0 +1,151 @@
+# fr translation of the ebook-audiobook interface.
+# Open this file in Poedit. Keep %(name)s placeholders and any <code>…</code>
+# exactly as they are in the English; translate everything else.
+msgid ""
+msgstr ""
+"Project-Id-Version: ebook-audiobook 1.3.1\n"
+"Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
+"POT-Creation-Date: 2026-09-01 21:19-0400\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: ebook-audiobook\n"
+"Language: fr\n"
+"Language-Team: fr <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#. NOTE: byte units — French says o, Ko, Mo, Go, To
+#: ebook_audiobook/i18n.py:249
+msgid "B"
+msgstr "o"
+
+#: ebook_audiobook/i18n.py:249
+msgid "KB"
+msgstr "Ko"
+
+#: ebook_audiobook/i18n.py:249
+msgid "MB"
+msgstr "Mo"
+
+#: ebook_audiobook/i18n.py:249
+msgid "GB"
+msgstr "Go"
+
+#: ebook_audiobook/i18n.py:249 ebook_audiobook/i18n.py:255
+msgid "TB"
+msgstr "To"
+
+#. NOTE: hours and minutes of listening time, e.g. "8h 04m"
+#: ebook_audiobook/i18n.py:272
+#, python-format
+msgid "%(h)dh %(m)02dm"
+msgstr "%(h)d h %(m)02d min"
+
+#. NOTE: minutes of listening time, e.g. "12m"
+#: ebook_audiobook/i18n.py:274
+#, python-format
+msgid "%(m)dm"
+msgstr "%(m)d min"
+
+#: ebook_audiobook/web/templates/base.html:27 ebook_audiobook/web/templates/new.html:4
+#: ebook_audiobook/web/templates/new.html:9
+msgid "Add a book"
+msgstr "Ajouter un livre"
+
+#: ebook_audiobook/web/templates/base.html:32
+msgid "Library"
+msgstr "Bibliothèque"
+
+#: ebook_audiobook/web/templates/base.html:35
+msgid "Voices"
+msgstr "Voix"
+
+#: ebook_audiobook/web/templates/base.html:38
+msgid "Settings"
+msgstr "Réglages"
+
+#: ebook_audiobook/web/templates/base.html:90
+msgid "Quit"
+msgstr "Quitter"
+
+#: ebook_audiobook/web/templates/new.html:10
+msgid ""
+"A DRM-free ebook from your computer. EPUB works best; AZW3, MOBI, AZW, FB2 and PDF "
+"also work."
+msgstr ""
+"Un livre numérique sans DRM, depuis votre ordinateur. L'EPUB donne les meilleurs "
+"résultats ; AZW3, MOBI, AZW, FB2 et PDF fonctionnent aussi."
+
+#: ebook_audiobook/web/templates/new.html:22
+msgid "Ebook file"
+msgstr "Fichier du livre"
+
+#: ebook_audiobook/web/templates/new.html:24
+msgid "Browse…"
+msgstr "Parcourir…"
+
+#: ebook_audiobook/web/templates/new.html:25
+msgid "Nothing chosen yet"
+msgstr "Aucun fichier choisi"
+
+#: ebook_audiobook/web/templates/new.html:28
+msgid "The file is copied into this app's own folder. Nothing is uploaded anywhere."
+msgstr "Le fichier est copié dans le dossier de l'application. Rien n'est envoyé nulle part."
+
+#: ebook_audiobook/web/templates/new.html:32
+msgid "Narration engine"
+msgstr "Moteur de narration"
+
+#: ebook_audiobook/web/templates/new.html:32
+msgid "— you almost certainly want the default"
+msgstr "— vous voulez presque certainement celui par défaut"
+
+#: ebook_audiobook/web/templates/new.html:35
+msgid "Chatterbox — real narration"
+msgstr "Chatterbox — la vraie narration"
+
+#: ebook_audiobook/web/templates/new.html:36
+msgid "Silent — for testing the pipeline"
+msgstr "Silencieux — pour tester la chaîne de traitement"
+
+#: ebook_audiobook/web/templates/new.html:38
+msgid ""
+"The silent engine runs the whole process end to end without a GPU, producing a real "
+"<code>.m4b</code> of silence. It exists to prove the plumbing works."
+msgstr ""
+"Le moteur silencieux exécute tout le processus de bout en bout, sans GPU, et produit "
+"un vrai <code>.m4b</code> de silence. Il sert à vérifier que la mécanique fonctionne."
+
+#: ebook_audiobook/web/templates/new.html:43
+msgid "Read this book"
+msgstr "Lire ce livre"
+
+#: ebook_audiobook/web/templates/new.html:44
+msgid "Takes a few seconds. Narrating comes after."
+msgstr "Quelques secondes. La narration vient ensuite."
+
+#: ebook_audiobook/web/templates/new.html:51
+msgid ""
+"<b>Books you own, without DRM.</b> This cannot open a file bought with copy "
+"protection still on it, and it does not try to."
+msgstr ""
+"<b>Vos livres, sans DRM.</b> Un fichier acheté avec sa protection contre la copie "
+"encore en place ne peut pas être ouvert ici, et l'application n'essaie pas de le "
+"faire."
+
+#: ebook_audiobook/web/templates/settings.html:91
+msgid "Language"
+msgstr "Langue"
+
+#: ebook_audiobook/web/templates/settings.html:97
+msgid "Automatic — follow the browser"
+msgstr "Automatique — suivre le navigateur"
+
+#: ebook_audiobook/web/templates/settings.html:102
+msgid "Also used by the menu-bar icon, whose title changes the next time the app starts."
+msgstr ""
+"Utilisée aussi par l'icône de la barre de menus, dont le titre change au prochain "
+"démarrage de l'application."
+

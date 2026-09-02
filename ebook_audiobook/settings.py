@@ -67,6 +67,10 @@ class Settings:
     # running it *is* the consent.
     check_for_updates: bool = False
 
+    # Interface language: "fr", or "" to follow the browser (and, for the tray,
+    # the desktop). Precedence lives in ebook_audiobook.i18n.resolve.
+    language: str = ""
+
     def to_dict(self) -> dict:
         return asdict(self)
 
