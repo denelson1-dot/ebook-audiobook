@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 
+from ..i18n import N_, _
+
 
 class Stage(str, Enum):
     IMPORTED = "imported"
@@ -35,27 +37,31 @@ class Stage(str, Enum):
         of these say *who* stopped the render, because "cancelled" answers a
         question nobody asked and leaves the one they did.
         """
-        return STAGE_LABELS.get(self.value, self.value)
+        return stage_label(self.value)
 
 
 STAGE_LABELS = {
-    Stage.IMPORTED.value:   "Imported",
-    Stage.EXTRACTING.value: "Reading the book",
-    Stage.EXTRACTED.value:  "Ready to narrate",
-    Stage.PREPARING.value:  "Warming up",
-    Stage.PREVIEWING.value: "Making a preview",
-    Stage.RENDERING.value:  "Narrating",
-    Stage.ASSEMBLING.value: "Stitching chapters together",
-    Stage.PACKAGING.value:  "Packaging",
-    Stage.DONE.value:       "Finished",
-    Stage.ERROR.value:      "Stopped by a problem",
-    Stage.CANCELLED.value:  "Stopped by you",
+    Stage.IMPORTED.value:   N_("Imported"),
+    Stage.EXTRACTING.value: N_("Reading the book"),
+    Stage.EXTRACTED.value:  N_("Ready to narrate"),
+    Stage.PREPARING.value:  N_("Warming up"),
+    Stage.PREVIEWING.value: N_("Making a preview"),
+    Stage.RENDERING.value:  N_("Narrating"),
+    Stage.ASSEMBLING.value: N_("Stitching chapters together"),
+    Stage.PACKAGING.value:  N_("Packaging"),
+    Stage.DONE.value:       N_("Finished"),
+    Stage.ERROR.value:      N_("Stopped by a problem"),
+    Stage.CANCELLED.value:  N_("Stopped by you"),
 }
 
 
 def stage_label(value: str) -> str:
-    """Label for a raw stage string, tolerating one this build doesn't know."""
-    return STAGE_LABELS.get(value, value)
+    """Label for a raw stage string, tolerating one this build doesn't know.
+
+    Translated here, at the moment of use: inside a web request this is the
+    request's language, and everywhere else (the CLI, a stored copy) English.
+    """
+    return _(STAGE_LABELS.get(value, value))
 
 
 @dataclass

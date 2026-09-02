@@ -161,19 +161,48 @@ def translations(lang: str) -> _gettext.NullTranslations:
     return _gettext.translation(DOMAIN, str(LOCALE_DIR), languages=[lang], fallback=True)
 
 
-def gettext(message: str) -> str:
+def gettext(message: str, **params) -> str:
+    """Translate, then format — always, as Jinja's newstyle gettext does.
+
+    ``_("No folder at %(root)s.", root=path)`` in Python is the same call as
+    ``_("No folder at %(root)s.", root=path)`` in a template and
+    ``_("No folder at %(root)s.", {root: path})`` in JavaScript, and one rule
+    covers all three: a literal percent sign is written ``%%``.
+    """
+    return translations(current_language()).gettext(message) % params
+
+
+def ngettext(singular: str, plural: str, n: int, **params) -> str:
+    params.setdefault("n", n)
+    params.setdefault("num", n)
+    return translations(current_language()).ngettext(singular, plural, n) % params
+
+
+def pgettext(context: str, message: str, **params) -> str:
+    return translations(current_language()).pgettext(context, message) % params
+
+
+def npgettext(context: str, singular: str, plural: str, n: int, **params) -> str:
+    params.setdefault("n", n)
+    params.setdefault("num", n)
+    return translations(current_language()).npgettext(context, singular, plural, n) % params
+
+
+# Unformatted lookups, for Jinja: its newstyle gettext calls these with the
+# message alone and does the %(name)s formatting itself.
+def translate(message: str) -> str:
     return translations(current_language()).gettext(message)
 
 
-def ngettext(singular: str, plural: str, n: int) -> str:
+def translate_plural(singular: str, plural: str, n: int) -> str:
     return translations(current_language()).ngettext(singular, plural, n)
 
 
-def pgettext(context: str, message: str) -> str:
+def translate_context(context: str, message: str) -> str:
     return translations(current_language()).pgettext(context, message)
 
 
-def npgettext(context: str, singular: str, plural: str, n: int) -> str:
+def translate_context_plural(context: str, singular: str, plural: str, n: int) -> str:
     return translations(current_language()).npgettext(context, singular, plural, n)
 
 
@@ -269,6 +298,6 @@ def fmt_listening(output_bytes: int | None, kbps: int) -> str | None:
         h, m = h + 1, 0
     if h:
         # NOTE: hours and minutes of listening time, e.g. "8h 04m"
-        return _("%(h)dh %(m)02dm") % {"h": h, "m": m}
+        return _("%(h)dh %(m)02dm", h=h, m=m)
     # NOTE: minutes of listening time, e.g. "12m"
-    return _("%(m)dm") % {"m": m}
+    return _("%(m)dm", m=m)

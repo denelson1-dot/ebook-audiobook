@@ -21,6 +21,7 @@ reason the server doesn't start.
 
 from __future__ import annotations
 
+from ..i18n import _
 import os
 import sys
 import threading
@@ -190,16 +191,17 @@ def run(url: str, on_show, on_quit, quit_label=None, on_terminate=None) -> bool:
             # HAS_DEFAULT_ACTION — which AppIndicator and macOS both do not. On
             # those it merely renders bold, and clicking the icon opens the menu.
             # Worth keeping for the backends that honour it (Windows, GTK).
-            pystray.MenuItem("Open ebook-audiobook", lambda: on_show(), default=True),
+            # Callables, like the quit item, so a language change shows on the next open.
+            pystray.MenuItem(lambda item: _("Open ebook-audiobook"), lambda: on_show(), default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                (lambda item: quit_label()) if quit_label else "Quit",
+                (lambda item: quit_label()) if quit_label else (lambda item: _("Quit")),
                 lambda: on_quit()),
         )
         icon = pystray.Icon(
             "ebook-audiobook",
             icon=_load_image(),
-            title=f"ebook-audiobook — {url}",
+            title=_("ebook-audiobook — %(url)s", url=url),
             menu=menu,
         )
     except Exception:  # noqa: BLE001

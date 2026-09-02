@@ -12,6 +12,7 @@ Clip files live alongside it in the same directory.
 
 from __future__ import annotations
 
+from .i18n import N_, _
 import json
 import re
 import shutil
@@ -36,15 +37,15 @@ _INDEX = "voices.json"
 BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "voices"
 
 BUNDLED = (
-    {"id": "male-north-american", "name": "Male, North American",
+    {"id": "male-north-american", "name": N_("Male, North American"),
      "file": "male-north-american.flac", "pacing": 0.50, "expressiveness": 0.60},
-    {"id": "male-north-american-alt", "name": "Male, North American (alt)",
+    {"id": "male-north-american-alt", "name": N_("Male, North American (alt)"),
      "file": "male-north-american-alt.flac", "pacing": 0.42},
-    {"id": "female-north-american", "name": "Female, North American",
+    {"id": "female-north-american", "name": N_("Female, North American"),
      "file": "female-north-american.flac", "pacing": 0.42},
-    {"id": "male-british", "name": "Male, British",
+    {"id": "male-british", "name": N_("Male, British"),
      "file": "male-british.flac", "pacing": 0.42},
-    {"id": "female-british", "name": "Female, British",
+    {"id": "female-british", "name": N_("Female, British"),
      "file": "female-british.flac", "pacing": 0.42},
 )
 
@@ -125,14 +126,22 @@ class VoiceLibrary:
 
     @staticmethod
     def _default() -> Voice:
-        return Voice(DEFAULT_VOICE_ID, "Default narrator", None)
+        return Voice(DEFAULT_VOICE_ID, _("Default narrator"), None)
 
     @staticmethod
     def _bundled() -> list[Voice]:
         """The shipped voices, in the order they appear in the picker."""
-        return [Voice(b["id"], b["name"], b["file"], bundled=True,
-                      pacing=b.get("pacing"), expressiveness=b.get("expressiveness"))
-                for b in BUNDLED if (BUNDLED_DIR / b["file"]).is_file()]
+        voices = []
+        for b in BUNDLED:
+            if not (BUNDLED_DIR / b["file"]).is_file():
+                continue
+            # The name is marked N_() in BUNDLED and said here in the request's
+            # language. (Kept out of the _() call as a literal: the extractor
+            # would otherwise read the subscript's "name" as a message.)
+            label = b["name"]
+            voices.append(Voice(b["id"], _(label), b["file"], bundled=True,
+                                pacing=b.get("pacing"), expressiveness=b.get("expressiveness")))
+        return voices
 
     def list(self) -> list[Voice]:
         # Shipped voices first: a new install should meet a usable narrator

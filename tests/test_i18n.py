@@ -197,6 +197,42 @@ def test_listening_time_in_french_and_english():
     assert i18n.fmt_listening(12 * 60 * 64 * 125, 64) == "12 min"
 
 
+def test_python_gettext_formats_like_the_templates():
+    """One rule for all three layers: keyword placeholders, %% for a percent."""
+    assert i18n.gettext("No folder at %(root)s.", root="/x") == "No folder at /x."
+    assert i18n.gettext("Roughly 10–25%% slower.") == "Roughly 10–25% slower."
+    assert i18n.ngettext("%(n)s book", "%(n)s books", 1) == "1 book"
+    assert i18n.ngettext("%(num)d book", "%(num)d books", 3) == "3 books"
+    i18n.set_process_language("fr")
+    assert i18n.gettext("Leave room to keep working. Roughly 10–25%% slower.").endswith("plus lent.")
+    assert "%%" not in i18n.gettext("Leave room to keep working. Roughly 10–25%% slower.")
+
+
+def test_stage_labels_and_power_modes_follow_the_request(monkeypatch):
+    from ebook_audiobook import power
+    from ebook_audiobook.jobs.models import stage_label
+
+    monkeypatch.delenv("EBAB_LANG")
+    assert stage_label("rendering") == "Narrating"
+    assert power.describe("full").startswith("Full speed")
+    client = create_app().test_client()
+    body = _visible(client.get("/settings", headers={"Accept-Language": FRENCH}).data.decode())
+    assert "Pleine vitesse" in body and "Full speed" not in body
+    # The CLI's view of the same tables, outside any request, is still English.
+    assert stage_label("rendering") == "Narrating"
+
+
+def test_prerequisite_banner_is_cached_per_language(monkeypatch):
+    monkeypatch.delenv("EBAB_LANG")
+    client = create_app().test_client()
+    fr = client.get("/api/prereqs", headers={"Accept-Language": FRENCH}).get_json()
+    en = client.get("/api/prereqs").get_json()
+    names_fr = {c["name"] for c in fr["checks"]}
+    names_en = {c["name"] for c in en["checks"]}
+    assert "dossier de données (accessible en écriture)" in names_fr
+    assert "data folder (writable)" in names_en
+
+
 def test_english_formatting_is_unchanged_by_the_refactor():
     from ebook_audiobook.web import app as web_app
 

@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
                 tools, worker)
 from .. import hashing, i18n
+from ..i18n import _
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
 from ..jobs.models import STAGE_LABELS, Stage, stage_label
@@ -123,7 +124,7 @@ def _nearest_existing(path: Path) -> Path:
     unknown rather than lying.
     """
     p = path
-    for _ in range(64):  # bounded: a symlink cycle must not hang a request
+    for _hop in range(64):  # bounded: a symlink cycle must not hang a request
         if p.exists():
             return p
         if p.parent == p:
@@ -232,8 +233,8 @@ def create_app() -> Flask:
     # that a literal % in a template string must be written %%.
     app.jinja_env.add_extension("jinja2.ext.i18n")
     app.jinja_env.install_gettext_callables(
-        i18n.gettext, i18n.ngettext, newstyle=True,
-        pgettext=i18n.pgettext, npgettext=i18n.npgettext)
+        i18n.translate, i18n.translate_plural, newstyle=True,
+        pgettext=i18n.translate_context, npgettext=i18n.translate_context_plural)
     app.jinja_env.policies["ext.i18n.trimmed"] = True
     p = paths().ensure()
 
@@ -280,8 +281,8 @@ def create_app() -> Flask:
             "can_quit": bool(current_app.config.get("EBAB_SHUTDOWN")),
             "power_mode": s.power_mode,
             "power_modes": [
-                {"id": m, "label": power.MODE_LABELS[m],
-                 "description": power.MODE_DESCRIPTIONS[m]}
+                {"id": m, "label": _(power.MODE_LABELS[m]),
+                 "description": _(power.MODE_DESCRIPTIONS[m])}
                 for m in power.MODES
             ],
             "check_for_updates": s.check_for_updates,
@@ -504,7 +505,7 @@ def create_app() -> Flask:
             "human": backup_mod.human_bytes(est.selected_bytes),
             "excluded_human": backup_mod.human_bytes(est.excluded_bytes),
             "categories": [
-                {"key": key, "label": label,
+                {"key": key, "label": _(label),
                  "files": est.by_category.get(key, (0, 0))[0],
                  "human": backup_mod.human_bytes(est.by_category.get(key, (0, 0))[1]),
                  "included": getattr(selection, key, False)}
@@ -754,23 +755,23 @@ def create_app() -> Flask:
                 upload.save(staged)
             except OSError as e:
                 staged.unlink(missing_ok=True)
-                return fail(f"Couldn't save the uploaded file — is the disk full?\n\n{e}")
+                return fail(_("Couldn't save the uploaded file — is the disk full?\n\n%(e)s", e=e))
             src_path = str(staged)
         elif request.form.get("path"):
             # Local path import is intentional for a single-user localhost tool.
             src_path = request.form["path"].strip()
         if not src_path:
-            return fail("Choose an ebook file first.")
+            return fail(_("Choose an ebook file first."))
         try:
             job_id = worker.import_ebook(src_path, engine=engine)
         except FileNotFoundError:
-            return fail(f"That file no longer exists:\n{src_path}")
+            return fail(_("That file no longer exists:\n%(path)s", path=src_path))
         except ValueError as e:
             # Unsupported/again-actionable format problems — show the guidance inline.
             return fail(str(e))
         except OSError as e:
             # Out of space, unreadable source, permission denied on the data dir.
-            return fail(f"Couldn't import that book:\n\n{e}")
+            return fail(_("Couldn't import that book:\n\n%(e)s", e=e))
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)
@@ -808,7 +809,7 @@ def create_app() -> Flask:
     def start_preview(job_id):
         _job_or_404(job_id)
         if runner.is_busy(job_id):
-            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         # Bounded: zero would divide the progress by nothing after a full model
         # load, and an hour-long "preview" is a render by another name.
         seconds = min(300.0, max(5.0, _f(request.form, "seconds", 30)))
@@ -833,9 +834,9 @@ def create_app() -> Flask:
         """
         store = _job_or_404(job_id)
         if not store.load_chapters():
-            return {"ok": False, "error": "the book hasn't been read yet"}, 409
+            return {"ok": False, "error": _("The book hasn't been read yet.")}, 409
         if runner.is_busy():
-            return {"ok": False, "error": "something else is running"}, 409
+            return {"ok": False, "error": _("Something else is running.")}, 409
         runner.submit(job_id, "measure")
         return {"ok": True}
 
@@ -847,9 +848,9 @@ def create_app() -> Flask:
             # second submit queues a second full pass — re-assembling and
             # re-packaging the book for nothing — and its state writes below
             # land under a render that is already saving its own copy.
-            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         if not any(c.include for c in store.load_chapters()):
-            return {"ok": False, "error": "Select at least one section to render."}, 400
+            return {"ok": False, "error": _("Select at least one section to render.")}, 400
         mode = request.form.get("output_mode") or worker.default_output_mode()
         raw = (request.form.get("output_dir") or "").strip() or None
         # Resolve + write-check the real destination now, so a bad folder (or an
@@ -940,7 +941,7 @@ def create_app() -> Flask:
         Only listed chapters are changed; the rest keep their current setting."""
         store = _job_or_404(job_id)
         if runner.is_busy(job_id):
-            return {"ok": False, "error": "job is busy — stop it first"}, 409
+            return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
         includes = (request.get_json(silent=True) or {}).get("includes", {})
         if not isinstance(includes, dict):
             abort(400, "includes must be an object of chapter_id -> bool")
@@ -1014,9 +1015,9 @@ def create_app() -> Flask:
             target = Path(root) if root else None
 
         if target is None or not target.is_dir():
-            return {"ok": False, "error": "That folder doesn't exist yet."}, 404
+            return {"ok": False, "error": _("That folder doesn't exist yet.")}, 404
         if not tools.reveal(target):
-            return {"ok": False, "error": "Couldn't open a file manager on this system."}, 501
+            return {"ok": False, "error": _("Couldn't open a file manager on this system.")}, 501
         return {"ok": True, "path": str(target)}
 
     @app.get("/api/space")
@@ -1106,22 +1107,22 @@ def create_app() -> Flask:
         lib = VoiceLibrary()
         name = request.form.get("name", "").strip()
         if not name:
-            return _voices_page("Give the voice a name.", 400)
+            return _voices_page(_("Give the voice a name."), 400)
         upload = request.files.get("file")
         path = request.form.get("path", "").strip()
         try:
             if upload and upload.filename:
                 if Path(upload.filename).suffix.lower() not in AUDIO_EXTS:
-                    return _voices_page("That isn't an audio format this can read.", 400)
+                    return _voices_page(_("That isn't an audio format this can read."), 400)
                 lib.add(name, file_storage=upload, orig_filename=upload.filename)
             elif path:
                 lib.add(name, src_path=path)
             else:
-                return _voices_page("Choose a clip first.", 400)
+                return _voices_page(_("Choose a clip first."), 400)
         except (ValueError, OSError) as e:
             # A clip ffmpeg couldn't decode, a path that has gone, a folder macOS
             # wouldn't let us read: all shown on the page, with a way back.
-            return _voices_page(f"Couldn't add that voice: {e}", 400)
+            return _voices_page(_("Couldn't add that voice: %(e)s", e=e), 400)
         return redirect(url_for("voices_page"))
 
     @app.post("/voices/<voice_id>/default")
@@ -1239,7 +1240,8 @@ def create_app() -> Flask:
     # only when the user installs something, so cache it briefly. The TTL (rather
     # than caching forever) means installing a missing tool clears the banner
     # within a minute instead of needing a restart.
-    _prereq_cache: dict = {"at": 0.0, "value": None}
+    # One entry per interface language: the answer carries sentences.
+    _prereq_cache: dict = {}
     _PREREQ_TTL = 60.0
 
     @app.get("/api/prereqs")
@@ -1252,16 +1254,17 @@ def create_app() -> Flask:
         import time
 
         now = time.monotonic()
-        if _prereq_cache["value"] is None or now - _prereq_cache["at"] > _PREREQ_TTL:
+        entry = _prereq_cache.setdefault(g.lang, {"at": 0.0, "value": None})
+        if entry["value"] is None or now - entry["at"] > _PREREQ_TTL:
             tools.reset_cache()  # notice a tool installed since the last look
             results = checks.run_all()
             blocking = checks.blocking_problems(results)
-            _prereq_cache["value"] = {
+            entry["value"] = {
                 "checks": [r.to_dict() for r in results],
                 "blocking": [r.to_dict() for r in blocking],
                 "ok": not blocking,
             }
-            _prereq_cache["at"] = now
-        return _prereq_cache["value"]
+            entry["at"] = now
+        return entry["value"]
 
     return app

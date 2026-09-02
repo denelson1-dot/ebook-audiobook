@@ -18,6 +18,7 @@ new user gets — so an upgrade is never a second, less-tested install route.
 
 from __future__ import annotations
 
+from .i18n import _
 import json
 import platform
 import re
@@ -99,24 +100,19 @@ def check(timeout: float = TIMEOUT_SECONDS) -> Release:
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            raise UpdateError("No published releases yet.") from e
+            raise UpdateError(_("No published releases yet.")) from e
         if e.code in (403, 429):
-            raise UpdateError(
-                "GitHub rate-limited the version check. Try again later, or see "
-                f"{RELEASES_PAGE}"
-            ) from e
-        raise UpdateError(f"GitHub returned HTTP {e.code} for the version check.") from e
+            raise UpdateError(_("GitHub rate-limited the version check. Try again later, or see %(url)s", url=RELEASES_PAGE)) from e
+        raise UpdateError(_("GitHub returned HTTP %(code)s for the version check.", code=e.code)) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise UpdateError(
-            f"Couldn't reach GitHub to check for updates ({e}). "
-            "You're offline, or a firewall is in the way."
-        ) from e
+        raise UpdateError(_("Couldn't reach GitHub to check for updates (%(e)s). "
+                            "You're offline, or a firewall is in the way.", e=e)) from e
     except ValueError as e:
-        raise UpdateError("GitHub's reply wasn't valid JSON.") from e
+        raise UpdateError(_("GitHub's reply wasn't valid JSON.")) from e
 
     tag = str(payload.get("tag_name") or "").strip()
     if not tag:
-        raise UpdateError("GitHub's reply had no release tag.")
+        raise UpdateError(_("GitHub's reply had no release tag."))
     return Release(version=tag.lstrip("vV"), tag=tag,
                    url=str(payload.get("html_url") or RELEASES_PAGE))
 
@@ -169,15 +165,14 @@ def status(timeout: float = TIMEOUT_SECONDS) -> tuple[bool, Release | None, str]
         return False, None, str(e)
     if is_newer(latest.version, current):
         return True, latest, (
-            f"{latest.version} is available (you have {current}).")
+            _("%(latest)s is available (you have %(current)s).", latest=latest.version, current=current))
     if is_newer(current, latest.version):
         # A source checkout mid-release, or a locally-built wheel. Claiming
         # "you're on the latest" would be a lie in the one situation where the
         # person reading it is most likely to be checking something specific.
         return False, latest, (
-            f"You're on {current}, ahead of the latest release "
-            f"({latest.version}) — an unreleased build.")
-    return False, latest, f"You're on the latest version ({current})."
+            _("You're on %(current)s, ahead of the latest release (%(latest)s) — an unreleased build.", current=current, latest=latest.version))
+    return False, latest, _("You're on the latest version (%(current)s).", current=current)
 
 
 def platform_hint() -> str:

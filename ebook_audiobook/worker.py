@@ -11,6 +11,7 @@ These functions are synchronous and drive the CLI directly; the web UI runs
 
 from __future__ import annotations
 
+from .i18n import N_, _
 import errno
 import shutil
 import tempfile
@@ -58,14 +59,14 @@ def resolve_output_dir(raw: str | Path | None) -> Path:
     try:
         target = target.resolve()
     except OSError as e:
-        raise OutputDirError(f"Invalid output folder: {raw} ({e})") from e
+        raise OutputDirError(_("Invalid output folder: %(path)s (%(e)s)", path=raw, e=e)) from e
 
     if target.exists() and not target.is_dir():
-        raise OutputDirError(f"Output path is not a folder: {target}")
+        raise OutputDirError(_("Output path is not a folder: %(path)s", path=target))
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise OutputDirError(f"Can't create output folder “{target}”: {e}") from e
+        raise OutputDirError(_("Can't create output folder “%(path)s”: %(e)s", path=target, e=e)) from e
 
     # A real write test — os.access()/W_OK can lie on read-only mounts, ACLs,
     # and some network filesystems, so actually create and remove a probe file.
@@ -74,7 +75,7 @@ def resolve_output_dir(raw: str | Path | None) -> Path:
             pass
     except OSError as e:
         raise OutputDirError(
-            f"No write permission for output folder “{target}”: {e}"
+            _("No write permission for output folder “%(path)s”: %(e)s", path=target, e=e)
         ) from e
     return target
 
@@ -152,20 +153,21 @@ def render_voice_sample(voice_id: str, params: dict | None = None) -> Path:
 
 # Actionable guidance for common formats we can't read directly.
 _UNSUPPORTED_HELP = {
-    ".kfx": ("KFX (newer Kindle) isn't supported directly. Open it in Calibre and "
-             "convert/export it to EPUB, then import the EPUB."),
-    ".azw8": ("This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, "
-              "then import the EPUB."),
-    ".acsm": ("An .acsm file is an Adobe download token, not the book itself. Open it "
-              "in Adobe Digital Editions or Calibre to fetch the actual book, then "
-              "import that."),
-    ".pdb": ("Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."),
+    ".kfx": N_("KFX (newer Kindle) isn't supported directly. Open it in Calibre and "
+               "convert/export it to EPUB, then import the EPUB."),
+    ".azw8": N_("This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, "
+                "then import the EPUB."),
+    ".acsm": N_("An .acsm file is an Adobe download token, not the book itself. Open it "
+                "in Adobe Digital Editions or Calibre to fetch the actual book, then "
+                "import that."),
+    ".pdb": N_("Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."),
 }
 
 
 def unsupported_format_hint(ext: str) -> str | None:
     """Actionable guidance for a known-but-unsupported ebook extension, else None."""
-    return _UNSUPPORTED_HELP.get(ext.lower())
+    hint = _UNSUPPORTED_HELP.get(ext.lower())
+    return _(hint) if hint else None
 
 
 def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
@@ -179,10 +181,10 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
         if hint:
             raise ValueError(hint)
         supported = ", ".join(sorted(extract.SUPPORTED_INPUT))
-        kind = f"“{ext}” files" if ext else "files with no extension"
+        kind = _("“%(ext)s” files", ext=ext) if ext else _("files with no extension")
         raise ValueError(
-            f"{kind} aren't supported. Supported formats: {supported}. "
-            "For best results, convert your book to EPUB in Calibre first."
+            _("%(kind)s aren't supported. Supported formats: %(formats)s. "
+              "For best results, convert your book to EPUB in Calibre first.", kind=kind, formats=supported)
         )
 
     p = paths().ensure()
@@ -418,7 +420,7 @@ class OutOfSpaceError(RuntimeError):
 
 def _render_one(adapter, text: str, out_path: Path, retries: int = 2) -> None:
     last_err: Exception | None = None
-    for _ in range(retries + 1):
+    for _attempt in range(retries + 1):
         try:
             clip = adapter.synthesize(text)
             write_wav(out_path, clip.samples, clip.sample_rate)
@@ -888,7 +890,7 @@ def _assemble_preview(store: JobStore, rendered: list[tuple[Segment, Path]]) -> 
     out.parent.mkdir(parents=True, exist_ok=True)
     with sf.SoundFile(str(out), "w", samplerate=config.SAMPLE_RATE, channels=1, subtype="PCM_16") as f:
         for i, (seg, p) in enumerate(rendered):
-            data, _ = read_wav(p)
+            data, _sr = read_wav(p)
             f.write(data)
             if i < len(rendered) - 1:
                 gap = np.zeros(int(assemble.gap_for(seg.boundary) * config.SAMPLE_RATE), dtype=np.float32)

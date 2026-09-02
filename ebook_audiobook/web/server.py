@@ -120,7 +120,7 @@ def _quit_label() -> str:
     """The tray's quit text, which doubles as its only way to warn."""
     from .runner import runner
 
-    return "Quit — stops the running render" if runner.is_busy() else "Quit"
+    return i18n._("Quit — stops the running render") if runner.is_busy() else i18n._("Quit")
 
 
 def serve(host: str | None = None, port: int | None = None,

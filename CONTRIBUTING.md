@@ -139,8 +139,12 @@ Rules that keep it working:
   across requests (the prerequisite check, the storage survey) must store the
   English and translate on the way out, or the next request gets the wrong
   language.
-- Placeholders are `%(name)s` in all three layers; a literal `%` in a template
-  string is `%%` (newstyle gettext formats the result).
+- Placeholders are `%(name)s` in all three layers, passed as keyword arguments —
+  `_("No folder at %(root)s.", root=path)` in Python and in a template,
+  `_("…", { root: path })` in JavaScript — and every layer formats the result,
+  so a literal `%` is always written `%%`.
+- Don't put a string literal inside a dynamic `_()` argument (`_(b["name"])`):
+  the extractor would read `"name"` as a message. Assign it to a local first.
 - Never call `locale.setlocale`: it is process-global and thread-unsafe.
 - Commit the `.po` and the `.mo` together. A translator edits the `.po` in
   Poedit; `compile` then `check` before committing what comes back.
