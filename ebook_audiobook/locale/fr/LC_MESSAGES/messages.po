@@ -381,7 +381,7 @@ msgstr "turc"
 msgid "Chinese"
 msgstr "chinois"
 
-#: ebook_audiobook/narration_langs.py:227
+#: ebook_audiobook/narration_langs.py:234
 #, python-format
 msgid ""
 "Narrating in %(language)s needs the additional language model (%(size)s). Install it "
@@ -390,12 +390,12 @@ msgstr ""
 "Narrer en %(language)s demande le modèle de langue supplémentaire (%(size)s). "
 "Installez-le dans les Réglages, sous Langues de narration."
 
-#: ebook_audiobook/narration_langs.py:241
+#: ebook_audiobook/narration_langs.py:248
 #, python-format
 msgid "%(gb)s GB"
 msgstr "%(gb)s Go"
 
-#: ebook_audiobook/narration_langs.py:306 ebook_audiobook/web/app.py:1232
+#: ebook_audiobook/narration_langs.py:313 ebook_audiobook/web/app.py:1240
 msgid ""
 "The speech engine isn't installed, so there is nothing to add a language to. Install "
 "it first (re-run the installer)."
@@ -403,7 +403,7 @@ msgstr ""
 "Le moteur vocal n'est pas installé, il n'y a donc rien à quoi ajouter une langue. "
 "Installez-le d'abord (relancez l'installateur)."
 
-#: ebook_audiobook/narration_langs.py:322
+#: ebook_audiobook/narration_langs.py:329
 msgid ""
 "Couldn't reach huggingface.co. You're offline, a firewall is in the way, or "
 "HF_HUB_OFFLINE is set. Everything downloaded so far is kept; try again and it "
@@ -413,7 +413,7 @@ msgstr ""
 "HF_HUB_OFFLINE est défini. Tout ce qui a déjà été téléchargé est conservé ; réessayez"
 " et le téléchargement reprend."
 
-#: ebook_audiobook/narration_langs.py:328
+#: ebook_audiobook/narration_langs.py:335
 msgid ""
 "The disk filled up while downloading. Everything downloaded so far is kept; free some"
 " space and try again — it resumes."
@@ -421,7 +421,7 @@ msgstr ""
 "Le disque s'est rempli pendant le téléchargement. Tout ce qui a déjà été téléchargé "
 "est conservé ; libérez de l'espace et réessayez — il reprend."
 
-#: ebook_audiobook/narration_langs.py:330
+#: ebook_audiobook/narration_langs.py:337
 #, python-format
 msgid "The download failed: %(e)s"
 msgstr "Le téléchargement a échoué : %(e)s"
@@ -560,54 +560,50 @@ msgid "English — Male, North American"
 msgstr "Anglais — Homme, nord-américain"
 
 #: ebook_audiobook/voices.py:45
-msgid "English — Male, North American (alt)"
-msgstr "Anglais — Homme, nord-américain (bis)"
-
-#: ebook_audiobook/voices.py:47
 msgid "English — Female, North American"
 msgstr "Anglais — Femme, nord-américaine"
 
-#: ebook_audiobook/voices.py:49
+#: ebook_audiobook/voices.py:47
 msgid "English — Male, British"
 msgstr "Anglais — Homme, britannique"
 
-#: ebook_audiobook/voices.py:51
+#: ebook_audiobook/voices.py:49
 msgid "English — Female, British"
 msgstr "Anglais — Femme, britannique"
 
-#: ebook_audiobook/voices.py:53
+#: ebook_audiobook/voices.py:51
 msgid "French — Female"
 msgstr "Français — Femme"
 
-#: ebook_audiobook/voices.py:55
+#: ebook_audiobook/voices.py:53
 msgid "French — Male"
 msgstr "Français — Homme"
 
-#: ebook_audiobook/voices.py:142
+#: ebook_audiobook/voices.py:140
 msgid "Default narrator"
 msgstr "Narrateur par défaut"
 
-#: ebook_audiobook/worker.py:63
+#: ebook_audiobook/worker.py:64
 #, python-format
 msgid "Invalid output folder: %(path)s (%(e)s)"
 msgstr "Dossier de sortie invalide : %(path)s (%(e)s)"
 
-#: ebook_audiobook/worker.py:66
+#: ebook_audiobook/worker.py:67
 #, python-format
 msgid "Output path is not a folder: %(path)s"
 msgstr "Le chemin de sortie n'est pas un dossier : %(path)s"
 
-#: ebook_audiobook/worker.py:70
+#: ebook_audiobook/worker.py:71
 #, python-format
 msgid "Can't create output folder “%(path)s”: %(e)s"
 msgstr "Impossible de créer le dossier de sortie « %(path)s » : %(e)s"
 
-#: ebook_audiobook/worker.py:79
+#: ebook_audiobook/worker.py:80
 #, python-format
 msgid "No write permission for output folder “%(path)s”: %(e)s"
 msgstr "Pas de permission d'écriture sur le dossier de sortie « %(path)s » : %(e)s"
 
-#: ebook_audiobook/worker.py:157
+#: ebook_audiobook/worker.py:158
 msgid ""
 "KFX (newer Kindle) isn't supported directly. Open it in Calibre and convert/export it"
 " to EPUB, then import the EPUB."
@@ -615,7 +611,7 @@ msgstr ""
 "Le format KFX (Kindle récent) n'est pas pris en charge directement. Ouvrez-le dans "
 "Calibre, convertissez-le en EPUB, puis importez l'EPUB."
 
-#: ebook_audiobook/worker.py:159
+#: ebook_audiobook/worker.py:160
 msgid ""
 "This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, then import the "
 "EPUB."
@@ -623,7 +619,7 @@ msgstr ""
 "C'est un fichier Kindle de l'ère KFX. Convertissez-le d'abord en EPUB dans Calibre, "
 "puis importez l'EPUB."
 
-#: ebook_audiobook/worker.py:161
+#: ebook_audiobook/worker.py:162
 msgid ""
 "An .acsm file is an Adobe download token, not the book itself. Open it in Adobe "
 "Digital Editions or Calibre to fetch the actual book, then import that."
@@ -632,22 +628,22 @@ msgstr ""
 "le dans Adobe Digital Editions ou Calibre pour récupérer le vrai livre, puis importez"
 " celui-ci."
 
-#: ebook_audiobook/worker.py:164
+#: ebook_audiobook/worker.py:165
 msgid "Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."
 msgstr ""
 "Les vieux livres Palm/PDB ne sont pas pris en charge. Convertissez-le d'abord en EPUB"
 " dans Calibre."
 
-#: ebook_audiobook/worker.py:185
+#: ebook_audiobook/worker.py:186
 #, python-format
 msgid "“%(ext)s” files"
 msgstr "Les fichiers « %(ext)s »"
 
-#: ebook_audiobook/worker.py:185
+#: ebook_audiobook/worker.py:186
 msgid "files with no extension"
 msgstr "Les fichiers sans extension"
 
-#: ebook_audiobook/worker.py:187
+#: ebook_audiobook/worker.py:188
 #, python-format
 msgid ""
 "%(kind)s aren't supported. Supported formats: %(formats)s. For best results, convert "
@@ -656,7 +652,7 @@ msgstr ""
 "%(kind)s ne sont pas pris en charge. Formats acceptés : %(formats)s. Pour de "
 "meilleurs résultats, convertissez d'abord votre livre en EPUB dans Calibre."
 
-#: ebook_audiobook/worker.py:274
+#: ebook_audiobook/worker.py:275
 #, python-format
 msgid ""
 "This book is in %(language)s. Narrating it in %(language)s needs the additional "
@@ -723,7 +719,7 @@ msgstr "Arrêté par un problème"
 msgid "Stopped by you"
 msgstr "Arrêté par vous"
 
-#: ebook_audiobook/web/app.py:805
+#: ebook_audiobook/web/app.py:812
 #, python-format
 msgid ""
 "Couldn't save the uploaded file — is the disk full?\n"
@@ -734,11 +730,11 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:811
+#: ebook_audiobook/web/app.py:818
 msgid "Choose an ebook file first."
 msgstr "Choisissez d'abord un fichier de livre."
 
-#: ebook_audiobook/web/app.py:815
+#: ebook_audiobook/web/app.py:822
 #, python-format
 msgid ""
 "That file no longer exists:\n"
@@ -747,7 +743,7 @@ msgstr ""
 "Ce fichier n'existe plus :\n"
 "%(path)s"
 
-#: ebook_audiobook/web/app.py:821
+#: ebook_audiobook/web/app.py:828
 #, python-format
 msgid ""
 "Couldn't import that book:\n"
@@ -758,58 +754,58 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:871 ebook_audiobook/web/app.py:888
-#: ebook_audiobook/web/app.py:933 ebook_audiobook/web/app.py:1029
+#: ebook_audiobook/web/app.py:878 ebook_audiobook/web/app.py:896
+#: ebook_audiobook/web/app.py:941 ebook_audiobook/web/app.py:1037
 msgid "Already working on this book — stop it first."
 msgstr "Ce livre est déjà en cours de traitement — arrêtez-le d'abord."
 
-#: ebook_audiobook/web/app.py:874
+#: ebook_audiobook/web/app.py:881
 msgid "That isn't a language this can narrate."
 msgstr "Ce n'est pas une langue que l'application peut narrer."
 
-#: ebook_audiobook/web/app.py:916
+#: ebook_audiobook/web/app.py:924
 msgid "The book hasn't been read yet."
 msgstr "Le livre n'a pas encore été lu."
 
-#: ebook_audiobook/web/app.py:918 ebook_audiobook/web/app.py:1235
-#: ebook_audiobook/web/app.py:1259
+#: ebook_audiobook/web/app.py:926 ebook_audiobook/web/app.py:1243
+#: ebook_audiobook/web/app.py:1267
 msgid "Something else is running."
 msgstr "Autre chose est en cours."
 
-#: ebook_audiobook/web/app.py:935
+#: ebook_audiobook/web/app.py:943
 msgid "Select at least one section to render."
 msgstr "Sélectionnez au moins une section à narrer."
 
-#: ebook_audiobook/web/app.py:1103
+#: ebook_audiobook/web/app.py:1111
 msgid "That folder doesn't exist yet."
 msgstr "Ce dossier n'existe pas encore."
 
-#: ebook_audiobook/web/app.py:1105
+#: ebook_audiobook/web/app.py:1113
 msgid "Couldn't open a file manager on this system."
 msgstr "Impossible d'ouvrir un gestionnaire de fichiers sur ce système."
 
-#: ebook_audiobook/web/app.py:1195
+#: ebook_audiobook/web/app.py:1203
 msgid "Give the voice a name."
 msgstr "Donnez un nom à la voix."
 
-#: ebook_audiobook/web/app.py:1201
+#: ebook_audiobook/web/app.py:1209
 msgid "That isn't an audio format this can read."
 msgstr "Ce n'est pas un format audio lisible ici."
 
-#: ebook_audiobook/web/app.py:1206
+#: ebook_audiobook/web/app.py:1214
 msgid "Choose a clip first."
 msgstr "Choisissez d'abord un extrait."
 
-#: ebook_audiobook/web/app.py:1210
+#: ebook_audiobook/web/app.py:1218
 #, python-format
 msgid "Couldn't add that voice: %(e)s"
 msgstr "Impossible d'ajouter cette voix : %(e)s"
 
-#: ebook_audiobook/web/app.py:1229 ebook_audiobook/web/app.py:1257
+#: ebook_audiobook/web/app.py:1237 ebook_audiobook/web/app.py:1265
 msgid "No such language model."
 msgstr "Ce modèle de langue n'existe pas."
 
-#: ebook_audiobook/web/app.py:1241
+#: ebook_audiobook/web/app.py:1249
 #, python-format
 msgid "Not enough free space where the model cache lives: about %(size)s is needed."
 msgstr ""
@@ -2733,4 +2729,7 @@ msgstr "Impossible de générer un échantillon"
 
 #~ msgid "Male, British"
 #~ msgstr "Homme, britannique"
+
+#~ msgid "English — Male, North American (alt)"
+#~ msgstr "Anglais — Homme, nord-américain (bis)"
 

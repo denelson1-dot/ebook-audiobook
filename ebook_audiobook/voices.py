@@ -41,9 +41,7 @@ BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "voices"
 # a voice is never offered as a narrator for a language it does not speak.
 BUNDLED = (
     {"id": "male-north-american", "name": N_("English — Male, North American"), "language": "en",
-     "file": "male-north-american.flac", "pacing": 0.50, "expressiveness": 0.60},
-    {"id": "male-north-american-alt", "name": N_("English — Male, North American (alt)"), "language": "en",
-     "file": "male-north-american-alt.flac", "pacing": 0.42},
+     "file": "male-north-american.flac", "pacing": 0.42},
     {"id": "female-north-american", "name": N_("English — Female, North American"), "language": "en",
      "file": "female-north-american.flac", "pacing": 0.42},
     {"id": "male-british", "name": N_("English — Male, British"), "language": "en",

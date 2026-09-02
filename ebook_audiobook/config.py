@@ -99,6 +99,38 @@ def paths() -> Paths:
     return Paths(data_root())
 
 
+# Subfolders whose contents a job's JSON refers to by absolute path. When the
+# data folder moves (an install from before the packaged release used
+# ``<repo>/local-data``; a fresh one uses the per-user directory), those
+# recorded paths keep pointing at the old place while the files sit, intact,
+# under the new one.
+_RELOCATABLE = ("imports", "jobs", "voices", "outputs")
+
+
+def relocate(stored: str | None) -> str | None:
+    """Re-root a recorded absolute path under today's data folder if it no
+    longer exists where it was recorded.
+
+    ``/old/root/imports/abc.epub`` becomes ``<data root>/imports/abc.epub`` when
+    the former is gone and the latter is there. A path that still exists, or
+    that was never under one of our data subfolders (a user's own file passed
+    to the CLI), is returned unchanged.
+    """
+    if not stored:
+        return stored
+    old = Path(stored)
+    if old.exists():
+        return stored
+    parts = old.parts
+    for i in range(len(parts) - 1, 0, -1):
+        if parts[i] in _RELOCATABLE:
+            candidate = data_root().joinpath(*parts[i:])
+            if candidate.exists():
+                return str(candidate)
+            break
+    return stored
+
+
 # --- Pipeline defaults -------------------------------------------------------
 
 # Chatterbox natively outputs 24 kHz mono. The fake engine matches so the rest

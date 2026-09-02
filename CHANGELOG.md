@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.1 — 2026-09-02
+
+A hotfix. Two things 1.4.0 got wrong, and one it merely promised.
+
+- **The four new English narrators are actually in the box.** The 1.4.0 notes
+  below describe them, but the commit that swapped the clips landed after the
+  release was cut, so 1.4.0 still shipped the original five. This release
+  carries them. The voice ids are unchanged, so a book keeps its narrator and
+  simply sounds better on its next render; `male-north-american-alt` is gone,
+  and a book that used it needs a voice picked again.
+- **A book found again after its files moved.** Each book's record keeps
+  absolute paths to its imported copy, cover and voice clip. A library that
+  began life under the old `local-data/` folder in a source checkout kept
+  pointing there after moving to the per-user folder, so re-reading a book —
+  changing its narration language, say — handed Calibre a path that no longer
+  existed and reported the book as malformed. Those paths are now re-rooted
+  under today's data folder when the file is there. A copy that is truly gone
+  is named as such, before Calibre is ever run.
+- **Installing from a checkout starts from a clean build.** setuptools reuses
+  `build/lib` between installs and never removes a file from it, so a clip or
+  module deleted from the source tree could still ride along in the wheel.
+  Both installers now clear it first.
+
 ## 1.4.0 — 2026-09-02
 
 ### The interface speaks French, and French books are narrated in French
@@ -31,6 +54,11 @@
 - **Voices carry a language**, are named with it ("English — Male, North
   American", "French — Female"), and a book's page offers the ones that speak
   its language.
+- **Four new English narrators** replace the original five (kept under
+  `assets/voices/archive/`, not shipped). The voice ids carried over, so a book
+  on one of them keeps its choice and re-narrates with the new clip;
+  `male-north-american-alt` was retired — pick a voice again for a book that
+  used it.
 - The `.m4b` is tagged with the narration language players read.
 - The installers take `--lang fr` / `-Lang fr` and follow the desktop's
   language; `README.fr.md` is the French README.

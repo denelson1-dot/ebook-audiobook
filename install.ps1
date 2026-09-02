@@ -284,6 +284,10 @@ if ($isSourceTree) {
     # Running from a checkout: install from source. Used by CI to smoke-test this
     # installer, and by anyone testing a change before cutting a release.
     Write-Dim "installing from the source tree at $scriptDir"
+    # setuptools reuses build\lib from an earlier install and never removes a
+    # file from it, so anything deleted from the source tree since would still
+    # ride along in the wheel. Start from nothing every time.
+    Remove-Item -Recurse -Force (Join-Path $scriptDir "build") -ErrorAction SilentlyContinue
     & $VenvPy -m pip install --quiet $scriptDir
 } else {
     $resolved = $Version

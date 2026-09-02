@@ -382,8 +382,17 @@ def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
     """
     book = store.load_book()
     previous = {c.chapter_id: c.include for c in store.load_chapters()}
+    src = Path(book.source_path)
+    if not src.is_file():
+        # Say so plainly, rather than letting Calibre fail on a path that
+        # isn't there and having that reported as a malformed book.
+        raise extract.ExtractionError(
+            f"The copy of this book that was made when it was added is gone "
+            f"({src}), so it can't be read again. Remove the book from the "
+            "library and add it afresh."
+        )
     epub = store.dir / "normalized.epub"
-    extract.run_ebook_convert(Path(book.source_path), epub)
+    extract.run_ebook_convert(src, epub)
     raw = extract.parse_epub(epub)
     if not any((c.text or "").strip() for c in raw.chapters):
         raise extract.ExtractionError(

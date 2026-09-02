@@ -140,9 +140,11 @@ def test_convert_error_message_flags_drm():
     assert "DRM-protected" in msg and "Purchased.azw3" in msg
 
 
-def test_extract_job_records_error_on_failure(monkeypatch):
+def test_extract_job_records_error_on_failure(monkeypatch, tmp_path):
+    src = tmp_path / "book.epub"
+    src.write_bytes(b"not really an epub")
     store = JobStore("extractfail").ensure()
-    store.save_book(Book(job_id="extractfail", source_path="/nope.epub", source_hash="extractfail"))
+    store.save_book(Book(job_id="extractfail", source_path=str(src), source_hash="extractfail"))
     store.save_state(JobState(job_id="extractfail"))
 
     def boom(*a, **k):
@@ -153,6 +155,20 @@ def test_extract_job_records_error_on_failure(monkeypatch):
         worker.extract_job("extractfail")
     st = store.load_state()
     assert st.stage == "error" and "DRM-protected" in (st.error or "")
+
+
+def test_extract_job_names_a_vanished_source_instead_of_blaming_calibre(monkeypatch):
+    """Re-reading a book (e.g. after a narration-language change) whose imported
+    copy is gone must say the file is missing, not that the book is malformed."""
+    store = JobStore("gone").ensure()
+    store.save_book(Book(job_id="gone", source_path="/nope/imports/gone.epub", source_hash="gone"))
+    store.save_state(JobState(job_id="gone"))
+    monkeypatch.setattr(worker.extract, "run_ebook_convert",
+                        lambda *a, **k: pytest.fail("Calibre must not be run"))
+
+    with pytest.raises(extract.ExtractionError, match="gone.epub"):
+        worker.extract_job("gone")
+    assert "add it afresh" in (store.load_state().error or "")
 
 
 def test_gap_for_maps_boundaries():

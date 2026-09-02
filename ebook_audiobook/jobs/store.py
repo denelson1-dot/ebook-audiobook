@@ -17,7 +17,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ..config import VoiceSettings, paths
+from ..config import VoiceSettings, paths, relocate
 from .models import Book, Chapter, JobState, Segment, Stage
 
 
@@ -237,7 +237,12 @@ class JobStore:
         _atomic_write(self.dir / "book.json", json.dumps(book.to_dict(), indent=2))
 
     def load_book(self) -> Book:
-        return Book.from_dict(json.loads((self.dir / "book.json").read_text("utf-8")))
+        book = Book.from_dict(json.loads((self.dir / "book.json").read_text("utf-8")))
+        # Recorded as absolute paths; heal them if the data folder has moved
+        # since the book was imported (see :func:`config.relocate`).
+        book.source_path = relocate(book.source_path)
+        book.cover_path = relocate(book.cover_path)
+        return book
 
     # --- chapters -----------------------------------------------------------
 
@@ -285,7 +290,9 @@ class JobStore:
         p = self.dir / "voice_settings.json"
         if not p.exists():
             return VoiceSettings()
-        return VoiceSettings.from_dict(json.loads(p.read_text("utf-8")))
+        voice = VoiceSettings.from_dict(json.loads(p.read_text("utf-8")))
+        voice.reference_clip = relocate(voice.reference_clip)
+        return voice
 
     # --- state --------------------------------------------------------------
 

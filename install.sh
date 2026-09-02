@@ -527,6 +527,10 @@ fi
 
 if [ "$IS_SOURCE_TREE" = "1" ]; then
   say "  ${DIM}installing from the source tree at $SCRIPT_DIR${N}"
+  # setuptools reuses build/lib from an earlier install and never removes a
+  # file from it, so a clip or module deleted from the source tree since then
+  # would still ride along in the wheel. Start from nothing every time.
+  rm -rf "$SCRIPT_DIR/build"
   "$VPY" -m pip install --quiet "$SCRIPT_DIR" || die "install from source failed"
 else
   RESOLVED="$(resolve_version)"

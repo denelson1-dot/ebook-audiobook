@@ -1,6 +1,6 @@
 [project]
 name = "ebook-audiobook"
-version = "1.4.0"
+version = "1.4.1"
 description = "Offline, local ebook-to-audiobook converter with high-quality narrator voices, in English and French."
 readme = "README.md"
 requires-python = ">=3.11"

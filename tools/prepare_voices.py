@@ -44,12 +44,12 @@ MIN_DENSITY = 0.85   # of the best density available, before quiet decides
 QUIET_TOLERANCE_DB = 2.0  # a window this close to the quietest counts as tied
 
 SOURCES = {
-    "Male North America V2.mp3": "male-north-american.flac",
-    "Male North America ALT.mp3": "male-north-american-alt.flac",
-    "Female North America v2.mp3": "female-north-american.flac",
-    "Male British Sample v2.mp3": "male-british.flac",
-    "Female British Sample.mp3": "female-british.flac",
-    # French: 60-second narration samples, one reader each.
+    # 60-second narration samples, one reader each. The earlier English clips
+    # (from MP3s) are kept under assets/voices/archive/.
+    "Mark_F_Smith_North_American_Male_ebook_narration_60s.wav": "male-north-american.flac",
+    "Elizabeth_Klett_North_American_Female_ebook_narration_60s.wav": "female-north-american.flac",
+    "Peter_Yearsley_British_Male_ebook_narration_60s.wav": "male-british.flac",
+    "Ruth_Golding_British_Female_ebook_narration_60s.wav": "female-british.flac",
     "Nadine_Eckert-Boulet_ebook_narration_60s.wav": "female-french.flac",
     "Gilles_G_Le_Blanc_ebook_narration_60s.wav": "male-french.flac",
 }
@@ -159,7 +159,7 @@ def main(argv: list[str]) -> int:
     print(f"preparing {len(present)} voice(s) from {src_dir}")
     for src, dest in present.items():
         prepare(src_dir / src, out / dest)
-    print(f"\ntotal {sum(p.stat().st_size for p in out.glob('*.flac')) / 1e6:.1f} MB")
+    print(f"\ntotal {sum(p.stat().st_size for p in out.glob('*.flac')) / 1e6:.1f} MB shipped")
     return 0
 
 
