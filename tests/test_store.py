@@ -161,10 +161,15 @@ def test_library_pruning_recognises_the_root_by_identity_not_spelling(tmp_path, 
     from ebook_audiobook import settings as app_settings
     from ebook_audiobook.jobs.store import _prune_library_dirs
 
+    import pytest
+
     real_root = tmp_path / "Library"
     real_root.mkdir()
     alias = tmp_path / "library-alias"
-    alias.symlink_to(real_root)
+    try:
+        alias.symlink_to(real_root, target_is_directory=True)
+    except OSError:  # Windows: symlinks need a privilege the runner lacks
+        pytest.skip("cannot create a symlink here")
 
     s = app_settings.load_settings()
     s.audiobooks_root = str(alias)  # configured one way...
