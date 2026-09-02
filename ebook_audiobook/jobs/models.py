@@ -160,12 +160,16 @@ class JobState:
     measured_voice_key: str | None = None
     # history/audit: ISO-8601 UTC timestamps and final output size.
     created_at: str | None = None
-    # When the current full render's segment loop began. Used to show an honest
-    # "time remaining" estimate that survives a page reload, and cleared once the
-    # render leaves the rendering stage.
+    # When the most recent full render's segment loop began. Used to show an
+    # honest "time remaining" estimate that survives a page reload. Deliberately
+    # never cleared: its presence is what tells a job that was reset after a
+    # crash apart from one that only ever previewed — see storage.classify.
     render_started_at: str | None = None
     finished_at: str | None = None
     output_bytes: int | None = None
+    # The bitrate the finished file was encoded at. The voice's bitrate can be
+    # changed after the render without re-rendering; this one cannot.
+    output_bitrate_kbps: int | None = None
     # Preview is tracked separately from the render lifecycle so it never
     # clobbers `stage`/`output_path` (the final .m4b).
     preview_output: str | None = None

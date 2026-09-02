@@ -152,3 +152,34 @@ def test_imported_source_tolerates_a_missing_or_broken_book_record():
 
     store.save_book(Book(job_id="job-empty", source_path="", source_hash=""))
     assert store.imported_source() is None
+
+
+def test_library_pruning_recognises_the_root_by_identity_not_spelling(tmp_path, monkeypatch):
+    """APFS and NTFS are case-insensitive: ~/audiobooks and ~/Audiobooks are one
+    folder, and a string comparison says they are two. A symlink is the
+    portable way to spell one folder two ways on Linux too."""
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.jobs.store import _prune_library_dirs
+
+    import pytest
+
+    real_root = tmp_path / "Library"
+    real_root.mkdir()
+    alias = tmp_path / "library-alias"
+    try:
+        alias.symlink_to(real_root, target_is_directory=True)
+    except OSError:  # Windows: symlinks need a privilege the runner lacks
+        pytest.skip("cannot create a symlink here")
+
+    s = app_settings.load_settings()
+    s.audiobooks_root = str(alias)  # configured one way...
+    app_settings.save_settings(s)
+
+    book_dir = real_root / "Author" / "Title"  # ...written the other way
+    book_dir.mkdir(parents=True)
+    (book_dir / "cover.jpg").write_bytes(b"c")
+
+    _prune_library_dirs(book_dir)
+    assert not book_dir.exists()
+    assert not (real_root / "Author").exists()
+    assert real_root.exists()  # never the root itself

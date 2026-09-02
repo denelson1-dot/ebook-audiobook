@@ -454,3 +454,147 @@ def test_the_settings_page_shows_the_toggle(client):
     body = client.get("/settings").data
     assert b"autoplayCheck" in body
     assert b"Play a preview as soon as it is ready" in body
+
+
+# --- a crash is not a preview --------------------------------------------------
+
+def test_a_render_reset_after_a_crash_is_held_back(client):
+    """The case the whole module exists for, reached by the other door.
+
+    A job whose process died mid-render is put back to "extracted" on the next
+    launch (web.app._reconcile_stale). On disk that is exactly what a preview
+    leaves behind — segments, and a resting stage — except that a full render
+    stamps render_started_at. Twelve thousand narrated sections are a resume
+    whatever the stage says; classifying them "safe" and deleting them in the
+    default bulk sweep is silent data loss.
+    """
+    from datetime import datetime, timezone
+
+    store = make_job("crashed", stage=Stage.RENDERING.value, segments=12_000 // 100, total=200)
+    st = store.load_state()
+    st.render_started_at = datetime.now(timezone.utc).isoformat()
+    store.save_state(st)
+
+    create_app()  # boot-time reconcile: no worker owns the job, so it is reset
+    assert store.load_state().stage in (Stage.IMPORTED.value, Stage.EXTRACTED.value)
+
+    book = storage.survey().books[0]
+    assert book.reclaim == storage.HELD
+    assert "120" in book.reason and "200" in book.reason
+
+    d = client.post("/storage/free").get_json()  # the default sweep
+    assert d["freed_bytes"] == 0
+    assert store.intermediate_bytes() == 120_000  # every segment still there
+
+
+def test_a_previewed_book_that_never_rendered_is_still_safe():
+    """The distinction cuts the other way too: no render_started_at, no hold."""
+    make_job("previewed", stage=Stage.EXTRACTED.value, segments=15, total=151)
+    assert storage.survey().books[0].reclaim == storage.SAFE
+
+
+def test_a_book_that_rendered_fully_then_previewed_is_safe():
+    """render_started_at is never cleared, so a finished book carries one; the
+    stage decides first, and a done book's leftovers are only a shortcut."""
+    store = make_job("done", stage=Stage.DONE.value, segments=10, total=10, output=True)
+    st = store.load_state()
+    st.render_started_at = "2026-08-30T10:00:00+00:00"
+    store.save_state(st)
+    assert storage.survey().books[0].reclaim == storage.SAFE
+
+
+# --- queued is busy ----------------------------------------------------------------
+
+def test_a_queued_job_counts_as_busy(client, monkeypatch):
+    """Between submit and pickup nothing is running yet, but the render that
+    starts a moment later re-narrates everything deleted in that window. The
+    runner's own answer counts queued work; the survey must ask it."""
+    from ebook_audiobook.web.runner import runner
+
+    make_job("queued", stage=Stage.DONE.value, segments=5, total=5, output=True)
+    monkeypatch.setattr(runner, "is_busy", lambda job_id=None: job_id in ("queued", None))
+
+    d = client.get("/api/storage").get_json()
+    assert d["books"][0]["reclaim"] == storage.BUSY
+
+    d = client.post("/storage/free", data={"job_id": "queued", "force": "1"}).get_json()
+    assert d["freed_bytes"] == 0 and d["skipped"] == ["queued"]
+    assert JobStore("queued").intermediate_bytes() == 5_000
+
+
+# --- the folder total is the folder ------------------------------------------------
+
+def test_the_folder_total_includes_the_app_and_the_leftovers():
+    """The installer keeps its virtualenv in the data folder — gigabytes that no
+    book accounts for. The Storage page's "in your folder" figure must be what
+    a file manager would show, and the books' own total must stay the books'."""
+    from ebook_audiobook.config import paths
+
+    make_job("a", stage=Stage.DONE.value, segments=4, total=4, output=True)
+    p = paths().ensure()
+    (p.root / "venv").mkdir()
+    (p.root / "venv" / "big.so").write_bytes(b"v" * 7_000)
+    (p.root / "models").mkdir(exist_ok=True)
+    (p.root / "models" / "weights.bin").write_bytes(b"m" * 3_000)
+    (p.tmp / "upload-leftover.epub").write_bytes(b"t" * 500)
+    (p.outputs / "orphan.m4b").write_bytes(b"o" * 250)  # no job refers to it
+
+    storage._app_cache["at"] = 0.0  # the app-size cache would otherwise hide the seed
+    s = storage.survey()
+    assert s.app_bytes == 10_000
+    assert s.other_bytes == 750
+    assert s.folder_bytes == s.total_bytes + 10_750
+    assert s.books_bytes == s.books[0].disk_bytes
+    d = s.to_dict()
+    assert d["folder_bytes"] == s.folder_bytes and d["books_bytes"] == s.books_bytes
+
+
+def test_a_books_own_files_are_not_counted_as_leftovers():
+    """The preview and the imported ebook belong to the book, not to 'other'."""
+    from ebook_audiobook.config import paths
+
+    store = make_job("a", stage=Stage.DONE.value, segments=1, total=1, output=True)
+    p = paths().ensure()
+    store.preview_path().write_bytes(b"p" * 300)
+    src = p.imports / "a.epub"
+    src.write_bytes(b"e" * 200)
+    book = store.load_book()
+    book.source_path = str(src)
+    store.save_book(book)
+
+    storage._app_cache["at"] = 0.0
+    assert storage.survey().other_bytes == 0
+
+
+# --- macOS leaves things in folders ------------------------------------------------
+
+def test_appledouble_sidecars_do_not_count_as_narration():
+    """On exFAT and SMB volumes macOS writes ._name.wav beside every real file.
+    Counting them doubles the figure and, at the boundary, turns 'nothing
+    narrated' into 'something narrated'."""
+    store = make_job("mac", stage=Stage.EXTRACTED.value, segments=0)
+    (store.segments_dir / "._seg0.wav").write_bytes(b"x" * 10)
+    (store.segments_dir / ".DS_Store").write_bytes(b"x" * 10)
+    assert storage._rendered_segment_count(store) == 0
+    assert storage.survey().books[0].reclaim == storage.SAFE
+
+
+def test_freed_bytes_are_measured_not_assumed(monkeypatch):
+    """rmtree is told to ignore errors, so a file it could not remove is still
+    there — and must not be reported as freed."""
+    import shutil
+
+    store = make_job("stuck", stage=Stage.DONE.value, segments=3, total=3, output=True)
+    real_rmtree = shutil.rmtree
+
+    def leave_one(path, ignore_errors=False, **kw):
+        keep = None
+        if str(path) == str(store.segments_dir):
+            keep = (store.segments_dir / "seg0.wav").read_bytes()
+        real_rmtree(path, ignore_errors=ignore_errors, **kw)
+        if keep is not None:
+            store.segments_dir.mkdir(parents=True, exist_ok=True)
+            (store.segments_dir / "seg0.wav").write_bytes(keep)
+
+    monkeypatch.setattr(shutil, "rmtree", leave_one)
+    assert store.cleanup_intermediates() == 2_000

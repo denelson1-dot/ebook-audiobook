@@ -1,5 +1,80 @@
 # Changelog
 
+## Unreleased
+
+A review pass over the 1.3.0 interface, with macOS in mind.
+
+**A crashed render can no longer be swept away as "safe to delete".** A render
+interrupted by a crash or a force-quit is reset to "ready to narrate" on the
+next launch, and on disk that looked exactly like a preview's leftovers — so the
+Storage page listed it as safe and the default **Free up** deleted it. It now
+recognises an interrupted full render by the timestamp the render stamped, and
+holds it back with the price written into the row. A book that is queued but
+not yet running is treated as in use, too.
+
+**Measuring the voice counted the wrong segment as warm-up** whenever the first
+segment was already cached from a preview — which is the common case, since
+the button sits next to Preview — and so reported machines several times slower
+than they are. Cached segments now contribute to the audio-length figure only.
+
+**Deleting a book whose title has an apostrophe asked no question.** The
+confirmation was built as JavaScript inside an HTML attribute, and "The
+Hitchhiker's Guide" ended the string early, so the form went straight through.
+Confirmations now come from a data attribute, and a voice name is no longer a
+way to run script on the Voices page.
+
+**On macOS:**
+
+- *Quiet* and *Balanced* renders no longer nice the whole process. Darwin has
+  no per-thread niceness, so the old call lowered the web server's priority
+  along with the render's — and, being irreversible, every render after it.
+  They use thread QoS classes instead (utility, background), which is what
+  steers work onto the efficiency cores and can be undone.
+- The menu-bar icon's menu is rebuilt on the AppKit thread, not from whichever
+  thread noticed the render had started or stopped.
+- Ctrl-C in the terminal, and a log-out, now shut the app down properly: the
+  runtime record is retracted and the app window closes, rather than the window
+  being left showing a connection error.
+- "Open" from the menu bar raises *our* window by process id, rather than asking
+  LaunchServices for "Google Chrome" and getting the user's own browser.
+- `pystray` is required at 0.19.5 or newer: 0.19.4 used a Pillow call that
+  Pillow 10 removed, so the menu-bar icon silently never appeared.
+- With no Chromium installed the interface runs in Safari, which does not
+  allow a preview to start playing on its own; the page now says the preview is
+  ready instead of ending a thirty-second wait in silence. The window's position
+  is only remembered when the window is ours, not when it is a Safari tab.
+- Choosing a library folder the app cannot write to — on a Mac, usually one it
+  was never given access to — now says so instead of silently doing nothing.
+- The file browser hides `.DS_Store` and the `._Book.epub` sidecars macOS
+  writes on external drives, which listed as books and then failed to import.
+- An Intel Mac (or an Intel Python under Rosetta) is told the speech engine
+  cannot be installed rather than to re-run the installer; the installer judges
+  the architecture by the Python it found, not by the shell.
+
+Also:
+
+- The Storage page's "in your folder" figure now includes the app's own
+  virtualenv and models, and files no book claims, so it matches what Finder
+  or Explorer report for the same folder. Books' totals are unchanged.
+- The render-plan dialog uses the measured speaking rate, as the footer already
+  did; the two could disagree on length, size and whether disk space sufficed.
+- "Estimates are out of date" no longer sticks after re-measuring a voice that
+  had been measured before.
+- A second click on *Narrate the book* while the first is being set up is
+  refused rather than queueing a second full pass.
+- The default narrator for new books can now actually be chosen, on the Voices
+  page; the setting existed but nothing set it.
+- Auditioning a voice while a render is running waits for that voice's sample
+  rather than for the render to finish, then playing a stale one.
+- The library's listening time uses the bitrate a book was encoded at, not
+  whatever the slider says now.
+- Quieter fixes: the job page's status poll survives an exception; the finished
+  file's "Save" button is hidden while a re-render is running; a preview's
+  stale player no longer points at a deleted file after a full render; a book
+  with no readable sections says so instead of spinning; a bad voice clip is
+  reported on the page; flipping an unrelated switch no longer dismisses the
+  first-run prompt; escaping for file names, error text and release notes.
+
 ## 1.3.0 — 2026-08-30
 
 The interface, rebuilt around the two facts the old one never acknowledged: a

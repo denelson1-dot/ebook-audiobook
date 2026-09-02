@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path, PurePosixPath
 
 from ..config import data_root
@@ -206,11 +207,11 @@ def open_app_window(url: str) -> bool:
         return False
     with _spawned_lock:
         _spawned.append(child)
-    _macos_activate(browser)
+    _macos_activate(browser, child.pid)
     return True
 
 
-def _macos_activate(browser: str) -> None:
+def _macos_activate(browser: str, pid: int | None = None) -> None:
     """Bring the app window to the front on macOS.
 
     Executing the binary directly is what gives us a child process to close on
@@ -220,8 +221,20 @@ def _macos_activate(browser: str) -> None:
     window *behind* everything, or on another Space, and the click reads as
     having done nothing.
 
-    ``open -a`` on the bundle activates the instance that already exists rather
-    than starting another. Best effort; failing to focus is not worth an error.
+    Two ways, tried in order, on a thread of their own so the caller — a tray
+    menu action on the AppKit main thread, or a request handler — never waits
+    on a browser that is still starting:
+
+    * By process id, through ``NSRunningApplication``. This is the only way to
+      name *our* Chrome rather than the user's: both are the same bundle, and
+      anything that goes by bundle can pick either one.
+    * ``open -a`` on the bundle. It activates whichever instance LaunchServices
+      registered first — usually the user's own browser when they have one
+      open — but it is what worked before, and it is the only option once the
+      child has exited, which is what a second launch into an existing profile
+      does after handing its URL to the instance that owns it.
+
+    Best effort throughout; failing to focus is not worth an error.
     """
     if not IS_MACOS:
         return
@@ -231,12 +244,48 @@ def _macos_activate(browser: str) -> None:
     bundle = PurePosixPath(browser).parent.parent.parent
     if bundle.suffix != ".app":
         return
+    threading.Thread(target=_macos_activate_now, args=(str(bundle), pid),
+                     daemon=True, name="ebab-activate").start()
+
+
+def _macos_activate_now(bundle: str, pid: int | None) -> None:
+    """The work behind :func:`_macos_activate`, synchronously."""
+    if pid and _macos_activate_pid(pid):
+        return
     try:
-        subprocess.Popen(["open", "-a", str(bundle)],
+        subprocess.Popen(["open", "-a", bundle],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL)
     except (OSError, ValueError):
         pass
+
+
+def _macos_activate_pid(pid: int, timeout: float = 5.0, interval: float = 0.1) -> bool:
+    """Activate the application running as ``pid``. False if that didn't happen.
+
+    A process only appears to ``NSRunningApplication`` once it has connected
+    to the window server, which for a cold browser profile is a second or two
+    after ``Popen`` returns, so this polls rather than asking once. The return
+    value is AppKit's own: since macOS 14 activation is cooperative, and a
+    refusal comes back as False rather than as an error, which is what lets the
+    caller fall through to ``open``.
+    """
+    try:
+        import AppKit
+    except Exception:  # noqa: BLE001 - no pyobjc
+        return False
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            app = AppKit.NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+            if app is not None:
+                return bool(app.activateWithOptions_(
+                    AppKit.NSApplicationActivateIgnoringOtherApps))
+        except Exception:  # noqa: BLE001
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
 
 
 def close_windows(timeout: float = 3.0) -> None:

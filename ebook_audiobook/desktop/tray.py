@@ -40,6 +40,13 @@ ICON_FILE = "icon-64.png"
 _lock = threading.Lock()
 _icon = None  # the running pystray.Icon, so /quit can stop it from a request
 
+# macOS only: the NSApplication delegate that turns "the system wants us gone"
+# into an orderly shutdown, and the callback it runs. Module-level so AppKit's
+# unretained delegate reference stays valid for the life of the process.
+_app_delegate = None
+_app_delegate_class = None
+_on_terminate = None
+
 
 def _reach_system_gi() -> bool:
     """Make the distro's GTK bindings importable, if they aren't already.
@@ -140,7 +147,7 @@ def available() -> bool:
     return True
 
 
-def run(url: str, on_show, on_quit, quit_label=None) -> bool:
+def run(url: str, on_show, on_quit, quit_label=None, on_terminate=None) -> bool:
     """Show the tray icon and run its event loop until the app quits.
 
     **Blocks**, and must be called from the main thread: pystray's macOS backend
@@ -154,6 +161,13 @@ def run(url: str, on_show, on_quit, quit_label=None) -> bool:
     base.html.) It is **not** re-evaluated when the menu opens; no pystray
     backend offers that hook. The caller must call :func:`refresh` when the
     answer changes.
+
+    ``on_terminate`` is macOS only: it runs, synchronously, when the operating
+    system asks the application to quit — Ctrl-C in the terminal that started
+    it (pystray turns that into ``NSApp.terminate:``), a log-out, a shutdown.
+    AppKit then calls ``exit()`` without unwinding Python, so anything that must
+    happen on the way out (retract the runtime record, close the app window)
+    has to happen inside this callback or not at all. Ignored elsewhere.
 
     Returns False if no tray could be created. **A True return does not mean the
     tray ran**: every backend catches its own main-loop failures and returns
@@ -195,6 +209,7 @@ def run(url: str, on_show, on_quit, quit_label=None) -> bool:
         _icon = icon
     try:
         _macos_hide_dock_icon()
+        _macos_install_terminate_handler(on_terminate)
         icon.run()
     except Exception:  # noqa: BLE001 - a desktop with no usable tray protocol
         return False
@@ -227,6 +242,86 @@ def _macos_hide_dock_icon() -> None:
         pass
 
 
+def _macos_install_terminate_handler(on_terminate) -> None:
+    """Make ``NSApp.terminate:`` shut the app down properly instead of just
+    ending the process.
+
+    pystray's macOS backend answers SIGINT with ``terminate:``, and macOS sends
+    the same on log-out or shutdown. Without a delegate AppKit's answer is to
+    call ``exit()`` on the spot: no ``finally`` block in ``serve()`` ever runs,
+    the runtime record stays behind advertising a server that is gone, and the
+    app window is left showing the browser's connection-error page. The delegate
+    runs the orderly shutdown first, then lets the termination proceed.
+
+    Best effort, macOS only. One delegate class per process: Objective-C class
+    names are global, and declaring it twice raises.
+    """
+    global _app_delegate, _app_delegate_class, _on_terminate
+    if not IS_MACOS or on_terminate is None:
+        return
+    _on_terminate = on_terminate
+    try:
+        import AppKit
+        import objc
+
+        if _app_delegate_class is None:
+            class EbabAppDelegate(AppKit.NSObject):
+                # NSApplicationTerminateReply is an NSUInteger: declare the
+                # signature rather than let it be inferred, because a wrong
+                # guess here does not raise — it returns garbage to AppKit.
+                @objc.typedSelector(b"Q@:@")
+                def applicationShouldTerminate_(self, sender):
+                    _run_terminate_callback()
+                    return 1  # NSTerminateNow
+
+            _app_delegate_class = EbabAppDelegate
+        _app_delegate = _app_delegate_class.alloc().init()
+        AppKit.NSApplication.sharedApplication().setDelegate_(_app_delegate)
+    except Exception:  # noqa: BLE001 - cosmetic on the way out; never block the tray
+        _app_delegate = None
+
+
+def _run_terminate_callback() -> None:
+    """The delegate's work, kept out of the Objective-C method so a test can
+    drive it without AppKit."""
+    cb = _on_terminate
+    if cb is None:
+        return
+    try:
+        cb()
+    except Exception:  # noqa: BLE001 - we are exiting either way
+        pass
+
+
+def _on_main_thread(fn) -> bool:
+    """Schedule ``fn`` on the AppKit main thread. False if that isn't possible.
+
+    AppKit is not thread-safe, and both callers here run on background threads:
+    :func:`refresh` from the busy-state watcher, :func:`stop` from a ``/quit``
+    request. Rebuilding an ``NSMenu`` on a status item from another thread while
+    the user may be looking at that menu is the kind of thing that works a
+    thousand times and then crashes. ``callAfter`` hands the call to the run
+    loop that ``icon.run()`` is spinning, which is where it belongs. Anything
+    scheduled before the loop starts is queued until it does.
+    """
+    if not IS_MACOS:
+        return False
+    try:
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(_quietly, fn)
+        return True
+    except Exception:  # noqa: BLE001 - no pyobjc, or the loop is gone
+        return False
+
+
+def _quietly(fn) -> None:
+    try:
+        fn()
+    except Exception:  # noqa: BLE001 - backend teardown race
+        pass
+
+
 def refresh() -> None:
     """Rebuild the menu, so a dynamic label reflects the world as it is now.
 
@@ -239,10 +334,9 @@ def refresh() -> None:
         icon = _icon
     if icon is None:
         return
-    try:
-        icon.update_menu()
-    except Exception:  # noqa: BLE001 - backend teardown race
-        pass
+    if _on_main_thread(icon.update_menu):
+        return
+    _quietly(icon.update_menu)
 
 
 def stop() -> None:
@@ -255,7 +349,6 @@ def stop() -> None:
         icon = _icon
     if icon is None:
         return
-    try:
-        icon.stop()
-    except Exception:  # noqa: BLE001 - already stopping, or a backend teardown race
-        pass
+    if _on_main_thread(icon.stop):
+        return
+    _quietly(icon.stop)

@@ -85,7 +85,7 @@ def test_quitting_through_the_tray_ends_the_session(fake_stack, monkeypatch):
     """The other side of it: a genuine quit must not then block forever."""
     monkeypatch.setattr(server.tray, "available", lambda: True)
 
-    def run_tray(url, on_show, on_quit, quit_label=None):
+    def run_tray(url, on_show, on_quit, quit_label=None, **kw):
         on_quit()  # the user picks Quit
         return True
 
@@ -108,7 +108,7 @@ def test_the_quit_handler_does_not_block_the_calling_thread(fake_stack, monkeypa
     monkeypatch.setattr(server.tray, "available", lambda: True)
     timings = {}
 
-    def run_tray(url, on_show, on_quit, quit_label=None):
+    def run_tray(url, on_show, on_quit, quit_label=None, **kw):
         import time
         start = time.monotonic()
         on_quit()
@@ -141,3 +141,27 @@ def test_no_tray_still_blocks_and_shuts_down_cleanly(fake_stack, monkeypatch):
     fake_stack["server"].close()
     assert done.wait(5)
     assert fake_stack["drained"] == 1
+
+
+def test_a_system_terminate_drains_before_the_process_is_allowed_to_exit(fake_stack, monkeypatch):
+    """macOS: pystray answers Ctrl-C with NSApp.terminate:, and log-out sends
+    the same. AppKit then calls exit() without unwinding Python, so the finally
+    block in serve() never runs. Everything that matters on the way out — the
+    runtime record, the app window — has to happen inside the callback, and
+    has to have happened by the time it returns."""
+    monkeypatch.setattr(server.tray, "available", lambda: True)
+    seen = {}
+
+    def run_tray(url, on_show, on_quit, quit_label=None, on_terminate=None):
+        assert on_terminate is not None
+        on_terminate()
+        # By the time AppKit gets its answer the drain and the windows are done.
+        seen["drained"] = fake_stack["drained"]
+        seen["windows_closed"] = fake_stack["windows_closed"]
+        return True
+
+    monkeypatch.setattr(server.tray, "run", run_tray)
+    server.serve(host="127.0.0.1", port=1, open_browser=False)
+    assert seen == {"drained": 1, "windows_closed": 1}
+    # And serve()'s own finally block, when it does get to run, is idempotent.
+    assert fake_stack["drained"] == 2

@@ -538,3 +538,125 @@ def test_a_book_of_one_short_section_can_still_be_measured():
 
     state = worker.measure_job("tiny")
     assert state.chars_per_audio_second and state.chars_per_audio_second > 0
+
+
+# --- measuring: the warm-up is the first *fresh* generation ---------------------
+
+class _Clock:
+    """A monotonic clock that charges a fixed cost per render: a slow first
+    generation (the model warming up) and a quick one after that."""
+
+    def __init__(self, first=10.0, rest=1.0):
+        self.now = 0.0
+        self.first, self.rest = first, rest
+        self.renders = 0
+
+    def monotonic(self):
+        return self.now
+
+    def render(self):
+        self.now += self.first if self.renders == 0 else self.rest
+        self.renders += 1
+
+
+def _seed_long_job(job_id):
+    """Six paragraphs of identical length: every segment costs the same
+    characters, so a rate measured over any subset of them is the same rate."""
+    paragraphs = [f"Sentence number {i} of the chapter, written to a fixed length."
+                  for i in range(1, 7)]
+    assert len({len(p) for p in paragraphs}) == 1
+    text = "\n\n".join(paragraphs)
+    store = JobStore(job_id).ensure()
+    store.save_book(Book(job_id=job_id, source_path="/none.epub", source_hash=job_id,
+                         title="Long Book", author="Nobody"))
+    store.save_chapters([Chapter(chapter_id="ch0000", sequence=0, title="Chapter One",
+                                 text=text, char_count=len(text))])
+    store.save_voice(VoiceSettings(engine="fake"))
+    return store
+
+
+def _measure_with_clock(job_id, monkeypatch, clock):
+    real_render = worker._render_one
+
+    def timed(adapter, text, path):
+        clock.render()
+        return real_render(adapter, text, path)
+
+    monkeypatch.setattr(worker, "_render_one", timed)
+    monkeypatch.setattr(worker.time, "monotonic", clock.monotonic)
+    return worker.measure_job(job_id)
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_the_warm_up_is_skipped_even_when_the_first_segment_was_cached(monkeypatch):
+    """Measure is offered next to Preview, and a preview leaves the opening
+    segments in the cache. The warm-up is then not the first segment in the
+    list but the first one the engine actually renders — and counting a 10 s
+    warm-up as ordinary work makes a machine look five times slower than it is.
+    """
+    cold = _seed_long_job("cold")
+    cold_state = _measure_with_clock("cold", monkeypatch, _Clock())
+    assert cold.load_state().chars_per_render_second == cold_state.chars_per_render_second
+
+    warm = _seed_long_job("warm")
+    worker.render_job("warm", preview_max_seconds=1.0, preview_chapter_id="ch0000")
+    cached = len(list(warm.segments_dir.glob("*.wav")))
+    assert 1 <= cached <= 3, "the preview should have cached the opening segments only"
+    warm_state = _measure_with_clock("warm", monkeypatch, _Clock())
+
+    # Same machine, same clock, same-sized segments: the same speed — the
+    # cached segments contribute neither their seconds nor their characters.
+    assert warm_state.chars_per_render_second == pytest.approx(
+        cold_state.chars_per_render_second, rel=0.05)
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_measuring_an_errored_job_does_not_leave_it_saying_stopped_by_a_problem():
+    """Measuring clears the error (it is a fresh attempt at the engine), so
+    restoring the 'error' stage afterwards would show a problem with no text."""
+    store = _seed_job("erred")
+    st = store.load_state()
+    st.stage = "error"
+    st.error = "the engine fell over"
+    store.save_state(st)
+
+    worker.measure_job("erred")
+    after = store.load_state()
+    assert after.stage == "extracted"
+    assert after.error is None
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_a_finished_render_forgets_its_preview_completely():
+    """The preview file is deleted when the .m4b is written; the state that
+    points at it has to go too, or a reloaded page aims an <audio> at a 404."""
+    store = _seed_job("previewthenrender")
+    worker.render_job("previewthenrender", preview_max_seconds=1.0, preview_chapter_id="ch0000")
+    assert store.load_state().preview_at
+
+    state = worker.render_job("previewthenrender")
+    assert state.stage == "done"
+    assert state.preview_output is None and state.preview_at is None
+
+
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(not HAVE_FFMPEG, reason="no ffmpeg available")
+def test_the_bitrate_a_file_was_encoded_at_is_remembered():
+    """The voice's bitrate can be changed after the render without re-rendering;
+    the listening time on the shelf is size ÷ bitrate, so it needs the real one."""
+    store = _seed_job("bitrate")
+    voice = store.load_voice()
+    voice.extra["bitrate_kbps"] = 48
+    store.save_voice(voice)
+    state = worker.render_job("bitrate")
+    assert state.output_bitrate_kbps == 48
+
+
+def test_a_zero_second_preview_does_not_divide_by_zero(monkeypatch):
+    """The CLI accepts --seconds 0; the web route clamps, the worker must too."""
+    _seed_job("zero")
+    state = worker.render_job("zero", preview_max_seconds=0)
+    assert state.error is None

@@ -222,7 +222,10 @@ def serve(host: str | None = None, port: int | None = None,
 
     try:
         if has_tray:
-            tray.run(url, lambda: open_window(url), request_stop, _quit_label)
+            # on_terminate is macOS-only (see tray.run): AppKit exits the
+            # process straight after it, so the drain has to happen inside it.
+            tray.run(url, lambda: open_window(url), request_stop, _quit_label,
+                     on_terminate=lambda: (request_stop(), drain()))
         # Every pystray backend catches its own main-loop failures and returns
         # normally, so tray.run() returning tells us nothing about whether a
         # tray ever appeared. Trusting it meant that on a machine where the tray

@@ -155,6 +155,24 @@ def test_install_hints_exist_for_every_platform():
             assert tools._HINTS[tool][plat].strip()
 
 
+def test_an_intel_mac_is_told_the_engine_cannot_be_installed(monkeypatch):
+    """Re-run-the-installer is the wrong advice there: PyTorch stopped building
+    for x86_64 macOS after 2.2.2, so no install can succeed. The same is true of
+    an Intel Python under Rosetta on an Apple Silicon Mac."""
+    from ebook_audiobook import checks
+
+    monkeypatch.setattr(checks.sys, "platform", "darwin")
+    monkeypatch.setattr(checks.platform, "machine", lambda: "x86_64")
+    assert checks.intel_mac()
+    hint = checks.engine_install_hint()
+    assert "Intel Mac" in hint
+    assert "installer" not in hint.lower()
+
+    monkeypatch.setattr(checks.platform, "machine", lambda: "arm64")
+    assert not checks.intel_mac()
+    assert "installer" in checks.engine_install_hint()
+
+
 def test_run_decodes_non_utf8_output_without_crashing():
     """A tool emitting bytes that aren't valid UTF-8 must not kill the render."""
     proc = tools.run([sys.executable, "-c",

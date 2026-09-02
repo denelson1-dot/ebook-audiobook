@@ -29,7 +29,7 @@
           <span class="badge {{ j.state.stage }}">{{ j.state.stage|stage }}{% if j.state.total_segments %}
             at {{ (100 * j.state.rendered_segments / j.state.total_segments)|round|int }}%{% endif %}</span>
         {% else %}
-          <span class="badge">{{ j.state.stage|stage }}</span>
+          <span class="badge {{ j.state.stage }}">{{ j.state.stage|stage }}</span>
         {% endif %}
       </div>
     </a>
@@ -165,9 +165,9 @@
   try {
     const d = await getJSON("/api/storage");
     const meta = document.getElementById("libraryMeta");
-    if (meta && d.total_bytes) {
+    if (meta && d.books_bytes) {
       const n = d.books.length;
-      meta.innerHTML = `${n} book${n === 1 ? "" : "s"} · <span class="mono">${humanBytes(d.total_bytes)}</span> on disk`;
+      meta.innerHTML = `${n} book${n === 1 ? "" : "s"} · <span class="mono">${humanBytes(d.books_bytes)}</span> on disk`;
     }
     if (d.safe_bytes >= 1e9) {
       document.getElementById("libraryFreeText").textContent = "Free up " + humanBytes(d.safe_bytes);
@@ -205,8 +205,11 @@
 
 document.getElementById("welcomeFolder").addEventListener("click", () => {
   openFsBrowser({ start: homeDir, accept: "dir", onPick: async (path) => {
-    const r = await postForm("/settings", { audiobooks_root: path });
-    if (r && r.ok) location.reload(); else toast((r && r.error) || "Couldn't use that folder");
+    // The one action on the first-run screen. A refusal (a folder this app
+    // can't write to — on a Mac, one it was never given access to) must be
+    // shown, not swallowed: postForm throws on a 400, postFormResult reports it.
+    const r = await postFormResult("/settings", { audiobooks_root: path });
+    if (r.ok) location.reload(); else toast(r.error || "Couldn't use that folder");
   }});
 });
 {% endif %}
@@ -235,8 +238,12 @@ async function heroTick() {
   }
 }
 document.getElementById("heroStop").addEventListener("click", async () => {
-  await postForm(`/job/${heroJob}/cancel`, {});
-  toast("Stopping…");
+  try {
+    await postForm(`/job/${heroJob}/cancel`, {});
+    toast("Stopping…");
+  } catch (e) {
+    toast("Couldn't reach the app to stop it");
+  }
 });
 heroTick();
 setInterval(heroTick, 3000);

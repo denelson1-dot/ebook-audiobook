@@ -18,7 +18,6 @@ from werkzeug.utils import secure_filename
 
 from .. import (checks, config, power, settings as app_settings, storage as storage_mod,
                 tools, worker)
-from ..audio import estimate
 from .. import hashing
 from ..config import VoiceSettings, paths
 from ..desktop import runtime
@@ -192,6 +191,16 @@ def _busy_job_id() -> str | None:
     return cur.split(":", 1)[0] if cur else None
 
 
+def _measured_here(store: JobStore, state) -> bool:
+    """Whether the job's measured rates were taken with its current voice
+    settings. Estimates measured with different settings are no longer about
+    this book as it is now, which is what the UI offers to put right."""
+    if not state.measured_voice_key:
+        return False
+    current = hashing.voice_key(store.load_voice(), config.SAMPLE_RATE)
+    return state.measured_voice_key == current
+
+
 def _job_or_404(job_id: str) -> JobStore:
     store = JobStore(job_id)
     if not store.exists():
@@ -283,9 +292,13 @@ def create_app() -> Flask:
                     # to guess and then 404 an <img>.
                     "has_cover": bool(book.cover_path and Path(book.cover_path).is_file()),
                     "tint": cover_tint(book.title),
+                    # The bitrate the file was encoded at, when the render
+                    # recorded it; the voice's current setting is only a
+                    # fallback for books rendered before it was stamped.
                     "duration": fmt_listening(
                         state.output_bytes,
-                        int(store.load_voice().extra.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS)),
+                        int(state.output_bitrate_kbps
+                            or store.load_voice().extra.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS)),
                     ) if state.stage == Stage.DONE.value else None,
                     "working": state.stage == Stage.DONE.value,
                     "busy": jid == busy_id,
@@ -310,15 +323,43 @@ def create_app() -> Flask:
 
     @app.get("/voices")
     def voices_page():
+        return _voices_page()
+
+    def _voices_page(error: str | None = None, code: int = 200):
+        from ..voices import default_voice_id
+
         return render_template(
             "voices.html",
             voices=_offerable_voices(),
+            default_voice_id=default_voice_id(),
             start=str(Path.home()),
-        )
+            error=error,
+        ), code
 
     @app.get("/settings")
     def settings_page():
         return render_template("settings.html")
+
+    # Surveying walks every job's segment tree — tens of thousands of stat()
+    # calls for a long book — and every open page asks for it every few seconds
+    # to keep the sidebar figure current. The figure changes when a render
+    # finishes or files are freed, not every four seconds, so it is cached and
+    # dropped whenever something here deletes.
+    _storage_cache: dict = {"at": 0.0, "value": None}
+    _STORAGE_TTL = 20.0
+
+    def _survey(fresh: bool = False):
+        import time
+
+        now = time.monotonic()
+        cached = _storage_cache["value"]
+        if fresh or cached is None or now - _storage_cache["at"] > _STORAGE_TTL:
+            cached = storage_mod.survey(_busy_job_id(), is_busy=runner.is_busy)
+            _storage_cache.update(at=now, value=cached)
+        return cached
+
+    def _forget_survey() -> None:
+        _storage_cache["value"] = None
 
     @app.get("/storage")
     def storage_page():
@@ -329,7 +370,7 @@ def create_app() -> Flask:
         per-book button you had to already know about.
         """
         return render_template("storage.html",
-                               survey=storage_mod.survey(_busy_job_id()),
+                               survey=_survey(fresh=True),
                                safe=storage_mod.SAFE, held=storage_mod.HELD,
                                busy=storage_mod.BUSY, none=storage_mod.NONE)
 
@@ -339,9 +380,10 @@ def create_app() -> Flask:
 
         Fetched by every page to fill the sidebar's working-files figure. It
         walks each job's tree, so it is deliberately not computed during a page
-        render — same reasoning as /api/prereqs.
+        render — same reasoning as /api/prereqs — and it is cached briefly, for
+        the same reason again.
         """
-        return storage_mod.survey(_busy_job_id()).to_dict()
+        return _survey().to_dict()
 
     @app.post("/storage/free")
     def storage_free():
@@ -355,8 +397,10 @@ def create_app() -> Flask:
         ids = request.form.getlist("job_id")
         force = request.form.get("force") == "1"
         if not ids:
-            ids = [b.job_id for b in storage_mod.survey(busy).safe_books]
-        freed, skipped = storage_mod.free(ids, busy_job_id=busy, force=force)
+            ids = [b.job_id for b in _survey(fresh=True).safe_books]
+        freed, skipped = storage_mod.free(ids, busy_job_id=busy, force=force,
+                                          is_busy=runner.is_busy)
+        _forget_survey()
         return {"ok": True, "freed_bytes": freed, "skipped": skipped}
 
     @app.post("/settings")
@@ -384,13 +428,16 @@ def create_app() -> Flask:
             s.autoplay_preview = request.form.get("autoplay_preview") == "1"
         if "auto_free_working_files" in request.form:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
-        s.setup_dismissed = True  # user has engaged with setup either way
+        if "audiobooks_root" in request.form:
+            # Choosing (or clearing) the folder answers the first-run question.
+            # Flipping an unrelated switch does not, and must not silently
+            # dismiss a prompt the user never saw.
+            s.setup_dismissed = True
         app_settings.save_settings(s)
         return {"ok": True, "audiobooks_root": s.audiobooks_root,
                 "power_mode": s.power_mode,
                 "check_for_updates": s.check_for_updates,
                 "auto_free_working_files": s.auto_free_working_files,
-            "autoplay_preview": s.autoplay_preview,
                 "autoplay_preview": s.autoplay_preview}
 
     # ----- updates, backup, diagnostics -------------------------------------
@@ -576,13 +623,7 @@ def create_app() -> Flask:
         pron_text = "\n".join(f"{k}={v}" for k, v in (voice.extra.get("pron") or {}).items())
         # Reset a stage stranded by a killed process before rendering the page.
         state = _reconcile_stale(store)
-        est = (estimate.estimate(total_chars, bitrate, state.chars_per_render_second,
-                                 state.chars_per_audio_second) if total_chars else None)
-        # Estimates measured with different voice settings are no longer about
-        # this book as it is now, which is what the UI offers to put right.
-        current_vkey = hashing.voice_key(voice, config.SAMPLE_RATE)
-        measured_here = bool(state.measured_voice_key
-                             and state.measured_voice_key == current_vkey)
+        measured_here = _measured_here(store, state)
         default_ch = worker._pick_preview_chapter(chapters, None).chapter_id if chapters else ""
         book = store.load_book()
         root = app_settings.audiobooks_root()
@@ -603,7 +644,6 @@ def create_app() -> Flask:
             bitrate=bitrate,
             pron_text=pron_text,
             state=state,
-            est=est,
             output_mode=state.output_mode or worker.default_output_mode(),
             job_power_mode=state.power_mode or app_settings.default_power_mode(),
             folder_dir=state.output_dir if state.output_mode == worker.MODE_FOLDER else str(paths().outputs),
@@ -646,7 +686,12 @@ def create_app() -> Flask:
                     if e.is_dir() and not e.name.startswith(".")]
             files = []
             for e in entries:
-                if not e.is_file():
+                # Hidden files are noise at best. At worst they are macOS
+                # AppleDouble sidecars (``._Book.epub`` on any external or
+                # network volume), which carry the extension of a real ebook
+                # and none of its content, so they list as books and then
+                # fail to import.
+                if not e.is_file() or e.name.startswith("."):
                     continue
                 ext = e.suffix.lower()
                 if ext in allowed:
@@ -739,9 +784,14 @@ def create_app() -> Flask:
     @app.post("/job/<job_id>/preview")
     def start_preview(job_id):
         _job_or_404(job_id)
+        if runner.is_busy(job_id):
+            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
+        # Bounded: zero would divide the progress by nothing after a full model
+        # load, and an hour-long "preview" is a render by another name.
+        seconds = min(300.0, max(5.0, _f(request.form, "seconds", 30)))
         runner.submit(
             job_id, "preview",
-            seconds=_f(request.form, "seconds", 30),
+            seconds=seconds,
             chapter_id=request.form.get("chapter_id") or None,
             power_mode=power.normalize_mode(
                 request.form.get("power_mode")
@@ -769,6 +819,12 @@ def create_app() -> Flask:
     @app.post("/job/<job_id>/render")
     def start_render(job_id):
         store = _job_or_404(job_id)
+        if runner.is_busy(job_id):
+            # A double-click, a stale tab, a retried request: without this the
+            # second submit queues a second full pass — re-assembling and
+            # re-packaging the book for nothing — and its state writes below
+            # land under a render that is already saving its own copy.
+            return {"ok": False, "error": "Already working on this book — stop it first."}, 409
         if not any(c.include for c in store.load_chapters()):
             return {"ok": False, "error": "Select at least one section to render."}, 400
         mode = request.form.get("output_mode") or worker.default_output_mode()
@@ -806,8 +862,12 @@ def create_app() -> Flask:
         store = _job_or_404(job_id)
         # Self-heal a job whose worker died mid-flight (killed process, dead
         # thread) so the UI stops showing a stuck stage with a dead Stop button.
-        d = _reconcile_stale(store).to_dict()
+        st = _reconcile_stale(store)
+        d = st.to_dict()
         d["busy"] = runner.is_busy(job_id)
+        # The page polls this far more often than it reloads, so it is where it
+        # learns that a re-measurement has made its figures current again.
+        d["measured_here"] = _measured_here(store, st)
         return d
 
     @app.get("/job/<job_id>/chapters")
@@ -881,13 +941,14 @@ def create_app() -> Flask:
         """Remember where the app window is, so a relaunch reopens it there.
 
         Values come from the page's own ``screenX``/``outerWidth``. They are
-        clamped to something plausible before being stored: a window remembered
-        at 12000px because a monitor was unplugged would reopen off-screen, with
-        no obvious way back.
+        bounds-checked before being stored — not to keep the window on screen,
+        which Chromium does itself when it places a window whose saved position
+        is on a monitor that has gone, but so a garbage or hostile value can
+        never become a command-line flag handed to the browser.
         """
         try:
             g = {k: int(float(request.form[k])) for k in ("x", "y", "width", "height")}
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, OverflowError):
             return {"ok": False, "error": "bad geometry"}, 400
         if not (320 <= g["width"] <= 20000 and 240 <= g["height"] <= 20000):
             return {"ok": False, "error": "implausible size"}, 400
@@ -999,6 +1060,7 @@ def create_app() -> Flask:
         if runner.is_busy(job_id):
             abort(409, "job is busy")
         freed = JobStore(job_id).cleanup_intermediates()
+        _forget_survey()
         return {"ok": True, "freed_bytes": freed}
 
     @app.post("/job/<job_id>/delete")
@@ -1007,6 +1069,7 @@ def create_app() -> Flask:
         if runner.is_busy(job_id):
             abort(409, "job is busy — stop it first")
         JobStore(job_id).delete()
+        _forget_survey()
         return redirect(url_for("index"))
 
     # ----- voices -----------------------------------------------------------
@@ -1020,20 +1083,36 @@ def create_app() -> Flask:
         lib = VoiceLibrary()
         name = request.form.get("name", "").strip()
         if not name:
-            abort(400, "name required")
+            return _voices_page("Give the voice a name.", 400)
         upload = request.files.get("file")
         path = request.form.get("path", "").strip()
         try:
             if upload and upload.filename:
                 if Path(upload.filename).suffix.lower() not in AUDIO_EXTS:
-                    abort(400, "unsupported audio format")
+                    return _voices_page("That isn't an audio format this can read.", 400)
                 lib.add(name, file_storage=upload, orig_filename=upload.filename)
             elif path:
                 lib.add(name, src_path=path)
             else:
-                abort(400, "provide an audio file or path")
+                return _voices_page("Choose a clip first.", 400)
         except (ValueError, OSError) as e:
-            abort(400, str(e))
+            # A clip ffmpeg couldn't decode, a path that has gone, a folder macOS
+            # wouldn't let us read: all shown on the page, with a way back.
+            return _voices_page(f"Couldn't add that voice: {e}", 400)
+        return redirect(url_for("voices_page"))
+
+    @app.post("/voices/<voice_id>/default")
+    def voices_set_default(voice_id):
+        """Which narrator a newly imported book starts with.
+
+        Only new books: a book's voice is part of its own settings, and changing
+        it would re-render the book.
+        """
+        if not VoiceLibrary().get(voice_id):
+            abort(404)
+        s = app_settings.load_settings()
+        s.default_voice_id = voice_id
+        app_settings.save_settings(s)
         return redirect(url_for("voices_page"))
 
     @app.post("/voices/<voice_id>/delete")
@@ -1045,6 +1124,15 @@ def create_app() -> Flask:
     def voices_test(voice_id):
         if not VoiceLibrary().get(voice_id):
             abort(404)
+        # The page waits for the sample by polling for the file, which only
+        # means "this audition is done" if the previous audition's file is not
+        # still sitting there. Auditions queue behind a render, so waiting on
+        # the worker being idle instead — as this used to — meant four minutes
+        # of spinner and then playing whatever was there before.
+        try:
+            (paths().voices / f"_sample_{voice_id}.wav").unlink(missing_ok=True)
+        except OSError:
+            pass
         runner.submit(f"voicetest-{voice_id}", "voice_test", voice_id=voice_id)
         return {"ok": True}
 
@@ -1077,7 +1165,7 @@ def create_app() -> Flask:
         # page to find out how it is going was the single worst thing about the
         # old layout.
         jid = _busy_job_id()
-        if jid:
+        if jid and JobStore(jid).exists():  # a voice audition is busy, but is no book
             try:
                 store = JobStore(jid)
                 st = store.load_state()

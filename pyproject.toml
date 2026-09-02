@@ -44,7 +44,10 @@ dependencies = [
     # can be quit on purpose. Every import of these is guarded: the app runs
     # trayless (see ebook_audiobook.desktop) wherever they don't work, which
     # includes headless boxes, SSH sessions, and GNOME/Wayland.
-    "pystray>=0.19",
+    # 0.19.5, not 0.19: 0.19.4's macOS backend resizes the icon with
+    # PIL.Image.ANTIALIAS, which Pillow 10 removed, so with the Pillow pinned
+    # below the menu-bar icon raised inside pystray and silently never appeared.
+    "pystray>=0.19.5",
     "pillow>=10.0",          # pystray loads the icon through it
     # pystray already declares the per-platform bindings it needs (Quartz on
     # macOS, python-xlib on Linux), so those are NOT repeated here. Quartz is

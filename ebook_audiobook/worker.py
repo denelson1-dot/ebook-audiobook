@@ -139,7 +139,12 @@ def render_voice_sample(voice_id: str, params: dict | None = None) -> Path:
     finally:
         adapter.unload()
     out = paths().voices / f"_sample_{voice_id}.wav"
-    write_wav(out, audio.samples, audio.sample_rate)
+    # Written under another name and renamed into place: the Voices page polls
+    # for this file and plays it the moment it exists, so it must never exist
+    # half-written.
+    partial = out.with_name(f"_sample_{voice_id}.partial.wav")
+    write_wav(partial, audio.samples, audio.sample_rate)
+    partial.replace(out)
     return out
 
 
@@ -521,11 +526,7 @@ def render_job(
         store.save_state(st0)
     # Remember the lifecycle stage so a preview can restore it afterwards
     # (a preview must never leave the job looking "done").
-    prior_stage = store.load_state().stage
-    if prior_stage in (Stage.PREPARING.value, Stage.PREVIEWING.value,
-                       Stage.RENDERING.value, Stage.ASSEMBLING.value,
-                       Stage.PACKAGING.value):
-        prior_stage = Stage.EXTRACTED.value
+    prior_stage = _resumable_stage(store.load_state().stage)
 
     # Model load can take ~10s — surface a clear "preparing" status first so the
     # UI never shows a stale stage while busy.
@@ -540,6 +541,9 @@ def render_job(
         st.total_segments = 0
         st.rendered_segments = 0
         st.preview_progress = 0.0
+        # Zero or negative would divide the progress by nothing after a full
+        # model load; the web route clamps, the CLI does not.
+        preview_max_seconds = max(1.0, float(preview_max_seconds))
     store.save_state(st)
 
     # How hard this render may push the machine. Applied to *this* thread before
@@ -670,6 +674,12 @@ def render_job(
             state.output_bytes = None
         store.preview_path().unlink(missing_ok=True)
         state.preview_output = None
+        # Both, or the page reloads an <audio> pointed at a file that is gone.
+        state.preview_at = None
+        # The bitrate this file was actually encoded at. The voice's setting can
+        # be changed afterwards without re-rendering, and the library's listening
+        # time is derived from size ÷ bitrate — so it has to be the real one.
+        state.output_bitrate_kbps = int(voice.extra.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS))
         store.save_state(state)
         store.set_stage(Stage.DONE, f"output: {out}")
         # Opt-in housekeeping: the raw narration audio is several GB and buys
@@ -736,10 +746,7 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
         raise RuntimeError("no chapters — read the book first")
     voice = store.load_voice()
 
-    prior_stage = store.load_state().stage
-    if prior_stage in (Stage.PREPARING.value, Stage.PREVIEWING.value, Stage.RENDERING.value,
-                       Stage.ASSEMBLING.value, Stage.PACKAGING.value):
-        prior_stage = Stage.EXTRACTED.value
+    prior_stage = _resumable_stage(store.load_state().stage)
 
     store.set_stage(Stage.PREVIEWING, "measuring how long this will take")
     st = store.load_state()
@@ -771,15 +778,18 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
         # Narrated chapter titles are one short line each and read nothing like
         # the body of a book, so they are poor material for a rate.
         body = [s for s in ordered if s.boundary != "chapter_title"] or ordered
-        # With only one usable segment there is nothing left after discarding a
-        # warm-up, and a rough figure beats none at all.
-        skip_warmup = len(body) > 1
+        # The warm-up is the first generation the engine actually performs —
+        # not the first segment in the list, which may well be sitting in the
+        # cache from an earlier preview and cost nothing. With only one usable
+        # segment there is nothing left after discarding a warm-up, and a rough
+        # figure beats none at all.
+        warmup_pending = len(body) > 1
 
         chars = 0
         audio_seconds = 0.0
+        work_chars = 0
         work_seconds = 0.0
         counted = 0
-        first = True
 
         for seg in body[: config.MEASURE_MAX_SEGMENTS + 1]:
             if should_cancel and should_cancel():
@@ -791,12 +801,11 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
                 _render_one(adapter, seg.text, path)
             elapsed = time.monotonic() - t0
 
-            if first and fresh and skip_warmup:
+            if fresh and warmup_pending:
                 # The warm-up generation. Rendered and kept, but not counted.
-                first = False
+                warmup_pending = False
                 power.pace(pace_profile, elapsed)
                 continue
-            first = False
 
             duration = _safe_duration(path)
             if duration <= 0:
@@ -804,8 +813,10 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
             chars += len(seg.text)
             audio_seconds += duration
             # A cached segment costs no time, so it informs the audio-length
-            # measurement but must not flatter the speed one.
+            # measurement but must not flatter the speed one — neither its
+            # seconds nor its characters belong in that ratio.
             if fresh:
+                work_chars += len(seg.text)
                 work_seconds += elapsed
                 counted += 1
                 power.pace(pace_profile, elapsed)
@@ -824,7 +835,7 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
             state.chars_per_audio_second = round(chars / audio_seconds, 2)
             state.measured_voice_key = vkey
         if counted and work_seconds > 0:
-            state.chars_per_render_second = round(chars / work_seconds, 2)
+            state.chars_per_render_second = round(work_chars / work_seconds, 2)
         state.preview_progress = 0.0
         state.stage = prior_stage
         store.save_state(state)
@@ -844,6 +855,20 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
         raise
     finally:
         adapter.unload()
+
+
+def _resumable_stage(stage: str) -> str:
+    """The stage a job goes back to after a preview or a measurement.
+
+    Anything transient means "working", which the job is about to stop being.
+    A prior *error* is mapped the same way: previewing clears ``state.error``
+    (a preview is a fresh attempt), so restoring ``error`` afterwards would leave
+    the job saying "Stopped by a problem" with no problem to show.
+    """
+    if stage in (Stage.PREPARING.value, Stage.PREVIEWING.value, Stage.RENDERING.value,
+                 Stage.ASSEMBLING.value, Stage.PACKAGING.value, Stage.ERROR.value):
+        return Stage.EXTRACTED.value
+    return stage
 
 
 def _safe_duration(path: Path) -> float:

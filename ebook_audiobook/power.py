@@ -22,10 +22,15 @@ whatever else wants the GPU (a video call, a game, the window server).
 applied per-thread, which matters: the render must yield without the web UI
 becoming unresponsive too.
 
-macOS gets a fourth: Darwin's background QoS class, which is the documented way
-to say "prefer the efficiency cores". On Apple Silicon that is the difference
-between a warm laptop and a cool one, and no amount of ordinary niceness
-achieves it.
+macOS is different in two ways. It has no per-thread niceness at all:
+``setpriority(PRIO_PROCESS, 0, …)`` there lowers the *whole process*, web server
+included, and an unprivileged process can never raise it back — so one quiet
+render would leave every later full-speed render, and the UI, permanently
+niced. And it has something better: thread QoS classes, the documented way to
+say "this is background work, prefer the efficiency cores". On Apple Silicon
+that is the difference between a warm laptop and a cool one, and no amount of
+ordinary niceness achieves it. So on Darwin the priority lever is QoS alone,
+applied to the render thread and fully reversible.
 """
 
 from __future__ import annotations
@@ -59,11 +64,14 @@ MODE_DESCRIPTIONS = {
                 "Roughly 2x slower.",
 }
 
-# Darwin's setpriority() extensions. PRIO_DARWIN_THREAD scopes the call to the
-# calling thread; PRIO_DARWIN_BG puts it in the background QoS class, which
-# prefers efficiency cores and throttles its I/O. Values from <sys/resource.h>.
-_PRIO_DARWIN_THREAD = 3
-_PRIO_DARWIN_BG = 0x1000
+# Darwin thread QoS classes, from <sys/qos.h>, applied with
+# pthread_set_qos_class_self_np(). UTILITY is "long-running work the user is not
+# waiting on"; BACKGROUND additionally prefers the efficiency cores and throttles
+# I/O. DEFAULT puts a thread back where a fresh one starts.
+_QOS_DEFAULT = 0x15
+_QOS_UTILITY = 0x11
+_QOS_BACKGROUND = 0x09
+_DARWIN_QOS = {"utility": _QOS_UTILITY, "background": _QOS_BACKGROUND}
 
 
 @dataclass(frozen=True)
@@ -71,16 +79,16 @@ class Profile:
     """What one mode actually does."""
 
     mode: str
-    nice_delta: int          # added to the render thread's niceness
+    nice_delta: int          # added to the render thread's niceness (not on macOS)
     thread_divisor: int      # cores // this, floored at 1; 1 means "leave alone"
     pause_ratio: float       # rest for this fraction of the last segment's time
-    darwin_background: bool  # request Darwin's background QoS (Apple Silicon)
+    darwin_qos: str | None   # macOS thread QoS class: "utility", "background", None
 
 
 PROFILES = {
-    MODE_FULL: Profile(MODE_FULL, 0, 1, 0.0, False),
-    MODE_BALANCED: Profile(MODE_BALANCED, 5, 2, 0.15, False),
-    MODE_QUIET: Profile(MODE_QUIET, 10, 4, 0.5, True),
+    MODE_FULL: Profile(MODE_FULL, 0, 1, 0.0, None),
+    MODE_BALANCED: Profile(MODE_BALANCED, 5, 2, 0.15, "utility"),
+    MODE_QUIET: Profile(MODE_QUIET, 10, 4, 0.5, "background"),
 }
 
 
@@ -112,13 +120,21 @@ def _lower_thread_priority(delta: int) -> tuple[bool, bool]:
 
     Returns ``(applied, reversible)``. Deliberately per-thread rather than
     per-process: on Linux each thread is a schedulable task, so setpriority
-    targets this one alone, and Windows and macOS both have explicit per-thread
-    APIs. That keeps the web UI responsive while the render yields.
+    targets this one alone, and Windows has an explicit per-thread API. That
+    keeps the web UI responsive while the render yields.
+
+    macOS is skipped on purpose. Darwin has no per-thread niceness: the same
+    ``setpriority`` call lowers the whole process — every waitress thread with
+    it — and cannot be undone by an unprivileged process, so a single quiet
+    render would slow the UI and every later render for the life of the
+    process. Its lever is :func:`_darwin_qos`, which is per-thread and reversible.
     """
     if delta <= 0:
         return False, True
     if sys.platform == "win32":
         return _windows_below_normal(), True
+    if sys.platform == "darwin":
+        return False, True
     try:
         # Linux: PRIO_PROCESS on a thread id addresses that thread.
         current = os.getpriority(os.PRIO_PROCESS, 0)
@@ -139,20 +155,25 @@ def _windows_below_normal() -> bool:
         return False
 
 
-def _darwin_background(enable: bool) -> bool:
-    """Move this thread in or out of Darwin's background QoS class.
+def _darwin_qos(qos: str | None) -> bool:
+    """Put the calling thread in a Darwin QoS class; ``None`` restores the default.
 
     This is the lever that matters on Apple Silicon: background QoS is what
     steers work onto the efficiency cores, which is how a long render stops
-    cooking a fanless MacBook. Reversible, unlike POSIX niceness.
+    cooking a fanless MacBook. Per-thread, so the web server keeps its own
+    class, and reversible, unlike POSIX niceness.
     """
     if sys.platform != "darwin":
         return False
+    cls = _QOS_DEFAULT if qos is None else _DARWIN_QOS.get(qos)
+    if cls is None:
+        return False
     try:
-        libc = ctypes.CDLL("libc.dylib", use_errno=True)
-        rc = libc.setpriority(_PRIO_DARWIN_THREAD, 0,
-                              _PRIO_DARWIN_BG if enable else 0)
-        return rc == 0
+        libc = ctypes.CDLL("libSystem.B.dylib", use_errno=True)
+        fn = libc.pthread_set_qos_class_self_np
+        fn.argtypes = (ctypes.c_uint, ctypes.c_int)
+        fn.restype = ctypes.c_int
+        return fn(cls, 0) == 0
     except Exception:  # noqa: BLE001
         return False
 
@@ -190,7 +211,7 @@ def apply(profile: Profile) -> list[str]:
     notes: list[str] = []
     if profile.mode == MODE_FULL:
         # Undo anything a previous quiet render left behind that we *can* undo.
-        _darwin_background(False)
+        _darwin_qos(None)
         return notes
 
     threads = _limit_torch_threads(profile.thread_divisor)
@@ -203,8 +224,10 @@ def apply(profile: Profile) -> list[str]:
         if not reversible:
             _tainted.value = True
 
-    if profile.darwin_background and _darwin_background(True):
-        notes.append("using efficiency cores (background QoS)")
+    if profile.darwin_qos and _darwin_qos(profile.darwin_qos):
+        notes.append("using efficiency cores (background QoS)"
+                     if profile.darwin_qos == "background"
+                     else "running as a utility-class task")
 
     if profile.pause_ratio:
         notes.append(f"resting {int(profile.pause_ratio * 100)}% of the time")

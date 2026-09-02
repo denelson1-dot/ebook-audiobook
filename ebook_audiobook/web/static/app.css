@@ -371,7 +371,7 @@ hr, .hr { height: 1px; background: var(--line); border: 0; margin: 0; }
 .acts .btn {
   flex: 1; height: 26px; padding: 0 6px; font-size: 11.5px;
   background: rgba(18, 14, 11, .74); border-color: rgba(255, 255, 255, .2);
-  color: #FBF8F4; backdrop-filter: blur(7px);
+  color: #FBF8F4; -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 .acts .btn:hover { background: rgba(18, 14, 11, .9); border-color: rgba(255, 255, 255, .4); }
 
@@ -405,8 +405,11 @@ textarea { height: auto; min-height: 76px; padding: 8px 11px; line-height: 1.6; 
 select { cursor: pointer; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; }
 
+/* -webkit-appearance alongside appearance throughout: Safari only dropped the
+   prefix in 15.4, and without it these controls fall back to the native
+   widgets — the switch, drawn entirely with ::after, has nothing to fall back to. */
 input[type="checkbox"] {
-  appearance: none; width: 17px; height: 17px; border-radius: 5px; margin: 0;
+  -webkit-appearance: none; appearance: none; width: 17px; height: 17px; border-radius: 5px; margin: 0;
   border: 1.5px solid var(--line-2); background: var(--bg); cursor: pointer;
   display: grid; place-items: center; flex: none;
 }
@@ -419,7 +422,7 @@ input[type="checkbox"]:indeterminate { border-color: var(--accent); }
 input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2px; background: var(--accent); border-radius: 1px; }
 
 .switch { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
-.switch input { appearance: none; width: 34px; height: 20px; border-radius: 99px; margin: 1px 0 0;
+.switch input { -webkit-appearance: none; appearance: none; width: 34px; height: 20px; border-radius: 99px; margin: 1px 0 0;
   background: var(--track); border: 1px solid var(--line-2); position: relative; flex: none; cursor: pointer; }
 .switch input::after {
   content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
@@ -438,10 +441,10 @@ input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2
 .seg-btn.on, .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px var(--shade); font-weight: 600; }
 
 .range { display: flex; align-items: center; gap: 10px; }
-.range input[type="range"] { appearance: none; flex: 1; height: 4px; padding: 0; border: 0;
+.range input[type="range"] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; padding: 0; border: 0;
   border-radius: 99px; background: var(--track); cursor: pointer; }
 .range input[type="range"]::-webkit-slider-thumb {
-  appearance: none; width: 15px; height: 15px; border-radius: 50%;
+  -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%;
   background: var(--surface); border: 1.5px solid var(--accent); box-shadow: 0 1px 3px var(--shade);
 }
 .range input[type="range"]::-moz-range-thumb {
@@ -454,7 +457,7 @@ input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2
   border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); cursor: pointer; }
 .pick.selected, .power-mode.selected { border-color: var(--accent); background: var(--accent-quiet); }
 .pick input[type="radio"], .power-mode input[type="radio"] {
-  appearance: none; width: 15px; height: 15px; border-radius: 50%; margin: 2px 0 0;
+  -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%; margin: 2px 0 0;
   border: 1.5px solid var(--line-2); flex: none; display: grid; place-items: center; cursor: pointer;
 }
 .pick input[type="radio"]:checked, .power-mode input[type="radio"]:checked { border-color: var(--accent); }
@@ -656,6 +659,7 @@ input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2
 .fade { -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent); mask-image: linear-gradient(180deg, #000 82%, transparent); }
 .advanced summary { cursor: pointer; font-size: 12.5px; font-weight: 500; padding: 8px 0; }
 .advanced summary::marker { color: var(--text-3); }
+.advanced summary::-webkit-details-marker { color: var(--text-3); }
 
 /* ── narrow windows ────────────────────────────────────────────────────── */
 @media (max-width: 900px) {

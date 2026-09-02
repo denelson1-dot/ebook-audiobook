@@ -18,12 +18,14 @@ it has not classified as safe unless told twice.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import settings as app_settings
 from .config import paths
 from .jobs.models import Stage
-from .jobs.store import JobStore
+from .jobs.store import JobStore, is_junk
 
 # Why a book's working files may or may not be reclaimed right now.
 SAFE = "safe"   # finished, or nothing narrated yet — deleting loses no work
@@ -69,10 +71,20 @@ class BookStorage:
 
 @dataclass
 class Survey:
-    """Every book, plus the data that belongs to no book (voices, settings)."""
+    """Every book, plus the data that belongs to no book (voices, settings).
+
+    ``app_bytes`` and ``other_bytes`` are what else sits in the data folder —
+    the installed program itself (the installer puts its virtualenv there, and
+    that alone is several gigabytes) and leftovers no book claims. They are kept
+    out of ``total_bytes``, which is the *books'* footprint, and shown on the
+    Storage page so that its "in your folder" figure is the one Finder or
+    Explorer would give for the same folder.
+    """
 
     books: list[BookStorage] = field(default_factory=list)
     extras_bytes: int = 0
+    app_bytes: int = 0
+    other_bytes: int = 0
 
     def _sum(self, attr: str, *reclaim: str) -> int:
         return sum(getattr(b, attr) for b in self.books
@@ -102,7 +114,18 @@ class Survey:
 
     @property
     def total_bytes(self) -> int:
+        """The books, their outputs, and the small things around them."""
         return self.working_bytes + self.output_bytes + self.keep_bytes
+
+    @property
+    def books_bytes(self) -> int:
+        """Just the books: what "N books · X on disk" should say."""
+        return self._sum("disk_bytes")
+
+    @property
+    def folder_bytes(self) -> int:
+        """Everything in the data folder, the way a file manager would count it."""
+        return self.total_bytes + self.app_bytes + self.other_bytes
 
     @property
     def safe_books(self) -> list[BookStorage]:
@@ -112,12 +135,16 @@ class Survey:
         return {
             "books": [b.to_dict() for b in self.books],
             "extras_bytes": self.extras_bytes,
+            "app_bytes": self.app_bytes,
+            "other_bytes": self.other_bytes,
             "safe_bytes": self.safe_bytes,
             "held_bytes": self.held_bytes,
             "working_bytes": self.working_bytes,
             "output_bytes": self.output_bytes,
             "keep_bytes": self.keep_bytes,
             "total_bytes": self.total_bytes,
+            "books_bytes": self.books_bytes,
+            "folder_bytes": self.folder_bytes,
             "safe_count": len(self.safe_books),
         }
 
@@ -134,10 +161,62 @@ def _tree_bytes(path) -> int:
 
 
 def _rendered_segment_count(store: JobStore) -> int:
+    """How many segments are on disk. Not "how many .wav files": on an exFAT
+    or SMB volume macOS writes a ``._name.wav`` sidecar beside each real one,
+    and counting those would double the figure and, at the boundary, turn
+    "nothing narrated" into "something narrated"."""
     try:
-        return sum(1 for p in store.segments_dir.glob("*.wav"))
+        return sum(1 for p in store.segments_dir.glob("*.wav") if not is_junk(p.name))
     except OSError:
         return 0
+
+
+# What the installer puts in the data folder that is not the user's data: the
+# program's own virtualenv and the engine's model cache. Walked rarely — the
+# venv is ~100k files and changes only when the app is reinstalled.
+_APP_DIRS = ("venv", "models")
+_APP_BYTES_TTL = 600.0
+_app_cache: dict = {"at": 0.0, "root": None, "value": 0}
+
+# Everything a book accounts for lives here; anything else at the top of the
+# data folder is "other" (temporary files, the app window's browser profile).
+_BOOK_DIRS = ("jobs", "imports", "voices", "outputs")
+
+
+def _app_bytes(root: Path) -> int:
+    now = time.monotonic()
+    if _app_cache["root"] == root and now - _app_cache["at"] < _APP_BYTES_TTL:
+        return _app_cache["value"]
+    value = sum(_tree_bytes(root / d) for d in _APP_DIRS)
+    _app_cache.update(at=now, root=root, value=value)
+    return value
+
+
+def _other_bytes(root: Path, claimed: set[Path]) -> int:
+    """Bytes in the data folder that no book and no known purpose accounts for.
+
+    Two kinds: top-level entries that are none of the known folders, and files
+    in ``imports/`` or ``outputs/`` that no job refers to any more — a job
+    deleted by hand, or an output left by a version that filed things
+    differently. Reported so the folder total is honest, not so it can be
+    deleted from here: nothing in this module touches them.
+    """
+    total = 0
+    try:
+        for entry in root.iterdir():
+            if entry.name in _BOOK_DIRS or entry.name in _APP_DIRS or entry.name == "settings.json":
+                continue
+            total += _tree_bytes(entry)
+        for folder in ("imports", "outputs"):
+            base = root / folder
+            if not base.is_dir():
+                continue
+            for entry in base.iterdir():
+                if entry.is_file() and entry not in claimed:
+                    total += _tree_bytes(entry)
+    except OSError:
+        pass
+    return total
 
 
 def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[str, str, int]:
@@ -156,14 +235,22 @@ def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[st
     if rendered == 0:
         # A preview and a normalized EPUB, nothing narrated. Re-made in seconds.
         return SAFE, "Nothing narrated yet — this is only a preview and a working copy of the book.", rendered
-    if state.stage in (Stage.IMPORTED.value, Stage.EXTRACTED.value):
+    total = state.total_segments or 0
+    if (state.stage in (Stage.IMPORTED.value, Stage.EXTRACTED.value)
+            and not (state.render_started_at and total > rendered)):
         # Segments exist, but no full render was ever started — generating a
         # preview caches a handful of them and then puts the stage back. Calling
         # that "a resume worth hours" would be scaremongering over a few seconds
         # of audio, so it is offered like any other finished book's leftovers.
+        #
+        # The stage alone cannot say that, though. A render interrupted by a
+        # crash or a force-quit is reset to "extracted" on the next launch
+        # (web.app._reconcile_stale), and on disk it looks exactly like this —
+        # except that a full render stamps ``render_started_at`` and a preview
+        # never does. Twelve thousand narrated sections are a resume, whatever
+        # the stage says, so those fall through to the held case below.
         return SAFE, "Only the audio from a preview — a few seconds' work to make again.", rendered
 
-    total = state.total_segments or 0
     if total > rendered:
         left = total - rendered
         return HELD, (f"Keeping these lets it carry on from where it stopped. "
@@ -172,9 +259,33 @@ def classify(store: JobStore, state, working_bytes: int, busy: bool) -> tuple[st
                   f"{rendered:,} sections again."), rendered
 
 
-def survey(busy_job_id: str | None = None) -> Survey:
-    """Look at every job on disk. ``busy_job_id`` is excluded from reclaiming."""
+def _is_busy(jid: str, busy_job_id: str | None, is_busy) -> bool:
+    """Whether a worker owns this job right now — running *or queued*.
+
+    ``busy_job_id`` is the one being rendered this instant. ``is_busy`` is the
+    runner's own answer, which also counts work that is queued and about to
+    start; between a submit and the worker picking it up the first is None and
+    the second is True, and deleting the job's files in that window means the
+    render that begins a moment later re-narrates everything it had.
+    """
+    if jid == busy_job_id:
+        return True
+    if is_busy is None:
+        return False
+    try:
+        return bool(is_busy(jid))
+    except Exception:  # noqa: BLE001 - never let a busy check hide the survey
+        return False
+
+
+def survey(busy_job_id: str | None = None, is_busy=None) -> Survey:
+    """Look at every job on disk. Busy jobs are excluded from reclaiming.
+
+    ``is_busy`` is a ``job_id -> bool`` callable (the web runner's) that also
+    knows about queued work; see :func:`_is_busy`.
+    """
     out = Survey()
+    claimed: set[Path] = set()
     for jid in JobStore.list_ids():
         store = JobStore(jid)
         try:
@@ -185,7 +296,11 @@ def survey(busy_job_id: str | None = None) -> Survey:
             working = store.intermediate_bytes()
             output = _tree_bytes(store.output_path())
             keep = max(0, store.disk_bytes() - working - output)
-            reclaim, reason, rendered = classify(store, state, working, jid == busy_job_id)
+            for owned in (store.imported_source(), store.preview_path(), store.output_path()):
+                if owned is not None:
+                    claimed.add(owned)
+            reclaim, reason, rendered = classify(store, state, working,
+                                                 _is_busy(jid, busy_job_id, is_busy))
             out.books.append(BookStorage(
                 job_id=jid, title=book.title, author=book.author, stage=state.stage,
                 working_bytes=working, output_bytes=output, keep_bytes=keep,
@@ -198,20 +313,24 @@ def survey(busy_job_id: str | None = None) -> Survey:
     out.books.sort(key=lambda b: (b.reclaim != SAFE, -b.working_bytes, b.title))
     p = paths()
     out.extras_bytes = _tree_bytes(p.voices) + _tree_bytes(p.root / "settings.json")
+    out.app_bytes = _app_bytes(p.root)
+    out.other_bytes = _other_bytes(p.root, claimed)
     return out
 
 
-def free(job_ids, busy_job_id: str | None = None, force: bool = False) -> tuple[int, list[str]]:
+def free(job_ids, busy_job_id: str | None = None, force: bool = False,
+         is_busy=None) -> tuple[int, list[str]]:
     """Delete the working files of the named jobs.
 
-    Skips anything a worker is touching, and — unless ``force`` — anything whose
-    files are holding a resume. Returns ``(bytes_freed, skipped_job_ids)``.
+    Skips anything a worker is touching or about to, and — unless ``force`` —
+    anything whose files are holding a resume. Returns
+    ``(bytes_freed, skipped_job_ids)``.
     """
     freed = 0
     skipped: list[str] = []
     for jid in job_ids:
         store = JobStore(jid)
-        if not store.exists() or jid == busy_job_id:
+        if not store.exists() or _is_busy(jid, busy_job_id, is_busy):
             skipped.append(jid)
             continue
         state = store.load_state()

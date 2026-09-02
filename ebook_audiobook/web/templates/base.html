@@ -103,7 +103,8 @@
           <h3>Something this needs is missing</h3>
           <div id="prereqBody"></div>
         </div>
-        {% if setup_needed and (nav != 'library' or jobs) %}
+        {# Not on an empty library: its welcome screen asks the same question. #}
+        {% if setup_needed and (nav != 'library' or jobs or request.endpoint == 'new_page') %}
         <div class="card setup-banner">
           <h3>Where should finished audiobooks go?</h3>
           <p class="meta" style="margin-top:4px">Choose your audiobooks library folder — the one Plex watches.
@@ -139,10 +140,6 @@
       document.getElementById("prereqBanner").hidden = false;
     } catch (e) { /* offline or shutting down: not worth surfacing */ }
   })();
-  function escapeHtml(s) {
-    return String(s ?? "").replace(/[&<>"']/g, c => (
-      {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  }
   const homeDir = {{ home_dir|tojson }};
   startSidebar();
   </script>
@@ -185,12 +182,15 @@
   </script>
   {% endif %}
 
-  {% if setup_needed and (nav != 'library' or jobs) %}
+  {% if setup_needed and (nav != 'library' or jobs or request.endpoint == 'new_page') %}
   <script>
   document.getElementById("setupChooseBtn").addEventListener("click", () => {
     openFsBrowser({ start: homeDir, accept: "dir", onPick: async (path) => {
-      const r = await postForm("/settings", { audiobooks_root: path });
-      if (r && r.ok) location.reload(); else toast((r && r.error) || "Couldn't use that folder");
+      // A folder that can't be written to is refused with a reason (on a Mac,
+      // often that the app was never given access to it). postFormResult
+      // returns that reason; postForm would have thrown it away.
+      const r = await postFormResult("/settings", { audiobooks_root: path });
+      if (r.ok) location.reload(); else toast(r.error || "Couldn't use that folder");
     }});
   });
   document.getElementById("setupSkipBtn").addEventListener("click", async () => {
