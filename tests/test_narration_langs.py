@@ -53,8 +53,16 @@ def test_nothing_installed_in_an_empty_cache(tmp_path):
     assert nl.snapshot_dir(tmp_path) is None
     assert not nl.is_installed("english", tmp_path)
     assert not nl.language_available("fr", tmp_path)
-    assert nl.available_languages(tmp_path) == []
     assert nl.bytes_on_disk(nl.MULTILINGUAL, tmp_path) == 0
+
+
+def test_english_is_always_available_even_before_its_first_download(tmp_path):
+    """The English model is fetched by the engine itself on the first render,
+    as it always was — and the fake engine needs none. A fresh install must
+    not be told to install anything before narrating in English."""
+    assert nl.language_available("en", tmp_path)
+    assert [lg.code for lg in nl.available_languages(tmp_path)] == ["en"]
+    nl.require_installed("en", tmp_path)  # does not raise
 
 
 def test_installed_means_every_file_present(tmp_path):
@@ -69,6 +77,10 @@ def test_installed_means_every_file_present(tmp_path):
     # One file short is not installed — a half-finished download must not count.
     (nl.snapshot_dir(root) / "t3_cfg.safetensors").unlink()
     assert not nl.is_installed("english", root)
+
+    # The multilingual pack, complete, makes French available.
+    root2 = fake_cache(tmp_path / "two", {name: 1 for name in nl.MULTILINGUAL.files})
+    assert nl.language_available("fr", root2)
 
 
 def test_download_progress_counts_partial_blobs(tmp_path):

@@ -207,12 +207,19 @@ def bytes_on_disk(pack: Pack, root: Path | None = None) -> int:
 
 
 def language_available(lang: str, root: Path | None = None) -> bool:
+    """Whether a book can be narrated in ``lang`` on this machine.
+
+    English is always available: its model is the one the engine fetches by
+    itself on the first render, as it always has, and the fake engine needs
+    no model at all. Only the opt-in pack is ever a precondition.
+    """
+    if lang == "en":
+        return True
     return is_installed(pack_for(lang).id, root)
 
 
 def available_languages(root: Path | None = None) -> list[Language]:
-    ready = {pid for pid in PACKS if is_installed(pid, root)}
-    return [lg for lg in LANGUAGES.values() if lg.pack in ready]
+    return [lg for lg in LANGUAGES.values() if language_available(lg.code, root)]
 
 
 class LanguagePackMissing(ValueError):
