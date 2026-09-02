@@ -21,6 +21,31 @@ from ..config import VoiceSettings, paths
 from .models import Book, Chapter, JobState, Segment, Stage
 
 
+def is_junk(name: str) -> bool:
+    """A file the operating system dropped in, not one of ours.
+
+    Finder writes ``.DS_Store`` into any folder it shows, and on a volume that
+    can't hold resource forks (exFAT, SMB) macOS writes an AppleDouble
+    ``._name`` beside every real file. Both are invisible in Finder and both
+    turn up in a plain glob.
+    """
+    return name.startswith(".")
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """Whether two paths name one directory, by identity rather than spelling.
+
+    ``resolve()`` does not fold case, and APFS and NTFS are case-insensitive:
+    a library root configured as ``~/audiobooks`` while the folder is
+    ``~/Audiobooks`` is the same folder, and a string comparison says it isn't.
+    """
+    try:
+        sa, sb = a.stat(), b.stat()
+    except OSError:
+        return False
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
 def _atomic_write(path: Path, text: str) -> None:
     """Write then rename, so a crash mid-write never corrupts state."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,13 +74,13 @@ def _prune_library_dirs(book_dir: Path) -> None:
         d = book_dir.resolve()
     except OSError:
         return
-    if root not in d.parents:  # output wasn't under the library root — leave it
-        return
+    if not any(_same_file(root, parent) for parent in d.parents):
+        return  # output wasn't under the library root — leave it
 
     for name in ("cover.jpg", "cover.png"):  # sidecars we wrote
         (d / name).unlink(missing_ok=True)
 
-    while d != root and root in d.parents:
+    while not _same_file(d, root) and any(_same_file(root, parent) for parent in d.parents):
         try:
             d.rmdir()  # succeeds only when empty
         except OSError:
@@ -159,13 +184,22 @@ class JobStore:
         so the job stays in the history. Returns bytes freed."""
         import shutil
 
-        freed = self.intermediate_bytes()
+        before = self.intermediate_bytes()
         shutil.rmtree(self.segments_dir, ignore_errors=True)
         shutil.rmtree(self.chapters_audio_dir, ignore_errors=True)
-        (self.dir / "normalized.epub").unlink(missing_ok=True)
-        self.preview_path().unlink(missing_ok=True)
+        for stray in (self.dir / "normalized.epub", self.preview_path()):
+            try:
+                stray.unlink(missing_ok=True)
+            except OSError:
+                # Windows refuses to unlink a file that is open, and the
+                # preview is open for as long as the browser is streaming it.
+                # The segments are already gone; one lingering preview is not
+                # worth failing the whole request for.
+                pass
         self.segments_dir.mkdir(parents=True, exist_ok=True)
         self.chapters_audio_dir.mkdir(parents=True, exist_ok=True)
+        # Measured, not assumed: whatever rmtree could not remove is still here.
+        freed = max(0, before - self.intermediate_bytes())
         # The preview file is gone; clear its state so the UI stops pointing an
         # <audio> element at a now-missing file (which 404s on reload).
         state = self.load_state()
