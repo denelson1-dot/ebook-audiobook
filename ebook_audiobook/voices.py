@@ -39,6 +39,9 @@ BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "voices"
 # ``language`` is the language the clip was recorded in — the one this voice
 # narrates naturally. Each language ships its own voices and its own default;
 # a voice is never offered as a narrator for a language it does not speak.
+# The name leads with the language said in itself, matching the language
+# picker directly above this list on a book's page; what follows it — the
+# gender and the accent region — is translated like any other label.
 BUNDLED = (
     {"id": "male-north-american", "name": N_("English — Male, North American"), "language": "en",
      "file": "male-north-american.flac", "pacing": 0.42},
@@ -48,24 +51,24 @@ BUNDLED = (
      "file": "male-british.flac", "pacing": 0.42},
     {"id": "female-british", "name": N_("English — Female, British"), "language": "en",
      "file": "female-british.flac", "pacing": 0.42},
-    {"id": "female-french", "name": N_("French — Female"), "language": "fr",
+    {"id": "female-french", "name": N_("Français — Female"), "language": "fr",
      "file": "female-french.flac", "pacing": 0.42},
-    {"id": "male-french", "name": N_("French — Male"), "language": "fr",
+    {"id": "male-french", "name": N_("Français — Male"), "language": "fr",
      "file": "male-french.flac", "pacing": 0.42},
     # Spanish ships an accent pair per region rather than one "neutral" reader:
     # a Mexican and a Peninsular narrator are audibly different within a
     # sentence. The names say the region, as the English ones do.
-    {"id": "female-spanish-latin-american", "name": N_("Spanish — Female, Latin American"),
+    {"id": "female-spanish-latin-american", "name": N_("Español — Female, Latin American"),
      "language": "es", "file": "female-spanish-latin-american.flac", "pacing": 0.42},
-    {"id": "male-spanish-latin-american", "name": N_("Spanish — Male, Latin American"),
+    {"id": "male-spanish-latin-american", "name": N_("Español — Male, Latin American"),
      "language": "es", "file": "male-spanish-latin-american.flac", "pacing": 0.42},
-    {"id": "female-spanish-european", "name": N_("Spanish — Female, European"),
+    {"id": "female-spanish-european", "name": N_("Español — Female, European"),
      "language": "es", "file": "female-spanish-european.flac", "pacing": 0.42},
-    {"id": "male-spanish-european", "name": N_("Spanish — Male, European"),
+    {"id": "male-spanish-european", "name": N_("Español — Male, European"),
      "language": "es", "file": "male-spanish-european.flac", "pacing": 0.42},
-    {"id": "female-japanese", "name": N_("Japanese — Female"), "language": "ja",
+    {"id": "female-japanese", "name": N_("日本語 — Female"), "language": "ja",
      "file": "female-japanese.flac", "pacing": 0.42},
-    {"id": "male-japanese", "name": N_("Japanese — Male"), "language": "ja",
+    {"id": "male-japanese", "name": N_("日本語 — Male"), "language": "ja",
      "file": "male-japanese.flac", "pacing": 0.42},
 )
 

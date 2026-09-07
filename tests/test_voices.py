@@ -211,20 +211,18 @@ def test_a_voice_may_suggest_settings_or_leave_them_alone():
     assert lib.get("default").pacing is None
 
 
-# The display name leads with the language, so a picker showing several reads
-# as a list rather than a jumble. Extend this when a language is added — which
-# is the point: the name is part of shipping a voice, not an afterthought.
-LANGUAGE_NAME_PREFIX = {"en": "English — ", "fr": "French — ",
-                        "es": "Spanish — ", "ja": "Japanese — "}
-
-
+# The display name leads with the language said in itself — "Español — Female,
+# Latin American" — so it matches the language picker directly above it and a
+# picker showing several reads as a list rather than a jumble. Derived rather
+# than listed here, so adding a language cannot forget to update this.
 def test_every_bundled_voice_names_its_language():
     from ebook_audiobook import narration_langs
     from ebook_audiobook.voices import BUNDLED
 
     for b in BUNDLED:
-        assert b["language"] in LANGUAGE_NAME_PREFIX, b["id"]
-        assert b["name"].startswith(LANGUAGE_NAME_PREFIX[b["language"]]), b["id"]
+        assert b["language"] in narration_langs.LANGUAGES, b["id"]
+        prefix = narration_langs.LANGUAGES[b["language"]].native + " — "
+        assert b["name"].startswith(prefix), b["id"]
         # A voice for a language the app does not claim to support properly is
         # a voice nobody can reach: the picker only offers supported languages.
         assert narration_langs.LANGUAGES[b["language"]].tier == "supported", b["id"]

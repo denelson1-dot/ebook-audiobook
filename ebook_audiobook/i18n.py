@@ -48,25 +48,17 @@ class Language:
     plural: Callable[[int], int]
     decimal: str                    # "," for French
     thousands: str                  # U+202F narrow no-break space for French
-    # Has a native speaker been through this catalog? A machine-written
-    # translation is worth shipping — it is far better than an English-only
-    # app — but it is worth saying so, and saying where to send corrections,
-    # rather than letting someone assume a person wrote it.
-    reviewed: bool = True
 
 
 SUPPORTED: dict[str, Language] = {
     "en": Language("en", "English", lambda n: int(n != 1), ".", ","),
-    # Also unreviewed: a native speaker has been lined up to read it since
-    # 1.4.0 and has not yet, and an adversarial pass found real grammar errors
-    # in it. It says so until that review actually happens.
-    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " ", reviewed=False),
+    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " "),
     # Spanish separators are the reverse of English, and they are not a free
     # choice: a page renders numbers from Python and from JavaScript both, and
     # toLocaleString("es") gives "1.234.567" and "1,5".
-    "es": Language("es", "Español", lambda n: int(n != 1), ",", ".", reviewed=False),
+    "es": Language("es", "Español", lambda n: int(n != 1), ",", "."),
     # Japanese has a single plural form, and groups numbers as English does.
-    "ja": Language("ja", "日本語", lambda n: 0, ".", ",", reviewed=False),
+    "ja": Language("ja", "日本語", lambda n: 0, ".", ","),
 }
 
 
@@ -259,9 +251,8 @@ def js_catalog(lang: str) -> dict:
 
 
 def language_choices() -> list[dict]:
-    """For the Settings select and the first-run modal: code, native name, and
-    whether a native speaker has been through the catalog."""
-    return [{"code": code, "native": lang.native, "reviewed": lang.reviewed}
+    """For the Settings select and the first-run modal: code and native name."""
+    return [{"code": code, "native": lang.native}
             for code, lang in SUPPORTED.items()]
 
 

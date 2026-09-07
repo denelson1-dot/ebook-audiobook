@@ -61,7 +61,12 @@ PACKS = {ENGLISH.id: ENGLISH, MULTILINGUAL.id: MULTILINGUAL}
 @dataclass(frozen=True)
 class Language:
     code: str
-    name: str        # N_() msgid — the language's English name
+    name: str        # N_() msgid — the language's English name, for sentences
+    # The language's name in itself ("Español"), shown untranslated wherever a
+    # language is picked from a list. Someone choosing a narration language is
+    # looking for their own language's name, not this interface's word for it —
+    # which is also how the interface-language picker reads (see i18n.py).
+    native: str
     pack: str
     # "supported": the text is prepared for narration (numbers, abbreviations,
     # headings). "experimental": the model speaks it, but numbers and
@@ -70,29 +75,29 @@ class Language:
 
 
 LANGUAGES: dict[str, Language] = {
-    "en": Language("en", N_("English"), "english", "supported"),
-    "fr": Language("fr", N_("French"), "multilingual", "supported"),
-    "es": Language("es", N_("Spanish"), "multilingual", "supported"),
-    "ja": Language("ja", N_("Japanese"), "multilingual", "supported"),
-    "ar": Language("ar", N_("Arabic"), "multilingual", "experimental"),
-    "da": Language("da", N_("Danish"), "multilingual", "experimental"),
-    "de": Language("de", N_("German"), "multilingual", "experimental"),
-    "el": Language("el", N_("Greek"), "multilingual", "experimental"),
-    "fi": Language("fi", N_("Finnish"), "multilingual", "experimental"),
-    "he": Language("he", N_("Hebrew"), "multilingual", "experimental"),
-    "hi": Language("hi", N_("Hindi"), "multilingual", "experimental"),
-    "it": Language("it", N_("Italian"), "multilingual", "experimental"),
-    "ko": Language("ko", N_("Korean"), "multilingual", "experimental"),
-    "ms": Language("ms", N_("Malay"), "multilingual", "experimental"),
-    "nl": Language("nl", N_("Dutch"), "multilingual", "experimental"),
-    "no": Language("no", N_("Norwegian"), "multilingual", "experimental"),
-    "pl": Language("pl", N_("Polish"), "multilingual", "experimental"),
-    "pt": Language("pt", N_("Portuguese"), "multilingual", "experimental"),
-    "ru": Language("ru", N_("Russian"), "multilingual", "experimental"),
-    "sv": Language("sv", N_("Swedish"), "multilingual", "experimental"),
-    "sw": Language("sw", N_("Swahili"), "multilingual", "experimental"),
-    "tr": Language("tr", N_("Turkish"), "multilingual", "experimental"),
-    "zh": Language("zh", N_("Chinese"), "multilingual", "experimental"),
+    "en": Language("en", N_("English"), "English", "english", "supported"),
+    "fr": Language("fr", N_("French"), "Français", "multilingual", "supported"),
+    "es": Language("es", N_("Spanish"), "Español", "multilingual", "supported"),
+    "ja": Language("ja", N_("Japanese"), "日本語", "multilingual", "supported"),
+    "ar": Language("ar", N_("Arabic"), "العربية", "multilingual", "experimental"),
+    "da": Language("da", N_("Danish"), "Dansk", "multilingual", "experimental"),
+    "de": Language("de", N_("German"), "Deutsch", "multilingual", "experimental"),
+    "el": Language("el", N_("Greek"), "Ελληνικά", "multilingual", "experimental"),
+    "fi": Language("fi", N_("Finnish"), "Suomi", "multilingual", "experimental"),
+    "he": Language("he", N_("Hebrew"), "עברית", "multilingual", "experimental"),
+    "hi": Language("hi", N_("Hindi"), "हिन्दी", "multilingual", "experimental"),
+    "it": Language("it", N_("Italian"), "Italiano", "multilingual", "experimental"),
+    "ko": Language("ko", N_("Korean"), "한국어", "multilingual", "experimental"),
+    "ms": Language("ms", N_("Malay"), "Bahasa Melayu", "multilingual", "experimental"),
+    "nl": Language("nl", N_("Dutch"), "Nederlands", "multilingual", "experimental"),
+    "no": Language("no", N_("Norwegian"), "Norsk", "multilingual", "experimental"),
+    "pl": Language("pl", N_("Polish"), "Polski", "multilingual", "experimental"),
+    "pt": Language("pt", N_("Portuguese"), "Português", "multilingual", "experimental"),
+    "ru": Language("ru", N_("Russian"), "Русский", "multilingual", "experimental"),
+    "sv": Language("sv", N_("Swedish"), "Svenska", "multilingual", "experimental"),
+    "sw": Language("sw", N_("Swahili"), "Kiswahili", "multilingual", "experimental"),
+    "tr": Language("tr", N_("Turkish"), "Türkçe", "multilingual", "experimental"),
+    "zh": Language("zh", N_("Chinese"), "中文", "multilingual", "experimental"),
 }
 
 # ISO 639-2/B codes for the m4b's language tag, which is what players read.

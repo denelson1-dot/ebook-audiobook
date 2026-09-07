@@ -148,11 +148,6 @@ Rules that keep it working:
 - Never call `locale.setlocale`: it is process-global and thread-unsafe.
 - Commit the `.po` and the `.mo` together. A translator edits the `.po` in
   Poedit; `compile` then `check` before committing what comes back.
-- A catalog written without a native speaker's review sets `reviewed=False` on
-  its `i18n.SUPPORTED` entry. The Settings panel and the first-run modal then
-  say so and link to the locale files. Shipping a machine-written translation
-  is right — it beats an English-only app — but letting someone assume a person
-  wrote it is not.
 - Not translated, on purpose: CLI output, the bug report from `ebook-audiobook
   report`, the "Unknown Title"/"Unknown Author" fallbacks (they name folders and
   tags), raw exception text, and the shell commands in "how to fix it" hints.
