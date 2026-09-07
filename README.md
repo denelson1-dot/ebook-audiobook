@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="The library: one book being narrated, four finished, one waiting" width="100%">
+  <img src="docs/screenshots/library.png" alt="The library: one book being narrated, one finished, three waiting" width="100%">
 </p>
 
 No cloud, no account, no telemetry. The voice model runs on your GPU (NVIDIA,
@@ -42,9 +42,9 @@ leaves the computer.
 - **A real audiobook, not a text-to-speech dump.** One `.m4b` per book with a
   chapter marker per chapter, the cover embedded, and the tags Plex and
   Audiobookshelf look for. Filed as `Author / Title (Year) / Title.m4b`.
-- **A narrator you'd choose.** Seven public-domain voices ship with it, tuned by
-  ear — five English, two French. Or clone a rights-cleared clip of your own in
-  about ten seconds of audio.
+- **A narrator you'd choose.** Twelve public-domain voices ship with it, tuned
+  by ear — four English, four Spanish, two French, two Japanese. Or clone a
+  rights-cleared clip of your own in about ten seconds of audio.
 - **Honest about the hours.** A render takes a while, so the app measures your
   machine, tells you how long, and keeps the progress on every screen. Close the
   window and it carries on in the tray.
@@ -57,15 +57,21 @@ leaves the computer.
 - **One command to install**, on Windows, macOS and Linux. It sets up its own
   Python, picks the right PyTorch build for your hardware, and bundles ffmpeg.
 - **Speaks your language, and the book's.** The interface follows your
-  browser (English and French so far), and a French book is narrated in French
-  by French voices, with its numbers and abbreviations read the French way —
-  see [Languages](#languages).
+  browser (English, French, Spanish and Japanese), and a book that declares
+  itself French, Spanish or Japanese is narrated in that language by voices
+  that speak it, with its numbers and abbreviations read the way a reader of
+  that language would — see [Languages](#languages).
 
 ## What it looks like
 
 <p align="center">
   <img src="docs/screenshots/book.png" alt="A book before narration: which sections to read, which voice, and what it will cost in time and disk" width="100%">
   <br><sub>The book page. What gets narrated on the left, who narrates it on the right, and a bar along the bottom that always says what you are about to commit to.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings: where audiobooks go, how hard to work the machine, the palette and light/dark, and the interface language" width="100%">
+  <br><sub>Settings. Two palettes and a light/dark mode that move independently, and the interface language beside them.</sub>
 </p>
 
 <p align="center">
@@ -143,7 +149,7 @@ Run with `--no-tray` to skip the tray deliberately.
 | `--cuda128` / `-Cuda128` | Force the CUDA 12.8 build (RTX 20-series and newer) |
 | `--cuda126` / `-Cuda126` | Force the CUDA 12.6 build (GTX 900/1000-series) |
 | `--no-tts` / `-NoTts` | Skip PyTorch for now — import books, add the engine later |
-| `--lang fr` / `-Lang fr` | Installer messages in French (default: the desktop's language) |
+| `--lang fr` / `-Lang fr` | Installer messages in French — also `es`, `ja` (default: the desktop's language) |
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
 | `--yes` / `-Yes` | Accept all prompts (scripted installs) |
@@ -235,27 +241,33 @@ ebook-audiobook report                            # that, as a bug report
 Two separate things, kept separate:
 
 **The interface language** follows your browser. To pin it, open **Settings →
-Language**; the choice is remembered and the tray menu follows it. English and
-French today. The installers take `--lang fr` / `-Lang fr`, and `EBAB_LANG`
-overrides everything.
+Language**; the choice is remembered and the tray menu follows it. English,
+French, Spanish and Japanese today. The installers take `--lang fr` /
+`-Lang fr` (or `es`, `ja`), and `EBAB_LANG` overrides everything.
 
 **The narration language** belongs to the book, not to you. A book that
-declares itself French (nearly every EPUB does) is narrated in French, by one
-of the bundled French voices, with numbers, abbreviations and typography read
-the way a French reader would: "1625" becomes *mille six cent vingt-cinq*,
-"M. de Tréville" becomes *Monsieur de Tréville*, "12,50 €" becomes *douze
-euros et cinquante centimes*. You can change a book's narration language on its
+declares itself French, Spanish or Japanese (nearly every EPUB declares
+something) is narrated in that language, by one of the bundled voices that
+speaks it, with numbers, abbreviations and typography read the way a reader of
+that language would: "1625" becomes *mille six cent vingt-cinq*, "M. de
+Tréville" becomes *Monsieur de Tréville*, "12,50 €" becomes *douze euros et
+cinquante centimes*; "Luis M. García" keeps its middle initial and "1° de mayo"
+is a date rather than a temperature; "2時間" is *にじかん* rather than a
+torn-apart *にじ間*. You can change a book's narration language on its
 page: that language's narrator takes over and the text is prepared afresh for
 it, without reading the book again — the conversion is kept from the import, so
 the switch takes a moment rather than minutes.
 
-French needs a second speech model, about 3 GB, downloaded from huggingface.co
-**only** when you press **Install** in **Settings → Narration languages** (or
-run `ebook-audiobook languages install fr`). Until then a French book is
-narrated in English and its page says what to install. The same model speaks
-twenty-one other languages, offered as *experimental*: it pronounces them, but
-numbers and abbreviations are read as written. Adding proper support for one is
-a single file in `ebook_audiobook/pipeline/lang/` and a set of bundled voices.
+French, Spanish and Japanese share a second speech model, about 3 GB,
+downloaded from huggingface.co **only** when you press **Install** in
+**Settings → Narration languages** (or run `ebook-audiobook languages install
+fr`). Until then such a book is narrated in English and its page says what to
+install. The same model speaks nineteen other languages, offered as
+*experimental*: it pronounces them, but numbers and abbreviations are read as
+written. Adding proper support for one is a single file in
+`ebook_audiobook/pipeline/lang/` and a set of bundled voices — see
+[CONTRIBUTING.md](CONTRIBUTING.md#translations) for what that involves,
+including what a language without spaces between its words needs.
 
 Translating the interface is a `.po` file a translator edits in Poedit; see
 [CONTRIBUTING.md](CONTRIBUTING.md#translations).
