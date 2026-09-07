@@ -465,12 +465,14 @@ either way; only the time changes.
 
 | Mode | What it does | Cost |
 |---|---|---|
-| **Full speed** | Everything available. The default. | — |
+| **Full speed** | Everything available. | — |
 | **Balanced** | Caps CPU threads, lowers priority, brief rests | ~10–25% slower |
 | **Quiet / background** | Few threads, lowest priority, rests half the time; on Apple Silicon it moves to the **efficiency cores** | ~2x slower |
 
-On the command line: `--power quiet`. The measured chars/sec figure ignores rest
-time, so switching modes doesn't make your hardware look slower than it is.
+A new install starts on **Balanced**, so the first render leaves the machine
+usable; upgrades keep whatever they were already set to. On the command line:
+`--power quiet`. The measured chars/sec figure ignores rest time, so switching
+modes doesn't make your hardware look slower than it is.
 
 **If a GPU runs out of memory** partway through, the render doesn't die — it
 retries once, then moves to the CPU and finishes. Everything already rendered

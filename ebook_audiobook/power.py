@@ -48,7 +48,18 @@ MODE_BALANCED = "balanced"
 MODE_QUIET = "quiet"
 MODES = (MODE_FULL, MODE_BALANCED, MODE_QUIET)
 
+# What an unrecognised mode falls back to — a hand-edited settings file, a
+# stale job record, a form post that invented a mode. Full speed, because a
+# value nobody can read is no reason to quietly halve someone's throughput.
 DEFAULT_MODE = MODE_FULL
+
+# What a machine that has never run this app starts on. Balanced rather than
+# full speed: the first render is the one nobody has calibrated expectations
+# for, and a laptop that stays usable and quiet through it makes a better first
+# impression than one that finishes 10-25% sooner with the fans at full tilt.
+# Deliberately *not* DEFAULT_MODE — see settings.load_settings(). An existing
+# install keeps whatever it has, including the full speed it has always had.
+NEW_INSTALL_MODE = MODE_BALANCED
 
 # Shown in the UI and by `check`. Kept here so the CLI, the web UI, and the
 # settings page can't drift into describing the same mode three different ways.

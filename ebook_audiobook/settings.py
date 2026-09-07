@@ -27,6 +27,12 @@ class Settings:
     setup_dismissed: bool = False
     # Default render intensity for new jobs: "full", "balanced" or "quiet".
     # See ebook_audiobook.power. A job may override it.
+    #
+    # "full" here is the answer for a settings.json written before this key
+    # existed, not the answer for a new machine — those installs have been
+    # rendering at full speed all along and an upgrade must not quietly slow
+    # them down. A genuinely fresh install starts on power.NEW_INSTALL_MODE
+    # instead; load_settings() is the one place that knows the difference.
     power_mode: str = "full"
     # Play a preview as soon as it finishes rendering.
     #
@@ -156,19 +162,30 @@ def _settings_path() -> Path:
 
 def load_settings() -> Settings:
     """The current settings — or, the first time this ever runs on a machine,
-    the defaults with ``preferences_onboarded`` forced to False.
+    the defaults as a new install wants them.
 
-    That flag defaults to True on the dataclass itself, so that reading an
-    *existing* settings.json written before onboarding existed — which simply
-    lacks the key — fills it in as "already done" and never nags someone
-    who has been using the app for months. Only the genuine absence of a
-    settings file at all (a fresh install, or a corrupt one being reset to
-    defaults) means "show the modal", so those are the two places that
-    override the dataclass default back to False.
+    Two fields differ between "new machine" and "old settings file missing a
+    key", and the dataclass can only carry one answer, so it carries the
+    upgrade-safe one and this function overrides for the fresh case:
+
+    ``preferences_onboarded`` defaults to True, so that reading an *existing*
+    settings.json written before onboarding existed — which simply lacks the
+    key — fills it in as "already done" and never nags someone who has been
+    using the app for months.
+
+    ``power_mode`` defaults to "full" for the same reason: the key postdates
+    settings.json, and a machine that has been rendering at full speed since
+    before render intensity existed must keep doing so across an upgrade. A new
+    install has no such history and starts on power.NEW_INSTALL_MODE.
+
+    Only the genuine absence of a settings file at all (a fresh install, or a
+    corrupt one being reset to defaults) counts as new, so those are the two
+    places that override.
     """
+    from .power import NEW_INSTALL_MODE
     p = _settings_path()
     if not p.exists():
-        return Settings(preferences_onboarded=False)
+        return Settings(preferences_onboarded=False, power_mode=NEW_INSTALL_MODE)
     try:
         loaded = json.loads(p.read_text("utf-8"))
         if not isinstance(loaded, dict):
@@ -185,7 +202,7 @@ def load_settings() -> Settings:
             p.replace(p.with_suffix(".corrupt.json"))
         except OSError:
             pass
-        return Settings(preferences_onboarded=False)
+        return Settings(preferences_onboarded=False, power_mode=NEW_INSTALL_MODE)
 
 
 def save_settings(settings: Settings) -> Settings:
