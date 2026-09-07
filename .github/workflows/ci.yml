@@ -320,6 +320,30 @@ jobs:
           bash -n install.sh
           if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh || true; fi
 
+      # Every language the installer claims to speak actually says something
+      # different. A message table is a long case statement, and the way it
+      # fails is silently: a missing table falls through to English and nobody
+      # notices until a user reports the installer is in the wrong language.
+      - name: Every installer language has its own words
+        if: runner.os != 'Windows'
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, sys
+          block = re.search(r"# --- language.*?(?=\nhave_sudo)", open("install.sh").read(), re.S).group(0)
+          probe = "Installing ebook-audiobook"
+          said = {}
+          for code in ("en", "fr", "es", "ja"):
+              out = subprocess.run(
+                  ["bash", "-c", f'{block}\nLANG_CODE={code}\nresolve_lang\ntr_msg "{probe}"'],
+                  capture_output=True, text=True, check=True).stdout.strip()
+              said[code] = out
+              print(f"  {code}: {out}")
+          if len(set(said.values())) != len(said):
+              sys.exit(f"two languages produced the same text: {said}")
+          if said["en"] != probe:
+              sys.exit("English must pass through unchanged")
+          PY
+
       # This gate decides whether a Mac user is told to expect a three-hour
       # render or a thirty-hour one, and it only ever executes on macOS — where
       # the runner reports one OS version, so CI would exercise a single branch

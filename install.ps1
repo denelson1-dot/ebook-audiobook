@@ -69,12 +69,20 @@ $PinnedVersion = "__EBAB_VERSION__"
 
 # --- language ----------------------------------------------------------------
 # -Lang, then EBAB_LANG, then Windows' own display language. The helpers pass
-# every message through Tr, which in French matches the English text (exactly,
-# or with a wildcard for lines that carry a value) and returns the French. Call
+# every message through Tr, which matches the English text (exactly, or with a
+# wildcard for lines that carry a value) and returns the translation. Call
 # sites stay English, so the logic is the same in every language.
 if (-not $Lang) { $Lang = $env:EBAB_LANG }
 if (-not $Lang) { try { $Lang = (Get-Culture).TwoLetterISOLanguageName } catch { $Lang = "en" } }
-$Lang = if ("$Lang".ToLower().StartsWith("fr")) { "fr" } else { "en" }
+$Lang = switch -Wildcard ("$Lang".ToLower()) { "fr*" { "fr" } "es*" { "es" } "ja*" { "ja" } default { "en" } }
+# Windows PowerShell 5.1 reads this BOM-less file as the ANSI code page, so
+# every non-ASCII literal in it is mangled before the console ever sees it.
+# French and Spanish lose their accents and stay readable; Japanese is
+# non-ASCII from end to end and would be nothing but replacement characters,
+# which is strictly worse than English. So 5.1 gets English for Japanese.
+if ($Lang -eq "ja" -and $PSVersionTable.PSVersion.Major -lt 6) { $Lang = "en" }
+# Helps the console render what we do print, on both editions.
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
 
 # UTF-8 without a byte-order mark, deliberately: PowerShell 7 reads that as
 # UTF-8, and a mark at the start of the text `irm | iex` hands to the parser
@@ -130,12 +138,111 @@ $French = [ordered]@{
     "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Note : ouvrez un NOUVEAU terminal pour que la commande « ebook-audiobook » soit trouvée."
 }
 
+$Spanish = [ordered]@{
+    "Uninstalling ebook-audiobook" = "Desinstalando ebook-audiobook"
+    "program removed" = "programa eliminado"
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:" = "  Tus libros, ajustes y audiolibros NO se han borrado. Están en:"
+    "  Delete that folder yourself if you want them gone." = "  Borra tú mismo esa carpeta si quieres deshacerte de ellos."
+    "ebook-audiobook installer" = "Instalador de ebook-audiobook"
+    "Turns ebooks you own into narrated audiobooks, entirely offline." = "Convierte los libros que son tuyos en audiolibros narrados, del todo sin conexión."
+    "Looking for Python 3.11 or newer" = "Buscando Python 3.11 o superior"
+    "no Python 3.11+ found" = "no se encontró Python 3.11 o superior"
+    "Install Python 3.12 now with winget?" = "¿Instalar ahora Python 3.12 con winget?"
+    "Creating a private environment" = "Creando un entorno privado"
+    "reusing the existing environment (upgrading in place)" = "reutilizando el entorno existente (actualizándolo en el sitio)"
+    "created" = "creado"
+    "Installing ebook-audiobook" = "Instalando ebook-audiobook"
+    "installed *" = "instalado *"
+    "Skipping the speech engine (-NoTts)" = "Se omite el motor de voz (-NoTts)"
+    "you can import books, but rendering audio needs the engine" = "puedes importar libros, pero generar audio necesita el motor"
+    "Setting up the speech engine" = "Preparando el motor de voz"
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "no se pudo preguntar a la aplicación qué versión de PyTorch usar; se recurre a la de solo procesador"
+    "Download and install the speech engine now?" = "¿Descargar e instalar ahora el motor de voz?"
+    "speech engine ready*" = "motor de voz listo*"
+    "The ~1 GB voice model downloads the first time you render." = "El modelo de voz (~1 GB) se descarga la primera vez que generes audio."
+    "skipped - re-run this installer to add it later." = "omitido - vuelve a ejecutar este instalador para añadirlo más tarde."
+    "Checking for Calibre (needed to read ebook files)" = "Buscando Calibre (necesario para leer los archivos de libros)"
+    "Calibre found" = "Calibre encontrado"
+    "Calibre is not installed" = "Calibre no está instalado"
+    "Install it now with 'winget install calibre.calibre'?" = "¿Instalarlo ahora con 'winget install calibre.calibre'?"
+    "winget install failed" = "winget no pudo instalarlo"
+    "Calibre installed" = "Calibre instalado"
+    "install Calibre before converting a book:" = "instala Calibre antes de convertir un libro:"
+    "or download it from https://calibre-ebook.com/download" = "o descárgalo desde https://calibre-ebook.com/download"
+    "Creating the launcher" = "Creando el lanzador"
+    "command: *" = "comando: *"
+    "added to your PATH (new terminals will find it)" = "añadido a tu PATH (los terminales nuevos lo encontrarán)"
+    "Start Menu shortcut" = "acceso directo en el menú Inicio"
+    "Add a Desktop shortcut too?" = "¿Añadir también un acceso directo en el escritorio?"
+    "Desktop shortcut" = "acceso directo en el escritorio"
+    "couldn't create shortcuts: *" = "no se pudieron crear los accesos directos: *"
+    "Verifying the install" = "Verificando la instalación"
+    "all required components are working" = "todos los componentes necesarios funcionan"
+    "some checks failed - run 'ebook-audiobook check' for details" = "algunas comprobaciones fallaron - ejecuta 'ebook-audiobook check' para ver los detalles"
+    "Installed." = "Instalado."
+    "  Start it from the Start Menu, or run: " = "  Iníciala desde el menú Inicio, o ejecuta: "
+    "  Your books live in: " = "  Tus libros están en: "
+    "  Check setup:  " = "  Comprobar:  "
+    "  Uninstall:    " = "  Desinstalar:    "
+    "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Nota: abre un terminal NUEVO para que se encuentre el comando 'ebook-audiobook'."
+}
+
+$Japanese = [ordered]@{
+    "Uninstalling ebook-audiobook" = "ebook-audiobook をアンインストールしています"
+    "program removed" = "プログラムを削除しました"
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:" = "  本、設定、オーディオブックは削除されていません。場所:"
+    "  Delete that folder yourself if you want them gone." = "  不要であれば、そのフォルダーはご自分で削除してください。"
+    "ebook-audiobook installer" = "ebook-audiobook インストーラー"
+    "Turns ebooks you own into narrated audiobooks, entirely offline." = "お手持ちの電子書籍を、完全にオフラインでオーディオブックにします。"
+    "Looking for Python 3.11 or newer" = "Python 3.11 以上を探しています"
+    "no Python 3.11+ found" = "Python 3.11 以上が見つかりません"
+    "Install Python 3.12 now with winget?" = "winget で Python 3.12 を今すぐインストールしますか？"
+    "Creating a private environment" = "専用の環境を作成しています"
+    "reusing the existing environment (upgrading in place)" = "既存の環境を再利用します（その場で更新します）"
+    "created" = "作成しました"
+    "Installing ebook-audiobook" = "ebook-audiobook をインストールしています"
+    "installed *" = "インストール済み *"
+    "Skipping the speech engine (-NoTts)" = "音声エンジンをスキップします（-NoTts）"
+    "you can import books, but rendering audio needs the engine" = "本の取り込みはできますが、音声の生成にはエンジンが必要です"
+    "Setting up the speech engine" = "音声エンジンを準備しています"
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "どの PyTorch を使うかアプリに問い合わせられませんでした。CPU 版で続行します"
+    "Download and install the speech engine now?" = "音声エンジンを今すぐダウンロードしてインストールしますか？"
+    "speech engine ready*" = "音声エンジンの準備ができました*"
+    "The ~1 GB voice model downloads the first time you render." = "音声モデル（約 1 GB）は、最初に生成するときにダウンロードされます。"
+    "skipped - re-run this installer to add it later." = "スキップしました - あとで追加するにはこのインストーラーを再実行してください。"
+    "Checking for Calibre (needed to read ebook files)" = "Calibre を確認しています（電子書籍の読み込みに必要です）"
+    "Calibre found" = "Calibre が見つかりました"
+    "Calibre is not installed" = "Calibre がインストールされていません"
+    "Install it now with 'winget install calibre.calibre'?" = "'winget install calibre.calibre' で今すぐインストールしますか？"
+    "winget install failed" = "winget によるインストールに失敗しました"
+    "Calibre installed" = "Calibre をインストールしました"
+    "install Calibre before converting a book:" = "本を変換する前に Calibre をインストールしてください:"
+    "or download it from https://calibre-ebook.com/download" = "または https://calibre-ebook.com/download からダウンロードしてください"
+    "Creating the launcher" = "ランチャーを作成しています"
+    "command: *" = "コマンド: *"
+    "added to your PATH (new terminals will find it)" = "PATH に追加しました（新しいターミナルで見つかります）"
+    "Start Menu shortcut" = "スタートメニューのショートカット"
+    "Add a Desktop shortcut too?" = "デスクトップにもショートカットを作成しますか？"
+    "Desktop shortcut" = "デスクトップのショートカット"
+    "couldn't create shortcuts: *" = "ショートカットを作成できませんでした: *"
+    "Verifying the install" = "インストールを検証しています"
+    "all required components are working" = "必要な構成要素はすべて動作しています"
+    "some checks failed - run 'ebook-audiobook check' for details" = "一部の確認に失敗しました - 詳しくは 'ebook-audiobook check' を実行してください"
+    "Installed." = "インストールが完了しました。"
+    "  Start it from the Start Menu, or run: " = "  スタートメニューから起動するか、次を実行してください: "
+    "  Your books live in: " = "  本の場所: "
+    "  Check setup:  " = "  設定の確認:  "
+    "  Uninstall:    " = "  アンインストール:    "
+    "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  注意: 'ebook-audiobook' コマンドを使うには、新しいターミナルを開いてください。"
+}
+
 function Tr($msg) {
-    if ($Lang -ne "fr") { return $msg }
-    if ($French.Contains($msg)) { return $French[$msg] }
-    foreach ($key in $French.Keys) {
+    $table = switch ($Lang) { "fr" { $French } "es" { $Spanish } "ja" { $Japanese } default { $null } }
+    if ($null -eq $table) { return $msg }
+    if ($table.Contains($msg)) { return $table[$msg] }
+    foreach ($key in $table.Keys) {
         if ($key.EndsWith("*") -and $msg.StartsWith($key.TrimEnd("*"))) {
-            return $French[$key].TrimEnd("*") + $msg.Substring($key.Length - 1)
+            return $table[$key].TrimEnd("*") + $msg.Substring($key.Length - 1)
         }
     }
     return $msg

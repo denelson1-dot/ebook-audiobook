@@ -56,14 +56,14 @@ else
 fi
 # --- language ----------------------------------------------------------------
 # The helpers below pass every message through tr_msg. In English it returns
-# the text as given; in French it matches the English (exactly, or by a glob
-# for lines that carry a path or a version) and prints the French. Call sites
+# the text as given; in another language it matches the English (exactly, or by a glob
+# for lines that carry a path or a version) and prints the translation. Call sites
 # stay English, so the installer's logic is the same in every language, and a
 # line with no French yet simply appears in English.
 resolve_lang() {
   code="${LANG_CODE:-${EBAB_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}}"
   code="$(printf '%s' "$code" | cut -c1-2 | tr '[:upper:]' '[:lower:]')"
-  case "$code" in fr) LANG_CODE="fr" ;; *) LANG_CODE="en" ;; esac
+  case "$code" in fr) LANG_CODE="fr" ;; es) LANG_CODE="es" ;; ja) LANG_CODE="ja" ;; *) LANG_CODE="en" ;; esac
 }
 
 fr_msg() {
@@ -135,8 +135,151 @@ fr_msg() {
   esac
 }
 
+es_msg() {
+  case "$1" in
+    "Uninstalling ebook-audiobook") printf '%s' "Desinstalando ebook-audiobook" ;;
+    "program removed") printf '%s' "programa eliminado" ;;
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  Tus libros, ajustes y audiolibros NO se han borrado. Están en:" ;;
+    "  Delete that folder yourself if you want them gone.") printf '%s' "  Borra tú mismo esa carpeta si quieres deshacerte de ellos." ;;
+    *"ebook-audiobook installer"*) printf '%s' "${B}Instalador de ebook-audiobook${N}" ;;
+    *"Turns ebooks you own into narrated audiobooks, entirely offline."*) printf '%s' "${DIM}Convierte los libros que son tuyos en audiolibros narrados, del todo sin conexión.${N}" ;;
+    "Looking for Python 3.11 or newer") printf '%s' "Buscando Python 3.11 o superior" ;;
+    "no Python 3.11+ found") printf '%s' "no se encontró Python 3.11 o superior" ;;
+    "Install Python 3.12 with Homebrew?") printf '%s' "¿Instalar Python 3.12 con Homebrew?" ;;
+    "Install Python with 'sudo apt-get install python3 python3-venv'?") printf '%s' "¿Instalar Python con «sudo apt-get install python3 python3-venv»?" ;;
+    *" at "*) printf '%s' "$1" ;;
+    "Python's 'venv' module is missing") printf '%s' "falta el módulo «venv» de Python" ;;
+    "Python's 'ensurepip' module is missing (common on Debian/Ubuntu)") printf '%s' "falta el módulo «ensurepip» de Python (habitual en Debian/Ubuntu)" ;;
+    "Install it with 'sudo apt-get install python3-venv'?") printf '%s' "¿Instalarlo con «sudo apt-get install python3-venv»?" ;;
+    "will install pip into the environment directly instead") printf '%s' "en su lugar se instalará pip directamente en el entorno" ;;
+    "Creating a private environment") printf '%s' "Creando un entorno privado" ;;
+    "reusing the existing environment (upgrading in place)") printf '%s' "reutilizando el entorno existente (actualizándolo en el sitio)" ;;
+    "created (with pip bootstrapped manually)") printf '%s' "creado (con pip preparado a mano)" ;;
+    "created") printf '%s' "creado" ;;
+    "Installing ebook-audiobook") printf '%s' "Instalando ebook-audiobook" ;;
+    *"installing from the source tree at "*) printf '%s' "$1" ;;
+    *"downloaded with your GitHub credentials"*) printf '%s' "  ${DIM}(descargado con tus credenciales de GitHub — el repositorio aún no es público)${N}" ;;
+    "installed "*) printf '%s' "instalado: ${1#installed }" ;;
+    "Skipping the speech engine (--no-tts)") printf '%s' "Se omite el motor de voz (--no-tts)" ;;
+    "you can import books, but rendering audio needs the engine") printf '%s' "puedes importar libros, pero generar audio necesita el motor" ;;
+    "  add it later with:") printf '%s' "  añádelo más tarde con:" ;;
+    "Setting up the speech engine") printf '%s' "Preparando el motor de voz" ;;
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only") printf '%s' "no se pudo preguntar a la aplicación qué versión de PyTorch usar; se recurre a la de solo procesador" ;;
+    "  Detected: "*) printf '%s' "  Detectado: ${1#  Detected: }" ;;
+    "  Download: "*) printf '%s' "  Descarga: ${1#  Download: }" ;;
+    "skipping the speech engine — no PyTorch build exists for Intel Macs") printf '%s' "se omite el motor de voz — no existe ninguna versión de PyTorch para los Mac con Intel" ;;
+    *"You can still import books, browse chapters and manage voices."*) printf '%s' "  ${DIM}Aun así puedes importar libros, examinar capítulos y gestionar voces.${N}" ;;
+    "Download and install the speech engine now?") printf '%s' "¿Descargar e instalar ahora el motor de voz?" ;;
+    "speech engine ready"*) printf '%s' "motor de voz listo${1#speech engine ready}" ;;
+    *"voice model downloads the first time you render."*) printf '%s' "  ${DIM}El modelo de voz (~3 GB) se descarga la primera vez que generes audio.${N}" ;;
+    "skipped — add it later by re-running this installer.") printf '%s' "omitido — añádelo más tarde volviendo a ejecutar este instalador." ;;
+    "Checking for Calibre (needed to read ebook files)") printf '%s' "Buscando Calibre (necesario para leer los archivos de libros)" ;;
+    "Calibre found") printf '%s' "Calibre encontrado" ;;
+    "Calibre is not installed") printf '%s' "Calibre no está instalado" ;;
+    "Install it now with 'brew install --cask calibre'?") printf '%s' "¿Instalarlo ahora con «brew install --cask calibre»?" ;;
+    "Install it now with 'sudo apt-get install calibre'?") printf '%s' "¿Instalarlo ahora con «sudo apt-get install calibre»?" ;;
+    "Calibre installed") printf '%s' "Calibre instalado" ;;
+    "install Calibre before converting a book:") printf '%s' "instala Calibre antes de convertir un libro:" ;;
+    *"or download it from https://calibre-ebook.com/download"*) printf '%s' "      ${DIM}o descárgalo desde https://calibre-ebook.com/download${N}" ;;
+    "Creating the launcher") printf '%s' "Creando el lanzador" ;;
+    "command: "*) printf '%s' "comando: ${1#command: }" ;;
+    "application icon") printf '%s' "icono de la aplicación" ;;
+    "application menu entry") printf '%s' "entrada en el menú de aplicaciones" ;;
+    "no icon.icns found; the app will use the generic bundle icon") printf '%s' "no se encontró icon.icns; la aplicación usará el icono genérico" ;;
+    "application: "*) printf '%s' "aplicación: ${1#application: }" ;;
+    "Verifying the install") printf '%s' "Verificando la instalación" ;;
+    "all required components are working") printf '%s' "todos los componentes necesarios funcionan" ;;
+    "some checks failed — run 'ebook-audiobook check' for details") printf '%s' "algunas comprobaciones fallaron — ejecuta «ebook-audiobook check» para ver los detalles" ;;
+    *"Installed."*) printf '%s' "${GRN}${B}Instalado.${N}" ;;
+    "  Start it with:   "*) printf '%s' "  Iníciala con:        ${1#  Start it with:   }" ;;
+    "  Your books live in: "*) printf '%s' "  Tus libros están en: ${1#  Your books live in: }" ;;
+    "  Check setup:     "*) printf '%s' "  Comprobar:           ${1#  Check setup:     }" ;;
+    "  Uninstall:       "*) printf '%s' "  Desinstalar:         ${1#  Uninstall:       }" ;;
+    *"isn't on your PATH yet.") printf '%s' "${1% isn?t on your PATH yet.} todavía no está en tu PATH." ;;
+    "  Add this line to your ~/.bashrc or ~/.zshrc, then open a new terminal:") printf '%s' "  Añade esta línea a tu ~/.bashrc o ~/.zshrc y abre un terminal nuevo:" ;;
+    "  Until then, start it with: "*) printf '%s' "  Mientras tanto, iníciala con: ${1#  Until then, start it with: }" ;;
+    "couldn't ask for your password here, so nothing was installed") printf '%s' "no se pudo pedir tu contraseña aquí, así que no se instaló nada" ;;
+    "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "falló la instalación de ${p% failed (see below)} (ver más abajo)" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+ja_msg() {
+  case "$1" in
+    "Uninstalling ebook-audiobook") printf '%s' "ebook-audiobook をアンインストールしています" ;;
+    "program removed") printf '%s' "プログラムを削除しました" ;;
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  本、設定、オーディオブックは削除されていません。場所:" ;;
+    "  Delete that folder yourself if you want them gone.") printf '%s' "  不要であれば、そのフォルダーはご自分で削除してください。" ;;
+    *"ebook-audiobook installer"*) printf '%s' "${B}ebook-audiobook インストーラー${N}" ;;
+    *"Turns ebooks you own into narrated audiobooks, entirely offline."*) printf '%s' "${DIM}お手持ちの電子書籍を、完全にオフラインでオーディオブックにします。${N}" ;;
+    "Looking for Python 3.11 or newer") printf '%s' "Python 3.11 以上を探しています" ;;
+    "no Python 3.11+ found") printf '%s' "Python 3.11 以上が見つかりません" ;;
+    "Install Python 3.12 with Homebrew?") printf '%s' "Homebrew で Python 3.12 をインストールしますか？" ;;
+    "Install Python with 'sudo apt-get install python3 python3-venv'?") printf '%s' "「sudo apt-get install python3 python3-venv」で Python をインストールしますか？" ;;
+    *" at "*) printf '%s' "$1" ;;
+    "Python's 'venv' module is missing") printf '%s' "Python の「venv」モジュールがありません" ;;
+    "Python's 'ensurepip' module is missing (common on Debian/Ubuntu)") printf '%s' "Python の「ensurepip」モジュールがありません（Debian/Ubuntu でよくあります）" ;;
+    "Install it with 'sudo apt-get install python3-venv'?") printf '%s' "「sudo apt-get install python3-venv」でインストールしますか？" ;;
+    "will install pip into the environment directly instead") printf '%s' "代わりに pip を環境へ直接インストールします" ;;
+    "Creating a private environment") printf '%s' "専用の環境を作成しています" ;;
+    "reusing the existing environment (upgrading in place)") printf '%s' "既存の環境を再利用します（その場で更新します）" ;;
+    "created (with pip bootstrapped manually)") printf '%s' "作成しました（pip は手動で用意しました）" ;;
+    "created") printf '%s' "作成しました" ;;
+    "Installing ebook-audiobook") printf '%s' "ebook-audiobook をインストールしています" ;;
+    *"installing from the source tree at "*) printf '%s' "$1" ;;
+    *"downloaded with your GitHub credentials"*) printf '%s' "  ${DIM}（GitHub の認証情報でダウンロードしました — リポジトリはまだ公開されていません）${N}" ;;
+    "installed "*) printf '%s' "インストール済み: ${1#installed }" ;;
+    "Skipping the speech engine (--no-tts)") printf '%s' "音声エンジンをスキップします（--no-tts）" ;;
+    "you can import books, but rendering audio needs the engine") printf '%s' "本の取り込みはできますが、音声の生成にはエンジンが必要です" ;;
+    "  add it later with:") printf '%s' "  あとから次のコマンドで追加できます:" ;;
+    "Setting up the speech engine") printf '%s' "音声エンジンを準備しています" ;;
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only") printf '%s' "どの PyTorch を使うかアプリに問い合わせられませんでした。CPU 版で続行します" ;;
+    "  Detected: "*) printf '%s' "  検出: ${1#  Detected: }" ;;
+    "  Download: "*) printf '%s' "  ダウンロード: ${1#  Download: }" ;;
+    "skipping the speech engine — no PyTorch build exists for Intel Macs") printf '%s' "音声エンジンをスキップします — Intel Mac 向けの PyTorch は存在しません" ;;
+    *"You can still import books, browse chapters and manage voices."*) printf '%s' "  ${DIM}本の取り込み、章の閲覧、声の管理はこれまでどおり行えます。${N}" ;;
+    "Download and install the speech engine now?") printf '%s' "音声エンジンを今すぐダウンロードしてインストールしますか？" ;;
+    "speech engine ready"*) printf '%s' "音声エンジンの準備ができました${1#speech engine ready}" ;;
+    *"voice model downloads the first time you render."*) printf '%s' "  ${DIM}音声モデル（約 3 GB）は、最初に生成するときにダウンロードされます。${N}" ;;
+    "skipped — add it later by re-running this installer.") printf '%s' "スキップしました — あとでこのインストーラーを再実行すれば追加できます。" ;;
+    "Checking for Calibre (needed to read ebook files)") printf '%s' "Calibre を確認しています（電子書籍の読み込みに必要です）" ;;
+    "Calibre found") printf '%s' "Calibre が見つかりました" ;;
+    "Calibre is not installed") printf '%s' "Calibre がインストールされていません" ;;
+    "Install it now with 'brew install --cask calibre'?") printf '%s' "「brew install --cask calibre」で今すぐインストールしますか？" ;;
+    "Install it now with 'sudo apt-get install calibre'?") printf '%s' "「sudo apt-get install calibre」で今すぐインストールしますか？" ;;
+    "Calibre installed") printf '%s' "Calibre をインストールしました" ;;
+    "install Calibre before converting a book:") printf '%s' "本を変換する前に Calibre をインストールしてください:" ;;
+    *"or download it from https://calibre-ebook.com/download"*) printf '%s' "      ${DIM}または https://calibre-ebook.com/download からダウンロードしてください${N}" ;;
+    "Creating the launcher") printf '%s' "ランチャーを作成しています" ;;
+    "command: "*) printf '%s' "コマンド: ${1#command: }" ;;
+    "application icon") printf '%s' "アプリケーションのアイコン" ;;
+    "application menu entry") printf '%s' "アプリケーションメニューの項目" ;;
+    "no icon.icns found; the app will use the generic bundle icon") printf '%s' "icon.icns が見つかりません。汎用のアイコンが使われます" ;;
+    "application: "*) printf '%s' "アプリケーション: ${1#application: }" ;;
+    "Verifying the install") printf '%s' "インストールを検証しています" ;;
+    "all required components are working") printf '%s' "必要な構成要素はすべて動作しています" ;;
+    "some checks failed — run 'ebook-audiobook check' for details") printf '%s' "一部の確認に失敗しました — 詳しくは「ebook-audiobook check」を実行してください" ;;
+    *"Installed."*) printf '%s' "${GRN}${B}インストールが完了しました。${N}" ;;
+    "  Start it with:   "*) printf '%s' "  起動:       ${1#  Start it with:   }" ;;
+    "  Your books live in: "*) printf '%s' "  本の場所:   ${1#  Your books live in: }" ;;
+    "  Check setup:     "*) printf '%s' "  設定の確認: ${1#  Check setup:     }" ;;
+    "  Uninstall:       "*) printf '%s' "  アンインストール: ${1#  Uninstall:       }" ;;
+    *"isn't on your PATH yet.") printf '%s' "${1% isn?t on your PATH yet.} はまだ PATH に含まれていません。" ;;
+    "  Add this line to your ~/.bashrc or ~/.zshrc, then open a new terminal:") printf '%s' "  次の行を ~/.bashrc か ~/.zshrc に追加し、新しいターミナルを開いてください:" ;;
+    "  Until then, start it with: "*) printf '%s' "  それまでは次のコマンドで起動してください: ${1#  Until then, start it with: }" ;;
+    "couldn't ask for your password here, so nothing was installed") printf '%s' "ここではパスワードを尋ねられなかったため、何もインストールされていません" ;;
+    "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "${p% failed (see below)} のインストールに失敗しました（下記参照）" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 tr_msg() {
-  if [ "$LANG_CODE" = "fr" ]; then fr_msg "$1"; else printf '%s' "$1"; fi
+  case "$LANG_CODE" in
+    fr) fr_msg "$1" ;;
+    es) es_msg "$1" ;;
+    ja) ja_msg "$1" ;;
+    *)  printf '%s' "$1" ;;
+  esac
 }
 
 say()  { printf '%s\n' "$(tr_msg "$*")"; }
