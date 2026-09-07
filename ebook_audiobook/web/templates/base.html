@@ -1,13 +1,155 @@
 <!doctype html>
-<html lang="{{ lang }}">
+<html lang="{{ lang }}" data-scheme="{{ color_scheme }}" data-mode-setting="{{ color_mode }}" data-mode="{{ color_mode }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ebook · audiobook{% endblock %}</title>
+  {# Resolves "system" to a concrete light/dark before the stylesheet paints,
+     so a light-mode desktop never flashes the dark palette (or vice versa)
+     while prefers-color-scheme is being read. Must run before the <link>
+     below; app.css's theme rules are keyed off data-mode, not data-mode-setting,
+     so this is the only place "system" is ever turned into an answer. #}
+  <script>
+  (function () {
+    var html = document.documentElement;
+    if (html.getAttribute("data-mode-setting") !== "system") return;
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var apply = function () { html.setAttribute("data-mode", mq.matches ? "dark" : "light"); };
+    apply();
+    // Keeps the page in step if the OS theme changes while it's open —
+    // switching Windows/macOS from light to dark at 6pm shouldn't need a
+    // reload. Only wired up while the setting is actually "system"; an
+    // explicit Light or Dark choice is never overridden by the OS.
+    (mq.addEventListener ? mq.addEventListener.bind(mq) : mq.addListener.bind(mq))("change", apply);
+  })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 {% import "_icons.html" as ic %}
 <body>
+  {% if onboarding_needed %}
+  {# The first thing anyone who has just installed this sees — before the
+     library, before Settings, before anything else. Three questions, none of
+     them blocking (every one has a sensible default already selected), and
+     answering them is the only way this overlay goes away: there's no
+     skip, because there's nothing here worth skipping past. Everything it
+     asks can be changed again later in Settings → Appearance / Language /
+     Updates, so getting an answer "wrong" here costs nothing. #}
+  <div class="onboard-overlay" id="onboardOverlay">
+    <div class="onboard-card">
+      <div class="onboard-head">
+        <span class="logo onboard-logo">{{ ic.icon('wordmark', 20) }}</span>
+        <h1>{{ _("Welcome to ebook·audiobook") }}</h1>
+        <p>{{ _("Three quick things, then you're in. Change any of it later in Settings.") }}</p>
+      </div>
+
+      <div class="onboard-field">
+        <label class="onboard-label" for="onboardLang">{{ _("Interface language") }}</label>
+        <select id="onboardLang">
+          <option value="" selected>{{ _("Automatic — follow the browser") }}</option>
+          {% for l in languages %}
+          <option value="{{ l.code }}">{{ l.native }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="onboard-field">
+        <label class="onboard-label">{{ _("Look") }}</label>
+        <div class="theme-cards">
+          <div class="theme-card selected" data-scheme="classic">
+            <span class="theme-swatch" style="background:#FBFAF8;border-color:#E4DED4">
+              <span style="background:#B4541F"></span><span style="background:#1A1614"></span>
+            </span>
+            <span class="theme-card-label">
+              <strong>{{ _("Classic") }}</strong>
+              <span class="meta">{{ _("Warm, amber accent — the original look") }}</span>
+            </span>
+          </div>
+          <div class="theme-card" data-scheme="modern">
+            <span class="theme-swatch" style="background:#FFFFFF;border-color:#E4E4E9">
+              <span style="background:#5352D6"></span><span style="background:#16161A"></span>
+            </span>
+            <span class="theme-card-label">
+              <strong>{{ _("Modern") }}</strong>
+              <span class="meta">{{ _("Cooler and neutral, one indigo accent") }}</span>
+            </span>
+          </div>
+        </div>
+        <div class="mode-toggle" id="onboardModeToggle" style="margin-top:9px">
+          <button type="button" class="mode-btn selected" data-mode="system">{{ _("Match my system") }}</button>
+          <button type="button" class="mode-btn" data-mode="light">{{ _("Light") }}</button>
+          <button type="button" class="mode-btn" data-mode="dark">{{ _("Dark") }}</button>
+        </div>
+      </div>
+
+      <div class="onboard-field">
+        <label class="switch">
+          <input type="checkbox" id="onboardAutoUpdate">
+          <span style="flex:1">
+            <b>{{ _("Automatically check for updates") }}</b>
+            <span>{{ _("Off by default. Enable to get the latest from GitHub — zero phoning home otherwise.") }}</span>
+          </span>
+        </label>
+      </div>
+
+      <button type="button" class="btn primary block" id="onboardContinue">{{ _("Get started") }}</button>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var html = document.documentElement;
+    var scheme = "classic", mode = "system";
+    function applyPreview() {
+      html.setAttribute("data-scheme", scheme);
+      html.setAttribute("data-mode-setting", mode);
+      if (mode === "system") {
+        var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        html.setAttribute("data-mode", dark ? "dark" : "light");
+      } else {
+        html.setAttribute("data-mode", mode);
+      }
+      var cards = document.querySelectorAll("#onboardOverlay .theme-card");
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.toggle("selected", cards[i].dataset.scheme === scheme);
+      }
+      var modeBtns = document.querySelectorAll("#onboardModeToggle .mode-btn");
+      for (var j = 0; j < modeBtns.length; j++) {
+        modeBtns[j].classList.toggle("selected", modeBtns[j].dataset.mode === mode);
+      }
+    }
+    var schemeCards = document.querySelectorAll("#onboardOverlay .theme-card");
+    for (var k = 0; k < schemeCards.length; k++) {
+      schemeCards[k].addEventListener("click", function () {
+        scheme = this.dataset.scheme;
+        applyPreview();
+      });
+    }
+    var modeButtons = document.querySelectorAll("#onboardModeToggle .mode-btn");
+    for (var m = 0; m < modeButtons.length; m++) {
+      modeButtons[m].addEventListener("click", function () {
+        mode = this.dataset.mode;
+        applyPreview();
+      });
+    }
+    document.getElementById("onboardContinue").addEventListener("click", function (e) {
+      var btn = e.target;
+      var original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "{{ _('Setting up…') }}";
+      var body = new URLSearchParams({
+        language: document.getElementById("onboardLang").value,
+        color_scheme: scheme,
+        color_mode: mode,
+        check_for_updates: document.getElementById("onboardAutoUpdate").checked ? "1" : "0",
+        onboarding_complete: "1",
+      });
+      fetch("/settings", { method: "POST", body: body })
+        .then(function () { location.reload(); })
+        .catch(function () { btn.disabled = false; btn.textContent = original; });
+    });
+  })();
+  </script>
+  {% endif %}
   <div class="app">
     <aside class="sidebar">
       {# The version rides under the wordmark on every page: the first question when
@@ -38,6 +180,22 @@
           {{ ic.icon('settings') }} {{ _("Settings") }}
         </a>
       </nav>
+
+      {# Only ever shown when Settings → Updates → "Automatically check for
+         updates" is on: that toggle is what starts the background check this
+         card reports on (see ebook_audiobook.web.update_watch). Filled in by
+         /api/updates/status, which is a local, in-memory read — polling it is
+         not itself a network request, only the periodic check behind it is,
+         and that already happened with consent. Installing still asks again
+         here before doing anything, per the confirm-before-apply update
+         behaviour. Lives beside the nav rather than the render dock below: an
+         update is not something in progress on this machine the way a render
+         is, it is a fact about the world worth noticing early. #}
+      <div class="update-dock" id="updateDock" hidden>
+        <b id="updateDockTitle"></b>
+        <p id="updateDockMsg"></p>
+        <div class="btn-row" id="updateDockActions" style="margin-top:9px"></div>
+      </div>
 
       {# Working files are ~85% of what this app puts on disk and the most
          disposable part of it, so the figure lives here rather than behind a
@@ -158,31 +316,124 @@
     model_download: [_("A language model is still downloading"), _("Quitting stops it. The download picks up where it left off next time.")],
   };
 
-  document.getElementById("quitBtn").addEventListener("click", async () => {
-    let r = await fetch("/quit", { method: "POST" });
+  // Shared by the sidebar Quit button and the update banner's Restart button —
+  // both go through the same /quit route, the only way this app shuts itself
+  // down cleanly. restart=1 makes the server relaunch itself right after.
+  async function doQuit(restart) {
+    const base = restart ? "/quit?restart=1" : "/quit";
+    let r = await fetch(base, { method: "POST" });
     if (r.status === 409) {
       const { kind } = await r.json();
       const [title, detail] = QUIT_WARNINGS[kind] ||
         [_("Something is still running"), _("Quitting stops it.")];
       const ok = await confirmDialog({
-        title, danger: true, confirmLabel: _("Quit anyway"),
+        title, danger: true,
+        confirmLabel: restart ? _("Restart anyway") : _("Quit anyway"),
         bodyHtml: `<p>${escapeHtml(detail)}</p>`,
       });
-      if (!ok) return;
-      r = await fetch("/quit?force=1", { method: "POST" });
+      if (!ok) return false;
+      r = await fetch(base + "&force=1", { method: "POST" });
     }
-    if (!r.ok) { toast(_("Couldn't quit — see the terminal or the logs.")); return; }
+    if (!r.ok) { toast(_("Couldn't quit — see the terminal or the logs.")); return false; }
+    const body = await r.json().catch(() => ({}));
     // Shutting down closes the window too, when the window is one we opened.
     // This is for when it isn't — no Chromium installed, so the UI is a tab in
     // the user's own browser, which is not ours to close. The server answers
     // before it stops precisely so there is time to swap this in, rather than
     // letting the browser race it and show its own error page.
-    document.body.innerHTML =
-      `<div class="quit-screen"><h1>${_("ebook·audiobook has stopped")}</h1>` +
-      `<p class="meta">${_("You can close this window.")}</p></div>`;
-  });
+    document.body.innerHTML = body.restarting
+      ? `<div class="quit-screen"><h1>${_("Restarting…")}</h1>` +
+        `<p class="meta">${_("ebook·audiobook is coming back up. Reopen it from where you normally launch it if this window doesn't reconnect on its own.")}</p></div>`
+      : `<div class="quit-screen"><h1>${_("ebook·audiobook has stopped")}</h1>` +
+        `<p class="meta">${_("You can close this window.")}</p></div>`;
+    return true;
+  }
+
+  document.getElementById("quitBtn").addEventListener("click", () => doQuit(false));
   </script>
   {% endif %}
+
+  <script>
+  window.EBAB_CAN_QUIT = {{ can_quit|tojson }};
+  // Only ever shows anything when Settings → Updates has automatic checking
+  // on — see the comment on #updateDock above. Polls a local, in-memory
+  // endpoint every few minutes; the only network request anywhere in this flow
+  // is the periodic GitHub check that toggle already consented to, and the
+  // one-time install the user is about to confirm below.
+  let updateDockTimer = null;
+  async function refreshUpdateBanner() {
+    clearTimeout(updateDockTimer);
+    let d;
+    try { d = await getJSON("/api/updates/status"); } catch (e) { return; }
+    const box = document.getElementById("updateDock");
+    const title = document.getElementById("updateDockTitle");
+    const msg = document.getElementById("updateDockMsg");
+    const actions = document.getElementById("updateDockActions");
+    if (!d.enabled || (!d.available && d.apply_state === "idle")) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+
+    if (d.apply_state === "running") {
+      box.className = "update-dock installing";
+      title.textContent = _("Installing update…");
+      msg.textContent = _("A few minutes, usually. Keep working — nothing else waits on it.");
+      actions.innerHTML = "";
+      updateDockTimer = setTimeout(refreshUpdateBanner, 4000);
+      return;
+    }
+    if (d.apply_state === "error") {
+      box.className = "update-dock error";
+      title.textContent = _("Update didn't install");
+      msg.textContent = d.apply_error || "";
+      actions.innerHTML = `<button type="button" class="btn sm" id="updateRetryBtn">${_("Try again")}</button>`;
+      document.getElementById("updateRetryBtn").addEventListener("click", (e) =>
+        withBusy(e.target, _("Starting…"), async () => {
+          await fetch("/updates/apply", { method: "POST" });
+          refreshUpdateBanner();
+        }));
+      return;
+    }
+    if (d.apply_state === "done") {
+      box.className = "update-dock ready";
+      title.textContent = _("Update ready");
+      msg.textContent = _("Restart for %(version)s.", { version: d.applied_version || d.version });
+      actions.innerHTML = `
+        <button type="button" class="btn sm primary" id="updateRestartBtn">${_("Restart now")}</button>
+        <button type="button" class="btn sm ghost" id="updateLaterBtn">${_("Later")}</button>`;
+      document.getElementById("updateRestartBtn").addEventListener("click", () => {
+        if (window.EBAB_CAN_QUIT) doQuit(true);
+        else toast(_("Restart ebook-audiobook yourself to finish."));
+      });
+      document.getElementById("updateLaterBtn").addEventListener("click", () => { box.hidden = true; });
+      return;
+    }
+    // idle, with a release available: the initial offer.
+    box.className = "update-dock available";
+    title.textContent = _("%(version)s available", { version: d.version });
+    msg.textContent = _("You're on %(current)s.", { current: d.current });
+    actions.innerHTML = `
+      <button type="button" class="btn sm primary" id="updateInstallBtn">${_("Install")}</button>
+      <button type="button" class="btn sm ghost" id="updateDismissBtn">${_("Not now")}</button>`;
+    document.getElementById("updateInstallBtn").addEventListener("click", async (e) => {
+      const ok = await confirmDialog({
+        title: _("Install this update?"),
+        confirmLabel: _("Install"),
+        bodyHtml: `<p>${_("Re-runs the installer in the background — the same one you used to set this up. It can take a few minutes and needs a working connection. You can keep working while it runs, but you'll need to restart the app once it's done.")}</p>`,
+      });
+      if (!ok) return;
+      await withBusy(e.target, _("Starting…"), () => fetch("/updates/apply", { method: "POST" }));
+      refreshUpdateBanner();
+    });
+    document.getElementById("updateDismissBtn").addEventListener("click", async () => {
+      await fetch("/updates/dismiss", { method: "POST", body: new URLSearchParams({ version: d.version }) });
+      box.hidden = true;
+    });
+  }
+  refreshUpdateBanner();
+  setInterval(refreshUpdateBanner, 5 * 60 * 1000);
+  </script>
 
   {% if setup_needed and (nav != 'library' or jobs or request.endpoint == 'new_page') %}
   <script>

@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
 import webbrowser
 
 from .. import i18n, settings as app_settings
-from . import create_app
+from . import create_app, update_watch
 from ..desktop import launcher, runtime, tray
 
 DEFAULT_HOST = "127.0.0.1"
@@ -116,6 +117,36 @@ def _announce(url: str, has_tray: bool) -> None:
               file=stderr, flush=True)
 
 
+def _relaunch() -> None:
+    """Best-effort: start a fresh copy of this same process before we go.
+
+    Reuses ``sys.argv`` verbatim rather than reconstructing a command —
+    whatever launched us (the venv's console-script shim, the Windows
+    Start-Menu .exe, the macOS .app's stub) put a real, directly runnable path
+    in ``argv[0]``, and that is the one thing guaranteed to still work after
+    an update, since it is what the fresh install just wrote. Detached fully
+    (own session, no inherited handles) so it outlives this process rather
+    than dying with it, and its own startup logs are its own — not blended
+    into whatever console this one had, if it had one at all.
+
+    Never raises: a failed relaunch must still let the requested quit happen,
+    not take the update down with it. Worst case, the banner already told the
+    user to reopen it themselves.
+    """
+    try:
+        kwargs = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                      stdin=subprocess.DEVNULL, close_fds=True)
+        if sys.platform == "win32":
+            kwargs["creationflags"] = (
+                getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen(list(sys.argv), **kwargs)
+    except Exception:  # noqa: BLE001 - see docstring
+        pass
+
+
 def _quit_label() -> str:
     """The tray's quit text, which doubles as its only way to warn."""
     from .runner import runner
@@ -197,12 +228,24 @@ def serve(host: str | None = None, port: int | None = None,
         # connection-error page as our parting screen.
         launcher.close_windows()
 
+    def request_restart() -> None:
+        """Relaunch, then stop — the update banner's "Restart now"."""
+        _relaunch()
+        request_stop()
+
     # How /quit reaches back into the server it is being served by.
     app.config["EBAB_SHUTDOWN"] = request_stop
+    app.config["EBAB_RESTART"] = request_restart
 
     server_thread = threading.Thread(target=server.run, daemon=True,
                                      name="ebab-waitress")
     server_thread.start()
+
+    # Always started, never conditionally: it is the loop itself that reads
+    # check_for_updates on every tick and does nothing while it's off. See
+    # update_watch's module docstring for why that is the right shape.
+    threading.Thread(target=update_watch.run_loop, args=(stopping,), daemon=True,
+                     name="ebab-update-watch").start()
 
     # Written only once the socket is actually bound (create_server binds in its
     # constructor), so a second launch can never find a record for a port that

@@ -6,11 +6,19 @@ that nothing leaves your machine; a background version check would quietly make
 that untrue, and a version check is a ping to GitHub carrying your IP and rough
 usage pattern.
 
-So: **nothing here ever runs on its own.** There is no timer and no start-up
-poll. A check happens when someone runs ``ebook-audiobook update``, or presses
-the button in Settings after opting in (``check_for_updates``, off by default).
-:func:`check` is the only function that opens a socket, and it is never called
-from import time or from a request handler that the user did not trigger.
+So: **nothing in this module ever runs on its own.** There is no timer and no
+start-up poll here. A check happens when someone runs ``ebook-audiobook
+update``, or presses the button in Settings. :func:`check` is the only
+function that opens a socket, and this module never calls it from import time
+or from a request handler the user did not trigger.
+
+``ebook_audiobook.web.update_watch`` builds an *opt-in* timer on top of this
+module — off by default (``check_for_updates``), and even once turned on it
+only ever calls :func:`check`, the exact same function, on a schedule instead
+of a click. Turning that setting on **is** the consent for those calls, the
+same way running ``ebook-audiobook update`` by hand is; nothing here treats
+the two differently. Installing what is found stays a separate, explicit step
+either way — the setting only automates asking, never applying.
 
 Applying an update re-runs the official installer, which is the same code path a
 new user gets — so an upgrade is never a second, less-tested install route.

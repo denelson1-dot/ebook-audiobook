@@ -17,6 +17,21 @@ def isolated_data_root(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def reset_update_watch_state():
+    """ebook_audiobook.web.update_watch keeps its findings in a process-wide
+    singleton (there is nowhere per-user to persist "a background thread found
+    9.9.9 a minute ago"), so — like the web layer's ``runner`` — it leaks
+    between tests unless something resets it. Imported lazily: importing Flask
+    under a test that monkeypatches sys.platform blows up, the same reason
+    drain_background_worker below imports late."""
+    from ebook_audiobook.web import update_watch
+
+    update_watch._state = update_watch._State()
+    yield
+    update_watch._state = update_watch._State()
+
+
+@pytest.fixture(autouse=True)
 def english_interface(monkeypatch):
     """Pin the interface to English, whatever the developer's desktop speaks.
 

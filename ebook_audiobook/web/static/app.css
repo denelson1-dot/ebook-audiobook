@@ -85,6 +85,132 @@
   }
 }
 
+/* --- explicit theme selection -------------------------------------------
+ * The blocks above are the fallback: the original palette, following the OS,
+ * for a page rendered before the resolver script below has run (or with JS
+ * off). Once ``<html>`` carries ``data-scheme``/``data-mode`` — set from the
+ * saved setting server-side, with "system" resolved to a concrete "light" or
+ * "dark" by the inline script in base.html before first paint — these four
+ * take over. Each names both axes explicitly, which gives it higher
+ * specificity than the bare ``:root`` above without needing !important.
+ *
+ * "classic" repeats the warm palette above verbatim, so switching *to* it
+ * from "modern" is a real switch and not a no-op once JS has resolved
+ * data-mode. "modern" is the second palette: a cooler, neutral pair with one
+ * restrained indigo accent, closer to what most 2026 desktop apps ship.
+ */
+html[data-scheme="classic"][data-mode="light"] {
+  --bg: #FBFAF8;
+  --rail: #F3F0EA;
+  --surface: #FFFFFF;
+  --surface-2: #F7F4EF;
+  --surface-3: #EFEAE1;
+  --line: #E4DED4;
+  --line-2: #D2C8BA;
+  --text: #1A1614;
+  --text-2: #5D544B;
+  --text-3: #8A8078;
+  --accent: #B4541F;
+  --accent-hi: #8E3F13;
+  --accent-ink: #FFFFFF;
+  --accent-quiet: #FBEFE5;
+  --accent-line: #EBD6C4;
+  --ok: #45702F;
+  --ok-quiet: #EEF4E9;
+  --warn: #8B6212;
+  --warn-quiet: #FAF2DF;
+  --danger: #AD392A;
+  --danger-quiet: #FBEDEA;
+  --track: #E7E1D6;
+  --shade: rgba(26, 22, 20, .28);
+  --shadow: 0 1px 2px rgba(26, 22, 20, .05), 0 6px 18px -12px rgba(26, 22, 20, .22);
+  color-scheme: light;
+}
+
+html[data-scheme="classic"][data-mode="dark"] {
+  --bg: #14100D;
+  --rail: #191411;
+  --surface: #1E1915;
+  --surface-2: #262019;
+  --surface-3: #2F2822;
+  --line: #332B24;
+  --line-2: #453B32;
+  --text: #F2EDE7;
+  --text-2: #B4A89B;
+  --text-3: #877C70;
+  --accent: #E8935C;
+  --accent-hi: #F4AE81;
+  --accent-ink: #1B1007;
+  --accent-quiet: #33231A;
+  --accent-line: #5C3D26;
+  --ok: #86B36F;
+  --ok-quiet: #1F2A19;
+  --warn: #DFB25A;
+  --warn-quiet: #2E2716;
+  --danger: #E4705F;
+  --danger-quiet: #311916;
+  --track: #2B241E;
+  --shade: rgba(0, 0, 0, .45);
+  --shadow: 0 1px 0 rgba(255, 255, 255, .035) inset, 0 8px 24px -14px rgba(0, 0, 0, .9);
+  color-scheme: dark;
+}
+
+html[data-scheme="modern"][data-mode="light"] {
+  --bg: #FFFFFF;
+  --rail: #F7F7F8;
+  --surface: #FFFFFF;
+  --surface-2: #F4F4F6;
+  --surface-3: #ECECF0;
+  --line: #E4E4E9;
+  --line-2: #D3D3DB;
+  --text: #16161A;
+  --text-2: #55555F;
+  --text-3: #8B8B96;
+  --accent: #5352D6;
+  --accent-hi: #423FBD;
+  --accent-ink: #FFFFFF;
+  --accent-quiet: #EDEDFB;
+  --accent-line: #D7D6F5;
+  --ok: #12805A;
+  --ok-quiet: #E6F5EE;
+  --warn: #9A6300;
+  --warn-quiet: #FBF1DD;
+  --danger: #C22A26;
+  --danger-quiet: #FBEAE9;
+  --track: #E6E6EB;
+  --shade: rgba(22, 22, 26, .32);
+  --shadow: 0 1px 2px rgba(22, 22, 26, .05), 0 6px 18px -12px rgba(22, 22, 26, .2);
+  color-scheme: light;
+}
+
+html[data-scheme="modern"][data-mode="dark"] {
+  --bg: #1B1B1F;
+  --rail: #151517;
+  --surface: #202024;
+  --surface-2: #26262B;
+  --surface-3: #2E2E35;
+  --line: #34343C;
+  --line-2: #45454F;
+  --text: #EEEEF1;
+  --text-2: #A8A8B3;
+  --text-3: #75757F;
+  --accent: #9291F0;
+  --accent-hi: #ABAAF5;
+  --accent-ink: #16151F;
+  --accent-quiet: #26243F;
+  --accent-line: #3B3A63;
+  --ok: #4FD69C;
+  --ok-quiet: #17261F;
+  --warn: #E4B455;
+  --warn-quiet: #2E2717;
+  --danger: #F0736C;
+  --danger-quiet: #341E1D;
+  --track: #2E2E35;
+  --shade: rgba(0, 0, 0, .5);
+  --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 8px 24px -14px rgba(0, 0, 0, .85);
+  color-scheme: dark;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 /* A class that sets `display` outranks the user agent's [hidden] rule, so
@@ -175,6 +301,7 @@ table { border-collapse: collapse; width: 100%; }
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   height: 27px; padding: 0 9px; border-radius: 6px; cursor: pointer;
   border: 1px solid var(--line-2); background: transparent; color: var(--text-2); font-size: 12px;
+  line-height: 1.2; /* see .btn's comment — same flex-centered-label shape */
 }
 .nav-quit:hover { color: var(--danger); border-color: var(--danger); }
 
@@ -195,6 +322,19 @@ table { border-collapse: collapse; width: 100%; }
 }
 .dock-idle b { display: block; font-size: 12.5px; font-weight: 600; }
 .dock-idle p { color: var(--text-3); font-size: 11px; line-height: 1.4; margin-top: 3px; }
+
+/* ── automatic updates: a fact worth noticing early, not a job in progress ── */
+.update-dock {
+  margin-top: 16px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; background: var(--surface);
+}
+.update-dock b { display: block; font-size: 12.5px; font-weight: 600; }
+.update-dock p { color: var(--text-3); font-size: 11px; line-height: 1.4; margin-top: 3px; }
+.update-dock.available, .update-dock.ready { border-color: var(--accent-line); background: var(--accent-quiet); }
+.update-dock.ready b { color: var(--accent-hi); }
+.update-dock.error { border-color: var(--danger); }
+.update-dock.error b { color: var(--danger); }
+.update-dock.error p { color: var(--text-2); }
 
 /* ── working files, the standing reminder ──────────────────────────────── */
 .diskstrip {
@@ -223,6 +363,16 @@ table { border-collapse: collapse; width: 100%; }
   height: 34px; padding: 0 13px; border-radius: 7px; white-space: nowrap;
   border: 1px solid var(--line-2); background: var(--surface); color: var(--text);
   font-size: 13px; font-weight: 500; cursor: pointer;
+  /* Overrides body's line-height: 1.5. align-items: center on this flex
+     container centers the *line box*, and 1.5 reserves far more room below
+     the baseline (descender space) than short, descender-free labels like
+     "Install" ever use, so the visible letters sat noticeably above true
+     center. 1.2 removes most of that excess while leaving enough headroom
+     that accented capitals in the French interface (Réessayer, Créer) don't
+     brush the button edge — going all the way to line-height: 1 measured no
+     better (the last ~1px is the system font's own ascent/descent split,
+     which no line-height value removes) and would have cut that margin. */
+  line-height: 1.2;
 }
 .btn:hover { background: var(--surface-2); border-color: var(--text-3); text-decoration: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
@@ -422,14 +572,28 @@ input[type="checkbox"]:indeterminate { border-color: var(--accent); }
 input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2px; background: var(--accent); border-radius: 1px; }
 
 .switch { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
-.switch input { -webkit-appearance: none; appearance: none; width: 34px; height: 20px; border-radius: 99px; margin: 1px 0 0;
-  background: var(--track); border: 1px solid var(--line-2); position: relative; flex: none; cursor: pointer; }
-.switch input::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-  border-radius: 50%; background: var(--text-3); transition: left .14s ease, background .14s ease;
+/* [type="checkbox"] added throughout, not just ".switch input": it makes every
+   rule here strictly more specific than the plain input[type="checkbox"]:checked
+   ::after above (same 2-class-2-element tier otherwise), which was winning the
+   width/height/border/transform tug-of-war on source order alone and left the
+   "on" thumb as a bitten little checkmark crescent instead of a circle. The
+   :checked::after rule also now redeclares every property the thumb needs
+   rather than only the two that used to differ, so it can never again inherit
+   a stray property from that unrelated rule. */
+.switch input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none; width: 34px; height: 20px; border-radius: 99px; margin: 1px 0 0;
+  background: var(--track); border: 1px solid var(--line-2); position: relative; flex: none; cursor: pointer;
 }
-.switch input:checked { background: var(--accent); border-color: var(--accent); }
-.switch input:checked::after { left: 16px; background: var(--accent-ink); }
+.switch input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border: none; border-radius: 50%; background: var(--text-3); transform: none;
+  transition: left .14s ease, background .14s ease;
+}
+.switch input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.switch input[type="checkbox"]:checked::after {
+  content: ""; position: absolute; top: 2px; left: 16px; width: 14px; height: 14px;
+  border: none; border-radius: 50%; background: var(--accent-ink); transform: none;
+}
 .switch b { font-size: 12.5px; font-weight: 600; display: block; }
 .switch span { color: var(--text-3); font-size: 11.5px; line-height: 1.45; display: block; margin-top: 1px; }
 
@@ -469,6 +633,60 @@ input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2
   border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); cursor: pointer; }
 .power-mode strong { font-size: 13px; font-weight: 600; }
 .power-mode .meta { display: block; margin-top: 2px; line-height: 1.45; }
+
+/* Appearance panel: two palettes (each a swatch preview), each with its own
+   light/dark/system mode. Deliberately not <select>s — a colour choice reads
+   faster as a swatch than as text. */
+.theme-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.theme-card { position: relative; display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); cursor: pointer; }
+.theme-card.selected { border-color: var(--accent); background: var(--accent-quiet); }
+.theme-card input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.theme-swatch {
+  flex: none; width: 34px; height: 34px; border-radius: 8px; border: 1px solid;
+  display: flex; align-items: flex-end; justify-content: flex-start; gap: 3px; padding: 5px;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, .04);
+}
+.theme-swatch span { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.theme-card-label { display: flex; flex-direction: column; min-width: 0; }
+.theme-card-label strong { font-size: 12.5px; font-weight: 600; }
+.theme-card-label .meta { display: block; margin-top: 1px; line-height: 1.35; font-size: 11px; }
+
+.mode-toggle { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px;
+  background: var(--surface-2); border: 1px solid var(--line); }
+.mode-btn { border: none; background: transparent; color: var(--text-2); cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 500; padding: 6px 13px; border-radius: 6px;
+  transition: background .12s, color .12s; }
+.mode-btn:hover { color: var(--text); }
+.mode-btn.selected { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px var(--shade); }
+
+/* ── first-run onboarding: language, appearance, updates — asked once ──── */
+.onboard-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--shade); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.onboard-card {
+  width: 100%; max-width: 440px; max-height: calc(100vh - 48px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 28px; box-shadow: 0 24px 64px -20px rgba(0, 0, 0, .45);
+  display: flex; flex-direction: column; gap: 20px;
+}
+.onboard-head { text-align: center; }
+.onboard-logo {
+  width: 40px; height: 40px; border-radius: 10px; margin: 0 auto 12px;
+  font-size: 18px;
+}
+.onboard-head h1 { font-size: 19px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.onboard-head p { margin-top: 6px; color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
+.onboard-field { display: flex; flex-direction: column; gap: 8px; }
+/* A dedicated class rather than "label:first-child" — the auto-update field's
+   only label is the .switch itself, and text-transform inherits into every
+   span nested inside it, which shouted the whole hint in capitals. */
+.onboard-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3);
+}
 
 .pathbox {
   display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 7px;
