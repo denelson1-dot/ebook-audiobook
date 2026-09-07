@@ -79,15 +79,18 @@ def test_mp4_audio_import_transcodes_to_wav(tmp_path, clip):
 
 # --- the voices shipped with the application --------------------------------
 
-def test_the_four_shipped_voices_are_present_and_readable():
+def test_the_shipped_voices_are_present_and_readable():
     """They ride in the package, so a fresh install has usable narrators."""
     from ebook_audiobook.voices import BUNDLED, BUNDLED_DIR
 
     # Named explicitly, so dropping one is a decision someone has to make here
-    # rather than something that quietly happens to a glob.
+    # rather than something that quietly happens to a glob. Adding one is a
+    # decision too — hence the count.
     assert [b["id"] for b in BUNDLED] == [
         "male-north-american", "female-north-american", "male-british", "female-british",
-        "female-french", "male-french"]
+        "female-french", "male-french",
+        "female-spanish-latin-american", "male-spanish-latin-american",
+        "female-spanish-european", "male-spanish-european"]
     for b in BUNDLED:
         clip = BUNDLED_DIR / b["file"]
         assert clip.is_file(), f"{b['file']} is missing from the package"
@@ -207,12 +210,35 @@ def test_a_voice_may_suggest_settings_or_leave_them_alone():
     assert lib.get("default").pacing is None
 
 
+# The display name leads with the language, so a picker showing several reads
+# as a list rather than a jumble. Extend this when a language is added — which
+# is the point: the name is part of shipping a voice, not an afterthought.
+LANGUAGE_NAME_PREFIX = {"en": "English — ", "fr": "French — ", "es": "Spanish — "}
+
+
 def test_every_bundled_voice_names_its_language():
+    from ebook_audiobook import narration_langs
     from ebook_audiobook.voices import BUNDLED
 
     for b in BUNDLED:
-        assert b["language"] in ("en", "fr"), b["id"]
-        assert b["name"].startswith({"en": "English — ", "fr": "French — "}[b["language"]]), b["id"]
+        assert b["language"] in LANGUAGE_NAME_PREFIX, b["id"]
+        assert b["name"].startswith(LANGUAGE_NAME_PREFIX[b["language"]]), b["id"]
+        # A voice for a language the app does not claim to support properly is
+        # a voice nobody can reach: the picker only offers supported languages.
+        assert narration_langs.LANGUAGES[b["language"]].tier == "supported", b["id"]
+
+
+def test_every_supported_narration_language_has_a_voice_and_a_default():
+    """A language marked "supported" promises a narrator that speaks it."""
+    from ebook_audiobook import narration_langs
+    from ebook_audiobook.voices import BUNDLED, DEFAULT_BUNDLED_BY_LANGUAGE
+
+    ids = {b["id"] for b in BUNDLED}
+    for code, lg in narration_langs.LANGUAGES.items():
+        if lg.tier != "supported":
+            continue
+        assert any(b["language"] == code for b in BUNDLED), code
+        assert DEFAULT_BUNDLED_BY_LANGUAGE.get(code) in ids, code
 
 
 def test_the_default_narrator_follows_the_interface_language(monkeypatch):
@@ -244,3 +270,60 @@ def test_a_book_imported_from_a_french_interface_starts_with_the_french_narrator
     r = client.post("/import", data={"path": str(synthetic_epub), "engine": "fake"})
     job = r.headers["Location"].rstrip("/").split("/")[-1]
     assert JobStore(job).load_voice().extra["voice_id"] == "male-north-american"
+
+
+# --- a voice knows what language it speaks -----------------------------------
+
+def test_a_user_added_clip_remembers_the_language_it_was_added_with(clip):
+    """Asked for on the form, persisted in the index, read back on the way out.
+
+    Without this a Spanish clip someone uploads is English forever, and never
+    appears on the page for the language it actually speaks.
+    """
+    lib = VoiceLibrary()
+    v = lib.add("Abuela", src_path=clip, language="es")
+    assert v.language == "es"
+    assert lib.get(v.id).language == "es"
+    assert any(d["language"] == "es" for d in lib._load_index() if d["id"] == v.id)
+
+
+def test_a_clip_added_before_voices_had_languages_is_english(clip):
+    """An index entry with no language key predates the field; it was English
+    at the time and must stay English rather than becoming unreachable."""
+    lib = VoiceLibrary()
+    v = lib.add("Old one", src_path=clip)
+    items = lib._load_index()
+    for d in items:
+        d.pop("language", None)
+    lib._save_index(items)
+    assert lib.get(v.id).language == "en"
+
+
+def test_the_default_narrator_is_per_language(clip):
+    """Choosing a Spanish narrator for new books must not hand that voice to
+    the next English book — it cannot speak the language."""
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.voices import default_voice_id
+
+    s = app_settings.load_settings()
+    s.set_default_voice("es", "male-spanish-european")
+    app_settings.save_settings(s)
+
+    assert default_voice_id("es") == "male-spanish-european"
+    assert default_voice_id("en") == "male-north-american"
+    assert default_voice_id("fr") == "female-french"
+
+
+def test_a_default_pointing_at_a_deleted_voice_falls_back(clip):
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.voices import default_voice_id
+
+    lib = VoiceLibrary()
+    v = lib.add("Temporary", src_path=clip, language="en")
+    s = app_settings.load_settings()
+    s.set_default_voice("en", v.id)
+    app_settings.save_settings(s)
+    assert default_voice_id("en") == v.id
+
+    lib.delete(v.id)
+    assert default_voice_id("en") == "male-north-american"

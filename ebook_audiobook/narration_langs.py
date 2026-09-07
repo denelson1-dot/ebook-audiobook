@@ -72,11 +72,11 @@ class Language:
 LANGUAGES: dict[str, Language] = {
     "en": Language("en", N_("English"), "english", "supported"),
     "fr": Language("fr", N_("French"), "multilingual", "supported"),
+    "es": Language("es", N_("Spanish"), "multilingual", "supported"),
     "ar": Language("ar", N_("Arabic"), "multilingual", "experimental"),
     "da": Language("da", N_("Danish"), "multilingual", "experimental"),
     "de": Language("de", N_("German"), "multilingual", "experimental"),
     "el": Language("el", N_("Greek"), "multilingual", "experimental"),
-    "es": Language("es", N_("Spanish"), "multilingual", "experimental"),
     "fi": Language("fi", N_("Finnish"), "multilingual", "experimental"),
     "he": Language("he", N_("Hebrew"), "multilingual", "experimental"),
     "hi": Language("hi", N_("Hindi"), "multilingual", "experimental"),

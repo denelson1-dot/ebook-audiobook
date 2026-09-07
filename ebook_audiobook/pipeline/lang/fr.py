@@ -170,5 +170,6 @@ RULES = Rules(
         "by_author_tail": ", de %(author)s.",
         "this_book": "ce livre",
         "the_end": "Fin",
+        "voice_sample": "Voici un extrait de la voix choisie. La ville endormie reposait sous un ciel vaste et indifférent, et quelque part une cloche a sonné deux fois.",
     },
 )

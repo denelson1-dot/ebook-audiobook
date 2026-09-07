@@ -308,3 +308,129 @@ def test_quit_warns_about_a_download(monkeypatch):
     assert r.status_code == 409 and r.get_json()["kind"] == "model_download"
     body = app.test_client().get("/").data.decode()
     assert "model_download" in body  # the warning table knows the kind
+
+
+# --- auditioning a narrator in its own language ------------------------------
+
+def test_the_audition_sentence_follows_the_voices_language():
+    """Each language auditions with its own sentence, not a translation of the
+    English one and not the English one itself."""
+    from ebook_audiobook.worker import voice_sample_text
+
+    said = {c: voice_sample_text(c) for c in ("en", "fr", "es")}
+    assert len({*said.values()}) == 3
+    assert "narrator voice" in said["en"]
+    assert "voix" in said["fr"]
+    assert "voz" in said["es"]
+    # A language with no rules module of its own still gets a sentence.
+    assert voice_sample_text("de") == said["en"]
+
+
+def test_auditioning_a_voice_uses_its_own_language_and_model(monkeypatch, tmp_path):
+    """The bug this covers: render_voice_sample built VoiceSettings without a
+    language, so every audition loaded the English model and read English —
+    a French narrator's clip reading English tells you nothing useful."""
+    from ebook_audiobook import worker
+
+    seen = {}
+
+    class FakeAdapter:
+        def load(self): pass
+        def unload(self): pass
+        def synthesize(self, text):
+            seen["text"] = text
+            import numpy as np
+            return types.SimpleNamespace(samples=np.zeros(240, dtype="float32"),
+                                         sample_rate=24000)
+
+    def fake_get_adapter(voice, sr):
+        seen["language"] = voice.language
+        return FakeAdapter()
+
+    monkeypatch.setattr(worker, "get_adapter", fake_get_adapter)
+    monkeypatch.setattr(nl, "require_installed", lambda lang: None)
+    worker.render_voice_sample("female-french")
+
+    assert seen["language"] == "fr"
+    assert "voix" in seen["text"]
+
+
+def test_auditioning_without_the_model_is_refused_before_it_queues(monkeypatch):
+    """409 with the pack to install, rather than four minutes of spinner and
+    then a failure inside the worker."""
+    monkeypatch.setattr(nl, "language_available", lambda code: code == "en")
+    client = create_app().test_client()
+    r = client.post("/voices/female-spanish-european/test")
+    assert r.status_code == 409
+    assert r.get_json()["install_pack"] == "multilingual"
+
+    # English still works: its model is the one that is there.
+    assert client.post("/voices/male-north-american/test").status_code == 200
+
+
+# --- the voices page is per language -----------------------------------------
+
+def test_the_voices_page_shows_one_languages_narrators():
+    client = create_app().test_client()
+    es = client.get("/voices?lang=es").data.decode()
+    assert "female-spanish-latin-american" in es
+    assert "female-french" not in es
+    assert "male-north-american" not in es
+
+    fr = client.get("/voices?lang=fr").data.decode()
+    assert "female-french" in fr
+    assert "female-spanish-latin-american" not in fr
+
+
+def test_the_voices_page_falls_back_for_a_language_it_cannot_narrate():
+    """German is a language the engine speaks but the app has no rules or
+    voices for, so asking for it lands on English rather than an empty page."""
+    client = create_app().test_client()
+    body = client.get("/voices?lang=de").data.decode()
+    assert "male-north-american" in body
+
+
+def test_an_audition_uses_the_penalty_its_model_was_tuned_with():
+    """At the English model's 1.2 the multilingual one stops a few words in: a
+    nine-second sentence came out at two. The audition builds its VoiceSettings
+    from scratch, so it has to ask for the right default rather than inherit
+    the dataclass one."""
+    from ebook_audiobook import config, worker
+
+    seen = {}
+
+    class FakeAdapter:
+        def load(self): pass
+        def unload(self): pass
+        def synthesize(self, text):
+            import numpy as np
+            return types.SimpleNamespace(samples=np.zeros(240, dtype="float32"),
+                                         sample_rate=24000)
+
+    def fake_get_adapter(voice, sr):
+        seen["penalty"] = voice.repetition_penalty
+        return FakeAdapter()
+
+    import pytest as _pytest
+    monkey = _pytest.MonkeyPatch()
+    try:
+        monkey.setattr(worker, "get_adapter", fake_get_adapter)
+        monkey.setattr(nl, "require_installed", lambda lang: None)
+        worker.render_voice_sample("female-spanish-european")
+        assert seen["penalty"] == config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL
+        worker.render_voice_sample("male-north-american")
+        assert seen["penalty"] == config.DEFAULT_REPETITION_PENALTY
+    finally:
+        monkey.undo()
+
+
+def test_the_penalty_default_is_decided_in_one_place():
+    from ebook_audiobook import config
+
+    # An unspecified language means English, which is what every caller that
+    # predates the field is asking for.
+    for code in ("en", None, ""):
+        assert config.default_repetition_penalty(code) == config.DEFAULT_REPETITION_PENALTY
+    for code in ("fr", "es", "ja"):
+        assert config.default_repetition_penalty(code) == \
+            config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL

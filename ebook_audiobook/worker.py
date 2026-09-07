@@ -117,28 +117,40 @@ def resolve_output_target(mode: str, output_dir: str | Path | None, book: Book) 
     return out_dir / f"{layout.output_stem(book)}.m4b", out_dir, False
 
 
-VOICE_SAMPLE_TEXT = (
-    "This is a sample of the selected narrator voice. The quiet town slept "
-    "beneath a wide and indifferent sky, and somewhere a single bell rang twice."
-)
+def voice_sample_text(lang: str = "en") -> str:
+    """The sentence a narrator is auditioned with, in the language it speaks."""
+    return rules_for(lang).strings["voice_sample"]
 
 
 def render_voice_sample(voice_id: str, params: dict | None = None) -> Path:
     """Render a short fixed sentence with a library voice so it can be auditioned
-    in the UI. Uses the real engine; output goes to local-data/voices/_sample_<id>.wav."""
+    in the UI. Uses the real engine; output goes to local-data/voices/_sample_<id>.wav.
+
+    The sentence, and the model that speaks it, follow the *voice's* language.
+    Auditioning a French narrator by having the English model read an English
+    sentence in a French speaker's timbre tells you almost nothing about how it
+    will read a French book, which is the only question the button is asked.
+    """
     from .voices import VoiceLibrary
 
     lib = VoiceLibrary()
+    entry = lib.get(voice_id)
+    lang = (entry.language if entry else "en") or "en"
+    # Refuse before queueing rather than failing inside the worker: the caller
+    # turns this into a 409 that names the model to install.
+    narration_langs.require_installed(lang)
     clip = lib.clip_path(voice_id)
     voice = VoiceSettings(
         engine="chatterbox",
         reference_clip=str(clip) if clip else None,
+        language=lang,
+        repetition_penalty=config.default_repetition_penalty(lang),
         **(params or {}),
     )
     adapter = get_adapter(voice, config.SAMPLE_RATE)
     adapter.load()
     try:
-        audio = adapter.synthesize(VOICE_SAMPLE_TEXT)
+        audio = adapter.synthesize(voice_sample_text(lang))
     finally:
         adapter.unload()
     out = paths().voices / f"_sample_{voice_id}.wav"
@@ -245,10 +257,10 @@ def set_job_language(store: JobStore, lang: str) -> None:
         # Each model was tuned with its own repetition penalty. Move the slider
         # only if it still sits at the other model's default, so a value the
         # user chose is never overwritten.
-        if lang == "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL:
-            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY
-        elif lang != "en" and voice.repetition_penalty == config.DEFAULT_REPETITION_PENALTY:
-            voice.repetition_penalty = config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL
+        was_default = voice.repetition_penalty in (
+            config.DEFAULT_REPETITION_PENALTY, config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL)
+        if was_default:
+            voice.repetition_penalty = config.default_repetition_penalty(lang)
         voice.language = lang
         lib = VoiceLibrary()
         current = lib.get(voice.extra.get("voice_id", ""))
@@ -467,7 +479,15 @@ def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
 # --- segment building --------------------------------------------------------
 
 def build_segments(chapters: list[Chapter], engine_version: str, vkey: str,
-                   overrides: dict[str, str] | None = None) -> list[Segment]:
+                   overrides: dict[str, str] | None = None,
+                   lang: str = "en") -> list[Segment]:
+    """Cut every chapter into renderable segments.
+
+    ``lang`` is the *book's* narration language, which decides where sentences
+    end and how long a chunk may be — a language without spaces between words
+    cannot be cut with the Latin rules. It defaults to English so that callers
+    predating it, and every English book, behave exactly as before.
+    """
     segments: list[Segment] = []
     gseq = 0
     for ch in chapters:
@@ -498,7 +518,7 @@ def build_segments(chapters: list[Chapter], engine_version: str, vkey: str,
         if title and ch.speak_title:
             add(title, "chapter_title")
         # A/C: paragraph- and scene-aware body chunks carry their own boundaries.
-        for chunk, boundary in chunk_structured(body):
+        for chunk, boundary in chunk_structured(body, lang=lang):
             add(chunk, boundary)
     return segments
 
@@ -664,7 +684,8 @@ def render_job(
         # User pronunciation fixes (e.g. "LOG" -> "log") are folded into segment
         # text here, so changing them re-renders only the affected segments.
         overrides = voice.extra.get("pron") or {}
-        segments = build_segments(chapters, adapter.engine_version, vkey, overrides)
+        segments = build_segments(chapters, adapter.engine_version, vkey, overrides,
+                                  lang=book.language)
         store.save_segments(segments)
 
         if is_preview:
@@ -860,7 +881,11 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
         adapter.load()  # deliberately outside every timing below
         vkey = voice_key(voice, config.SAMPLE_RATE)
         overrides = voice.extra.get("pron") or {}
-        segments = build_segments(chapters, adapter.engine_version, vkey, overrides)
+        # The book's own language, not the voice's: chunking follows the script
+        # the text is written in. A Japanese book still has no spaces between its
+        # words when its narration has fallen back to the English model.
+        segments = build_segments(chapters, adapter.engine_version, vkey, overrides,
+                                  lang=store.load_book().language)
 
         # Draw from every section that will actually be narrated, starting at the
         # first real chapter — not from that one chapter alone. A chapter can be

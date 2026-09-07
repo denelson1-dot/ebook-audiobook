@@ -110,5 +110,6 @@ RULES = Rules(
         "by_author_tail": ", by %(author)s.",
         "this_book": "this book",
         "the_end": "The End",
+        "voice_sample": "This is a sample of the selected narrator voice. The quiet town slept beneath a wide and indifferent sky, and somewhere a single bell rang twice.",
     },
 )

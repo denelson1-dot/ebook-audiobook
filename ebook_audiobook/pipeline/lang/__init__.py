@@ -38,15 +38,42 @@ class Rules:
     #   by_author_tail   its ending when there is an author
     #   this_book        what "concludes" says when the title is unknown
     #   the_end          the closing section's display-only marker
+    #   voice_sample     the sentence the Voices page auditions a narrator with
     strings: dict[str, str] = field(default_factory=dict)
+
+    # --- how this language's sentences are cut up -----------------------------
+    #
+    # All five default to None/" ", which is exactly what chunk.py did before
+    # any of this existed, so English and French are untouched. They exist for
+    # languages that do not put spaces between words: for those, the shared
+    # Latin patterns match nothing at all, a whole paragraph arrives as one
+    # "sentence", and the hard-wrapper — which splits on whitespace — slices it
+    # at arbitrary character positions, mid-word.
+    #
+    # None means "use the shared Latin pattern / the global budget".
+    sentence_end: re.Pattern | None = None
+    clause: re.Pattern | None = None
+    # What goes between two units packed into one chunk. "" for scripts with no
+    # word spacing, where a joining space would be a visible error.
+    joiner: str = " "
+    # Per-language chunk budgets, in characters. A character carries far more
+    # speech in a logographic script than in a Latin one, so a budget tuned for
+    # English produces over-long utterances — precisely what the engine degrades
+    # on. None means config.CHUNK_TARGET_CHARS / CHUNK_MAX_CHARS.
+    chunk_target_chars: int | None = None
+    chunk_max_chars: int | None = None
+
+
+# Languages with a rules module of their own. Everything else — including the
+# narration languages the engine speaks but we have written no rules for — falls
+# back to English, which is why this maps to a module name rather than gating on
+# membership somewhere else.
+_MODULES = {"en": "en", "fr": "fr", "es": "es"}
 
 
 def rules_for(lang: str | None) -> Rules:
     """The rules for a language code; English for anything unknown."""
-    from . import en
+    from importlib import import_module
 
-    if lang == "fr":
-        from . import fr
-
-        return fr.RULES
-    return en.RULES
+    name = _MODULES.get(lang or "", "en")
+    return import_module(f"{__name__}.{name}").RULES

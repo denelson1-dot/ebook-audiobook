@@ -52,12 +52,24 @@ BUNDLED = (
      "file": "female-french.flac", "pacing": 0.42},
     {"id": "male-french", "name": N_("French — Male"), "language": "fr",
      "file": "male-french.flac", "pacing": 0.42},
+    # Spanish ships an accent pair per region rather than one "neutral" reader:
+    # a Mexican and a Peninsular narrator are audibly different within a
+    # sentence. The names say the region, as the English ones do.
+    {"id": "female-spanish-latin-american", "name": N_("Spanish — Female, Latin American"),
+     "language": "es", "file": "female-spanish-latin-american.flac", "pacing": 0.42},
+    {"id": "male-spanish-latin-american", "name": N_("Spanish — Male, Latin American"),
+     "language": "es", "file": "male-spanish-latin-american.flac", "pacing": 0.42},
+    {"id": "female-spanish-european", "name": N_("Spanish — Female, European"),
+     "language": "es", "file": "female-spanish-european.flac", "pacing": 0.42},
+    {"id": "male-spanish-european", "name": N_("Spanish — Male, European"),
+     "language": "es", "file": "male-spanish-european.flac", "pacing": 0.42},
 )
 
 # Which voice a newly imported book starts with, per language. Until a book
 # carries its own language, the interface language decides: someone using the
 # app in French is, for now, taken to be narrating French books.
-DEFAULT_BUNDLED_BY_LANGUAGE = {"en": "male-north-american", "fr": "female-french"}
+DEFAULT_BUNDLED_BY_LANGUAGE = {"en": "male-north-american", "fr": "female-french",
+                               "es": "female-spanish-latin-american"}
 DEFAULT_BUNDLED_ID = DEFAULT_BUNDLED_BY_LANGUAGE["en"]
 # Accepted upload/import formats. Anything that isn't already a WAV is transcoded
 # to WAV via ffmpeg on import (see VoiceLibrary.add), so container/AAC formats
@@ -163,7 +175,10 @@ class VoiceLibrary:
         bundled_ids = {v.id for v in voices}
         for d in self._load_index():
             if d.get("id") and d["id"] not in bundled_ids:
-                voices.append(Voice(d["id"], d.get("name", d["id"]), d.get("clip_filename")))
+                # Index entries written before voices carried a language are
+                # English, which is what they were treated as at the time.
+                voices.append(Voice(d["id"], d.get("name", d["id"]), d.get("clip_filename"),
+                                    language=d.get("language") or "en"))
         return voices
 
     def get(self, voice_id: str) -> Voice | None:
@@ -179,9 +194,15 @@ class VoiceLibrary:
         return path if path.is_file() else None
 
     def add(self, name: str, src_path: str | None = None, file_storage=None,
-            orig_filename: str | None = None) -> Voice:
+            orig_filename: str | None = None, language: str = "en") -> Voice:
         """Add a voice from a local file path or an uploaded file. The clip is
-        copied into the library. Returns the created Voice."""
+        copied into the library. Returns the created Voice.
+
+        ``language`` is what the recording is spoken in. It is asked for rather
+        than guessed: a clip's language is metadata about the speaker, and no
+        amount of listening to sixty seconds of audio makes it safe to infer.
+        It decides which books may use the voice and which sentence auditions it.
+        """
         self.dir.mkdir(parents=True, exist_ok=True)
         name = (name or "").strip() or "Voice"
 
@@ -227,9 +248,11 @@ class VoiceLibrary:
             else:
                 raise ValueError("provide src_path or file_storage")
 
-        items.append({"id": vid, "name": name, "clip_filename": clip_filename})
+        language = (language or "en").strip() or "en"
+        items.append({"id": vid, "name": name, "clip_filename": clip_filename,
+                      "language": language})
         self._save_index(items)
-        return Voice(vid, name, clip_filename)
+        return Voice(vid, name, clip_filename, language=language)
 
     @staticmethod
     def _ffmpeg_to_wav(src: str, dest: Path) -> None:
@@ -282,11 +305,17 @@ def default_voice_id(language: str | None = None) -> str:
     from .i18n import current_language
 
     lib = VoiceLibrary()
-    available = {v.id for v in lib.list()}
-    chosen = app_settings.load_settings().default_voice_id
-    if chosen and chosen in available:
+    voices = lib.list()
+    available = {v.id for v in voices}
+    speaks = {v.id: v.language for v in voices}
+    lang = language or current_language()
+    # The user's choice *for this language*: a Spanish default must not be
+    # handed to an English book, and a voice that has since been deleted — or
+    # whose language was changed — must not be either.
+    chosen = app_settings.load_settings().default_voice_for(lang)
+    if chosen and chosen in available and speaks.get(chosen) == lang:
         return chosen
-    wanted = DEFAULT_BUNDLED_BY_LANGUAGE.get(language or current_language(), DEFAULT_BUNDLED_ID)
+    wanted = DEFAULT_BUNDLED_BY_LANGUAGE.get(lang, DEFAULT_BUNDLED_ID)
     for candidate in (wanted, DEFAULT_BUNDLED_ID):
         if candidate in available:
             return candidate

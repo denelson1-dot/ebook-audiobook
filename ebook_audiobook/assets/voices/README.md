@@ -1,9 +1,9 @@
 # Bundled narrator voices
 
-Six reference clips shipped with the application, so a new install has
+Ten reference clips shipped with the application, so a new install has
 usable voices without anyone having to find or record one: four English,
-two French. Each carries the language it was recorded in, and each language
-has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
+two French, four Spanish. Each carries the language it was recorded in, and
+each language has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
 `ebook_audiobook/voices.py`).
 
 ## Provenance and licence
@@ -18,10 +18,23 @@ narration samples (WAV), one reader each, converted here to 24 kHz mono FLAC.
   those are kept under `archive/` and are not shipped.
 - **French** — `female-french`: Nadine Eckert-Boulet; `male-french`:
   Gilles G. Le Blanc. The female voice is the default narrator when the
-  interface is in French. (The "floor"
-  figure `tools/prepare_voices.py` prints is meaningless for these: it is the
-  level of the quietest frames, and a continuous 60-second narration has no
-  silence to measure, only breaths and word tails.)
+  interface is in French.
+- **Spanish** — `female-spanish-latin-american`: Karen Savage;
+  `male-spanish-latin-american`: Mario Pineda; `female-spanish-european`:
+  Marian (dreamvoz); `male-spanish-european`: "tux". Added 2026-09-07.
+
+The "floor" figure `tools/prepare_voices.py` prints is not a noise measure for
+any of these: it is the level of the quietest frames, and a continuous
+60-second narration has no silence to measure, only breaths and word tails. To
+judge a recording, compare the quietest *sustained* window against the clips
+already here — the shipped ten sit between −63 dB and −97 dB by that measure.
+
+Spanish ships two accent regions rather than one "neutral" reader, because
+there is no such thing: a Mexican and a Peninsular narrator are audibly
+different within a sentence. The display names say the region — matching how
+the English clips say "North American" and "British" rather than naming a
+country — while the readers above are the actual individuals. The Latin
+American female is the default, on speaker numbers.
 
 Recording the provenance is the point of this file: audio shipped with no
 note of where it came from is very hard to reconstruct later, and "we
@@ -62,3 +75,11 @@ reports both.
 Drop a clip in, add an entry to `BUNDLED` in `ebook_audiobook/voices.py`,
 and make sure the first ten seconds are clean, representative, continuous
 speech. That is the part listeners will hear in the finished audiobook.
+
+The 60-second source WAVs are **inputs, not artefacts**: `tools/prepare_voices.py`
+reads them from a local directory and writes the FLACs here, and only the
+FLACs are committed and shipped. The sources are named in that script's
+`SOURCES` map so it is clear which file produced which clip, but they are
+not in the repository — they are several times the size of the output and
+re-deriving a clip from one is a deliberate act, not part of a build. Keep
+them somewhere durable if a clip may need re-cutting.

@@ -95,9 +95,16 @@ jobs:
               "ebook_audiobook/web/templates/job.html",
               "ebook_audiobook/web/static/app.css",
               "ebook_audiobook/web/static/app.js",
-              # Without this the app runs in English whatever the setting says.
-              "ebook_audiobook/locale/fr/LC_MESSAGES/messages.mo",
           ]
+          # Derived from the source tree rather than listed, so adding a language
+          # or a narrator cannot silently ship without its files. Both globs have
+          # bitten before: 1.4.0 went out without the new English clips, and a
+          # missing .mo runs the app in English whatever the setting says.
+          src = pathlib.Path("ebook_audiobook")
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("assets/voices/*.flac"))]
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("locale/*/LC_MESSAGES/*.mo"))]
           missing = [r for r in required if r not in names]
           if missing:
               print("MISSING FROM WHEEL:", *missing, sep="\n  ")

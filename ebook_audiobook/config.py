@@ -193,6 +193,18 @@ DEFAULT_REPETITION_PENALTY = 1.2
 # each model separately. Applied when a job switches language, and visible on
 # the slider rather than hidden inside the adapter.
 DEFAULT_REPETITION_PENALTY_MULTILINGUAL = 2.0
+
+
+def default_repetition_penalty(language: str | None) -> float:
+    """The penalty the model for ``language`` was tuned with.
+
+    Not a preference: at the English model's 1.2 the multilingual one stops
+    generating a few words in, so a sentence that should run nine seconds comes
+    out at two. Anything that builds a VoiceSettings from scratch for a
+    non-English language needs this, not the dataclass default.
+    """
+    return (DEFAULT_REPETITION_PENALTY if (language or "en") == "en"
+            else DEFAULT_REPETITION_PENALTY_MULTILINGUAL)
 DEFAULT_MIN_P = 0.05
 DEFAULT_TOP_P = 1.0
 

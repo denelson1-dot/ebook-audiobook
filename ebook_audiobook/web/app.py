@@ -414,13 +414,44 @@ def create_app() -> Flask:
     def voices_page():
         return _voices_page()
 
-    def _voices_page(error: str | None = None, code: int = 200):
-        from ..voices import default_voice_id
+    def _voices_language() -> str:
+        """Which language's narrators the page is showing.
 
+        The query string if it names a supported one, else the narration
+        counterpart of the interface language — someone reading the app in
+        Spanish is far more likely to want the Spanish narrators first — else
+        English.
+        """
+        asked = (request.args.get("lang") or "").strip()
+        for candidate in (asked, i18n.current_language()):
+            lg = narration_langs.LANGUAGES.get(candidate)
+            if lg is not None and lg.tier == "supported":
+                return candidate
+        return "en"
+
+    def _voices_page(error: str | None = None, code: int = 200,
+                     language: str | None = None):
+        from ..voices import VoiceLibrary, default_voice_id
+
+        shown = language or _voices_language()
+        # Only languages the app claims to narrate properly, and only those with
+        # a voice to show: an empty page behind a dropdown entry is a dead end.
+        counts: dict[str, int] = {}
+        for v in VoiceLibrary().list():
+            if not v.is_default:
+                counts[v.language] = counts.get(v.language, 0) + 1
+        choices = [dict(c, count=counts.get(c["code"], 0))
+                   for c in _narration_language_choices()
+                   if c["tier"] == "supported" and counts.get(c["code"])]
         return render_template(
             "voices.html",
-            voices=_offerable_voices(),
-            default_voice_id=default_voice_id(),
+            voices=_offerable_voices(language=shown),
+            default_voice_id=default_voice_id(shown),
+            language=shown,
+            languages=choices,
+            # Auditioning uses the real engine, so a language whose model is not
+            # on this machine cannot be previewed at all.
+            language_available=narration_langs.language_available(shown),
             start=str(Path.home()),
             error=error,
         ), code
@@ -1270,24 +1301,34 @@ def create_app() -> Flask:
     def voices_add():
         lib = VoiceLibrary()
         name = request.form.get("name", "").strip()
+        # The language the clip is spoken in, asked for on the form. Never
+        # inferred from the audio: sixty seconds of speech is not evidence, and
+        # guessing wrong hides the voice on a page its owner will not think to
+        # look at.
+        language = request.form.get("language", "").strip()
+        lg = narration_langs.LANGUAGES.get(language)
+        if lg is None or lg.tier != "supported":
+            language = _voices_language()
         if not name:
-            return _voices_page(_("Give the voice a name."), 400)
+            return _voices_page(_("Give the voice a name."), 400, language)
         upload = request.files.get("file")
         path = request.form.get("path", "").strip()
         try:
             if upload and upload.filename:
                 if Path(upload.filename).suffix.lower() not in AUDIO_EXTS:
-                    return _voices_page(_("That isn't an audio format this can read."), 400)
-                lib.add(name, file_storage=upload, orig_filename=upload.filename)
+                    return _voices_page(_("That isn't an audio format this can read."),
+                                        400, language)
+                lib.add(name, file_storage=upload, orig_filename=upload.filename,
+                        language=language)
             elif path:
-                lib.add(name, src_path=path)
+                lib.add(name, src_path=path, language=language)
             else:
-                return _voices_page(_("Choose a clip first."), 400)
+                return _voices_page(_("Choose a clip first."), 400, language)
         except (ValueError, OSError) as e:
             # A clip ffmpeg couldn't decode, a path that has gone, a folder macOS
             # wouldn't let us read: all shown on the page, with a way back.
-            return _voices_page(_("Couldn't add that voice: %(e)s", e=e), 400)
-        return redirect(url_for("voices_page"))
+            return _voices_page(_("Couldn't add that voice: %(e)s", e=e), 400, language)
+        return redirect(url_for("voices_page", lang=language))
 
     @app.get("/api/languages")
     def api_languages():
@@ -1346,22 +1387,35 @@ def create_app() -> Flask:
         Only new books: a book's voice is part of its own settings, and changing
         it would re-render the book.
         """
-        if not VoiceLibrary().get(voice_id):
+        voice = VoiceLibrary().get(voice_id)
+        if not voice:
             abort(404)
         s = app_settings.load_settings()
-        s.default_voice_id = voice_id
+        # Per language: a Spanish narrator chosen here must not become the
+        # narrator of the next English book.
+        s.set_default_voice(voice.language, voice_id)
         app_settings.save_settings(s)
-        return redirect(url_for("voices_page"))
+        return redirect(url_for("voices_page", lang=voice.language))
 
     @app.post("/voices/<voice_id>/delete")
     def voices_delete(voice_id):
+        voice = VoiceLibrary().get(voice_id)
+        language = voice.language if voice else None
         VoiceLibrary().delete(voice_id)
-        return redirect(url_for("voices_page"))
+        return redirect(url_for("voices_page", lang=language))
 
     @app.post("/voices/<voice_id>/test")
     def voices_test(voice_id):
-        if not VoiceLibrary().get(voice_id):
+        voice = VoiceLibrary().get(voice_id)
+        if not voice:
             abort(404)
+        # Auditioning runs the real engine, so a voice whose model is not on
+        # this machine is refused here rather than four minutes into a queue.
+        if not narration_langs.language_available(voice.language):
+            return {"ok": False, "install_pack": narration_langs.LANGUAGES[
+                        voice.language].pack,
+                    "error": _("Narrating in this language needs its model. "
+                               "Install it in Settings.")}, 409
         # The page waits for the sample by polling for the file, which only
         # means "this audition is done" if the previous audition's file is not
         # still sitting there. Auditions queue behind a render, so waiting on

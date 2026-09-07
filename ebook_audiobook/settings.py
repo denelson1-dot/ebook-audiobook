@@ -10,7 +10,7 @@ is trivial to back up or wipe with the rest of ``local-data/``.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .config import paths
@@ -39,7 +39,18 @@ class Settings:
     # Which narrator a newly imported book starts with. Empty means the shipped
     # default. Existing books are never touched by this — their voice is part of
     # their own settings, and changing it would re-render them.
+    #
+    # Kept as the English entry of default_voice_ids below, and still written so
+    # that an older build reading this file finds the default it expects.
     default_voice_id: str = ""
+
+    # The same choice, per narration language: {"en": "male-british", ...}.
+    #
+    # One global default cannot work once more than one language ships. Picking
+    # a Spanish narrator for new books would otherwise hand that voice to the
+    # next English book too — a voice that cannot speak its language, chosen by
+    # nobody. from_dict migrates the single old value in as the English entry.
+    default_voice_ids: dict = field(default_factory=dict)
 
     # Where the app window was last time, as {"x","y","width","height"}.
     #
@@ -103,7 +114,26 @@ class Settings:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Settings":
-        return cls(**{k: d.get(k) for k in cls.__dataclass_fields__ if k in d})
+        s = cls(**{k: d.get(k) for k in cls.__dataclass_fields__ if k in d})
+        if not isinstance(s.default_voice_ids, dict):
+            s.default_voice_ids = {}
+        # A settings file written before narrators were per-language carries a
+        # single default_voice_id, and it meant "for English books" because
+        # English was the only language there was.
+        if s.default_voice_id and not s.default_voice_ids:
+            s.default_voice_ids = {"en": s.default_voice_id}
+        return s
+
+    def default_voice_for(self, language: str) -> str:
+        """This machine's chosen narrator for a language, or "" for none."""
+        return (self.default_voice_ids or {}).get(language or "en", "")
+
+    def set_default_voice(self, language: str, voice_id: str) -> None:
+        ids = dict(self.default_voice_ids or {})
+        ids[language or "en"] = voice_id
+        self.default_voice_ids = ids
+        # Mirrored so an older build still finds a default it understands.
+        self.default_voice_id = ids.get("en", "")
 
 
 def _settings_path() -> Path:
