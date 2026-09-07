@@ -434,3 +434,216 @@ def test_the_penalty_default_is_decided_in_one_place():
     for code in ("fr", "es", "ja"):
         assert config.default_repetition_penalty(code) == \
             config.DEFAULT_REPETITION_PENALTY_MULTILINGUAL
+
+
+# --- changing the language without reading the book again ---------------------------------
+
+def _import_with_a_countable_read(client, epub, monkeypatch):
+    """Import ``epub`` with Calibre's conversion replaced by a copy that counts
+    itself, and wait for the extraction the import queues.
+
+    The conversion is the expensive half of reading a book — minutes on a real
+    one — so counting it is how "it didn't read the book again" is checked.
+    """
+    import shutil
+    import time
+
+    from ebook_audiobook import worker
+    from ebook_audiobook.web.runner import runner
+
+    reads = []
+
+    def convert(src, out_epub, timeout=1800):
+        reads.append(str(src))
+        shutil.copyfile(src, out_epub)
+        return out_epub
+
+    monkeypatch.setattr(worker.extract, "run_ebook_convert", convert)
+    r = client.post("/import", data={"path": str(epub), "engine": "fake"})
+    job = r.headers["Location"].rstrip("/").split("/")[-1]
+    deadline = time.monotonic() + 30
+    while runner.is_busy() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return job, reads
+
+
+def _wait_for_the_worker():
+    import time
+
+    from ebook_audiobook.web.runner import runner
+
+    deadline = time.monotonic() + 30
+    while runner.is_busy() and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+def test_changing_the_language_prepares_the_text_without_reading_the_book_again(
+        monkeypatch, synthetic_epub):
+    monkeypatch.setattr(nl, "is_installed", lambda pack_id, root=None: True)
+    client = create_app().test_client()
+    job, reads = _import_with_a_countable_read(client, synthetic_epub, monkeypatch)
+    store = JobStore(job)
+    assert len(reads) == 1, "the import reads the book once"
+    english = {c.chapter_id: c.text for c in store.load_chapters()}
+    assert english, "nothing was extracted, so there is nothing to re-prepare"
+
+    r = client.post(f"/job/{job}/language", data={"language": "fr"})
+    assert r.status_code == 200 and r.get_json()["language"] == "fr"
+    _wait_for_the_worker()
+
+    assert len(reads) == 1, "changing the language read the book again"
+    assert store.load_voice().language == "fr"
+    french = {c.chapter_id: c.text for c in store.load_chapters()}
+    assert set(french) == set(english), "the sections themselves changed"
+    # The text really was prepared afresh: the app's own closing line is now
+    # in French, and the body text was normalised by French rules.
+    assert "de" in french["outro"] and french["outro"] != english["outro"]
+    assert french["ch0000"] != english["ch0000"]
+
+
+def test_the_sections_you_switched_off_survive_a_language_change(monkeypatch, synthetic_epub):
+    monkeypatch.setattr(nl, "is_installed", lambda pack_id, root=None: True)
+    client = create_app().test_client()
+    job, _reads = _import_with_a_countable_read(client, synthetic_epub, monkeypatch)
+    store = JobStore(job)
+    chapters = store.load_chapters()
+    chapters[-1].include = False
+    store.save_chapters(chapters)
+
+    client.post(f"/job/{job}/language", data={"language": "fr"})
+    _wait_for_the_worker()
+    assert store.load_chapters()[-1].include is False
+
+
+def test_a_book_imported_before_the_cache_existed_falls_back_to_a_full_read(
+        monkeypatch, synthetic_epub):
+    """No parse on disk is not an error — it is the old behaviour, once."""
+    monkeypatch.setattr(nl, "is_installed", lambda pack_id, root=None: True)
+    client = create_app().test_client()
+    job, reads = _import_with_a_countable_read(client, synthetic_epub, monkeypatch)
+    store = JobStore(job)
+    (store.dir / "raw_chapters.json").unlink()
+
+    client.post(f"/job/{job}/language", data={"language": "fr"})
+    _wait_for_the_worker()
+
+    assert len(reads) == 2, "with no cached parse the book has to be read again"
+    assert store.load_voice().language == "fr"
+    assert store.load_chapters(), "the fallback produced no sections"
+    # And it wrote the cache, so the next change of language is the fast one.
+    client.post(f"/job/{job}/language", data={"language": "en"})
+    _wait_for_the_worker()
+    assert len(reads) == 2
+
+
+def test_a_cache_from_a_different_book_is_not_used(monkeypatch, synthetic_epub):
+    """The parse is keyed to the source it came from, so a job whose book was
+    replaced re-reads rather than narrating the previous one's text."""
+    monkeypatch.setattr(nl, "is_installed", lambda pack_id, root=None: True)
+    client = create_app().test_client()
+    job, reads = _import_with_a_countable_read(client, synthetic_epub, monkeypatch)
+    store = JobStore(job)
+    book = store.load_book()
+    assert store.load_raw_chapters(book.source_hash)
+    assert store.load_raw_chapters("some-other-hash") is None
+
+    book.source_hash = "some-other-hash"
+    store.save_book(book)
+    client.post(f"/job/{job}/language", data={"language": "fr"})
+    _wait_for_the_worker()
+    assert len(reads) == 2
+
+
+# --- each narrator keeps its own expressiveness and pacing -------------------------------
+
+def test_switching_language_gives_a_voice_back_the_settings_it_was_left_at(
+        monkeypatch, synthetic_epub):
+    from ebook_audiobook import worker
+
+    monkeypatch.setattr(nl, "is_installed", lambda pack_id, root=None: True)
+    client = create_app().test_client()
+    store = _job_with_french_text(client, synthetic_epub, monkeypatch, None)
+    voice = store.load_voice()
+    assert voice.extra["voice_id"] == "male-north-american"
+
+    # Tune the English narrator to something no clip would suggest.
+    voice.exaggeration, voice.cfg_weight = 0.85, 0.35
+    store.save_voice(voice)
+    worker.remember_voice_tuning(voice)
+    store.save_voice(voice)
+
+    worker.set_job_language(store, "fr")
+    voice = store.load_voice()
+    assert voice.extra["voice_id"] == "female-french"
+    assert voice.cfg_weight == 0.42, "the French clip's own pacing, it has never been tuned"
+    voice.exaggeration, voice.cfg_weight = 0.20, 0.70
+    worker.remember_voice_tuning(voice)
+    store.save_voice(voice)
+
+    # Back to English: the settings that voice was left at, not the clip's.
+    worker.set_job_language(store, "en")
+    voice = store.load_voice()
+    assert voice.extra["voice_id"] == "male-north-american"
+    assert (voice.exaggeration, voice.cfg_weight) == (0.85, 0.35)
+
+    # And French is still where it was left too.
+    worker.set_job_language(store, "fr")
+    voice = store.load_voice()
+    assert (voice.exaggeration, voice.cfg_weight) == (0.20, 0.70)
+
+
+def test_saving_files_the_sliders_under_the_voice_they_were_set_for(synthetic_epub):
+    from ebook_audiobook import worker
+
+    job_id = worker.import_ebook(str(synthetic_epub), engine="fake")
+    store = JobStore(job_id)
+    client = create_app().test_client()
+
+    r = client.post(f"/job/{job_id}/settings", data={
+        "voice_id": "male-north-american", "exaggeration": "0.85", "cfg_weight": "0.35"})
+    assert r.status_code == 200
+    tuning = store.load_voice().extra["voice_tuning"]
+    assert tuning["male-north-american"] == {"exaggeration": 0.85, "cfg_weight": 0.35}
+
+    # The page also carries what it remembers for voices tried without a save.
+    client.post(f"/job/{job_id}/settings", data={
+        "voice_id": "female-british", "exaggeration": "0.5", "cfg_weight": "0.42",
+        "voice_tuning": '{"male-british": {"exaggeration": 0.1, "cfg_weight": 0.9}}'})
+    tuning = store.load_voice().extra["voice_tuning"]
+    assert tuning["male-british"] == {"exaggeration": 0.1, "cfg_weight": 0.9}
+    assert tuning["female-british"] == {"exaggeration": 0.5, "cfg_weight": 0.42}
+    assert tuning["male-north-american"] == {"exaggeration": 0.85, "cfg_weight": 0.35}, \
+        "a save merged with what was already on file, rather than replacing it"
+
+
+def test_the_job_page_hands_the_browser_what_each_voice_was_left_at(synthetic_epub):
+    from ebook_audiobook import worker
+
+    job_id = worker.import_ebook(str(synthetic_epub), engine="fake")
+    client = create_app().test_client()
+    client.post(f"/job/{job_id}/settings", data={
+        "voice_id": "male-north-american", "exaggeration": "0.85", "cfg_weight": "0.35"})
+    body = client.get(f"/job/{job_id}").data.decode()
+    assert '"male-north-american": {"cfg_weight": 0.35, "exaggeration": 0.85}' in body
+    assert 'id="voiceTuning"' in body
+
+
+def test_a_nonsense_tuning_payload_cannot_corrupt_the_settings(synthetic_epub):
+    """The map is posted by the page, so it is parsed defensively: bad shapes
+    are dropped and out-of-range values clamped to what the sliders allow."""
+    from ebook_audiobook import worker
+
+    job_id = worker.import_ebook(str(synthetic_epub), engine="fake")
+    store = JobStore(job_id)
+    client = create_app().test_client()
+    for payload in ("not json", "[1, 2, 3]", '{"v": 3}', '{"v": {"exaggeration": "x"}}'):
+        r = client.post(f"/job/{job_id}/settings", data={
+            "voice_id": "male-north-american", "exaggeration": "0.5",
+            "cfg_weight": "0.42", "voice_tuning": payload})
+        assert r.status_code == 200, payload
+        assert set(store.load_voice().extra["voice_tuning"]) == {"male-north-american"}, payload
+
+    client.post(f"/job/{job_id}/settings", data={
+        "voice_id": "male-north-american", "exaggeration": "0.5", "cfg_weight": "0.42",
+        "voice_tuning": '{"v": {"exaggeration": 42, "cfg_weight": -5}}'})
+    assert store.load_voice().extra["voice_tuning"]["v"] == {"exaggeration": 1.0, "cfg_weight": 0.0}

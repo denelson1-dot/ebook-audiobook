@@ -90,22 +90,12 @@
       <div class="panel-head"><h3>{{ _("Narrator") }}</h3></div>
       <div class="panel-body">
         <form id="settingsForm">
-          <div class="field">
-            <label for="voiceSelect">{{ _("Voice") }}</label>
-            <select name="voice_id" id="voiceSelect">
-              {% for v in voices %}
-                <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}
-                        data-pacing="{{ v.pacing if v.pacing is not none }}"
-                        data-expressiveness="{{ v.expressiveness if v.expressiveness is not none }}">
-                  {{ v.name }}{{ _(' — engine default') if v.is_default }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          {# The language the narrator speaks. Two lists: languages whose text
-             this app prepares (numbers, abbreviations, headings), and the rest
-             the model can say but reads as written. A language whose model is
-             not on this machine is shown, greyed, with where to get it. #}
+          {# Language first: it decides which narrators the voice picker below
+             offers, so choosing it the other way round means choosing twice.
+             Two lists: languages whose text this app prepares (numbers,
+             abbreviations, headings), and the rest the model can say but reads
+             as written. A language whose model is not on this machine is shown,
+             greyed, with where to get it. #}
           <div class="field">
             <label for="narrationLang">{{ _("Language of the narration") }}</label>
             <select id="narrationLang" name="narration_language" data-current="{{ narration_language }}">
@@ -121,9 +111,26 @@
             {% if narration_notice %}
             <p class="hint" style="color:var(--warn)">{{ narration_notice }}</p>
             {% else %}
-            <p class="hint">{{ _("Changing it reads the book again and switches to that language's narrator.") }}</p>
+            <p class="hint">{{ _("Switches to that language's narrator and prepares the text for it. The book itself isn't read again.") }}</p>
             {% endif %}
           </div>
+
+          <div class="field">
+            <label for="voiceSelect">{{ _("Voice") }}</label>
+            <select name="voice_id" id="voiceSelect">
+              {% for v in voices %}
+                <option value="{{ v.id }}" {{ 'selected' if v.id == selected_voice_id }}
+                        data-pacing="{{ v.pacing if v.pacing is not none }}"
+                        data-expressiveness="{{ v.expressiveness if v.expressiveness is not none }}">
+                  {{ v.name }}{{ _(' — engine default') if v.is_default }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {# The two sliders below belong to whichever narrator is selected, and
+             this carries what the page remembers for each of them — including
+             voices tried and left without a save, which the job has never seen. #}
+          <input type="hidden" name="voice_tuning" id="voiceTuning">
 
           <div class="field">
             <label>{{ _("Expressiveness") }} <span class="dim">{{ _("— flat to theatrical") }}</span></label>
@@ -352,6 +359,28 @@ const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
                    min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
 const form = document.getElementById("settingsForm");
 
+// Expressiveness and pacing per narrator: what the job has on file, which the
+// page then keeps up to date as the sliders move. Switching voice files the
+// outgoing one's values here and takes the incoming one's back out, so trying
+// a voice — or a language, which changes the narrator for you — and returning
+// finds the settings you left. Posted with the form (see #voiceTuning) so the
+// ones you never explicitly saved survive the page reload too.
+const VOICE_TUNING_FIELDS = ["exaggeration", "cfg_weight"];
+const voiceTuning = {{ voice_tuning|tojson }};
+const voiceSelect = document.getElementById("voiceSelect");
+const voiceTuningInput = document.getElementById("voiceTuning");
+let tunedVoiceId = voiceSelect.value;
+
+function rememberTuning(voiceId) {
+  if (!voiceId) return;
+  const kept = {};
+  for (const name of VOICE_TUNING_FIELDS) {
+    const el = form.querySelector(`input[name="${name}"]`);
+    if (el) kept[name] = +el.value;
+  }
+  voiceTuning[voiceId] = kept;
+}
+
 // Live slider value labels
 function syncRanges() {
   form.querySelectorAll('input[type=range]').forEach(r => {
@@ -362,7 +391,13 @@ function syncRanges() {
 form.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', syncRanges));
 syncRanges();
 
-function formData() { return new URLSearchParams(new FormData(form)); }
+function formData() {
+  // The sliders on screen belong to the voice on screen; the server files them
+  // under it and merges the rest of the map with what it already had.
+  rememberTuning(voiceSelect.value);
+  voiceTuningInput.value = JSON.stringify(voiceTuning);
+  return new URLSearchParams(new FormData(form));
+}
 // Whether the form holds changes the server has not seen. While it does, the
 // server's opinion of whether the estimates are current is about the *saved*
 // settings and must not overwrite the page's own.
@@ -626,14 +661,20 @@ form.addEventListener("input", (e) => {
   if (e.target.name === "bitrate") return;  // encode-only: changes size, not length
   if (measuredHere) { measuredHere = false; computeEstimate(); }
 });
-// The narration language is not a slider: changing it re-reads the book and
-// swaps the narrator, so it saves on its own and reloads, and a language whose
-// model is missing is refused with the sentence that says where to get it.
+// The narration language is not a slider: changing it swaps the narrator and
+// re-prepares the text, so it saves on its own and reloads, and a language
+// whose model is missing is refused with the sentence that says where to get
+// it. The book is not read again — only the language-dependent preparation of
+// text already on disk is redone.
 const narrationLang = document.getElementById("narrationLang");
 narrationLang.addEventListener("change", async (e) => {
   e.stopPropagation();
+  // Save first: the reload lands on a different narrator, and anything on
+  // screen that the server has not seen is exactly what it would throw away.
+  try { await saveSettings(); }
+  catch { narrationLang.value = narrationLang.dataset.current; return; }
   const r = await postFormResult(`/job/${jobId}/language`, { language: narrationLang.value });
-  if (r.ok) { toast(_("Reading the book again in that language…")); location.reload(); return; }
+  if (r.ok) { toast(_("Preparing the text for that language…")); location.reload(); return; }
   narrationLang.value = narrationLang.dataset.current;
   toast(r.error || _("Couldn't change the language"));
 });
@@ -642,13 +683,18 @@ form.addEventListener("change", (e) => {
   if (e.target.name === "narration_language") return;
   dirty = true;
   if (e.target.name !== "voice_id") return;
-  // Each shipped clip has a pacing that suits it — they all read a little
+  // The voice being left keeps its sliders, so coming back to it comes back to
+  // them. The voice arriving gets its own if this book has tuned it before,
+  // and otherwise the pacing its clip suits — they all read a little
   // deliberately at the engine default. Moving the slider rather than applying
   // it invisibly means the change is something you can see and undo.
+  rememberTuning(tunedVoiceId);
+  tunedVoiceId = e.target.value;
   const opt = e.target.selectedOptions[0];
+  const remembered = voiceTuning[tunedVoiceId];
   let moved = false;
   for (const [attr, field] of [["pacing", "cfg_weight"], ["expressiveness", "exaggeration"]]) {
-    const want = parseFloat(opt && opt.dataset[attr]);
+    const want = remembered ? remembered[field] : parseFloat(opt && opt.dataset[attr]);
     const slider = form.querySelector(`input[name="${field}"]`);
     if (slider && Number.isFinite(want) && +slider.value !== want) {
       slider.value = want;
@@ -657,7 +703,8 @@ form.addEventListener("change", (e) => {
   }
   if (moved) {
     syncRanges();
-    toast(_("Settings adjusted to suit this voice"));
+    toast(remembered ? _("Back to your settings for this voice")
+                     : _("Settings adjusted to suit this voice"));
   }
   if (measuredHere) { measuredHere = false; }
   computeEstimate();

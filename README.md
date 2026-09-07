@@ -182,7 +182,9 @@ Run `ebook-audiobook`, or launch it from your applications menu. Then:
 
 1. **New conversion** → pick a DRM-free ebook from your computer.
 2. Choose a **voice** and adjust the settings — expressiveness and pacing up
-   front, the finer generation knobs under *Advanced*.
+   front, the finer generation knobs under *Advanced*. Those two belong to the
+   voice: try another narrator and come back, and the book hands you the
+   settings you left it at.
 3. **Generate a preview** of any chapter. It uses the exact same engine and
    settings as the full render, so it sounds like the finished article.
 4. **Render full audiobook**, and choose where it goes:
@@ -243,7 +245,9 @@ of the bundled French voices, with numbers, abbreviations and typography read
 the way a French reader would: "1625" becomes *mille six cent vingt-cinq*,
 "M. de Tréville" becomes *Monsieur de Tréville*, "12,50 €" becomes *douze
 euros et cinquante centimes*. You can change a book's narration language on its
-page; it is read again and that language's narrator takes over.
+page: that language's narrator takes over and the text is prepared afresh for
+it, without reading the book again — the conversion is kept from the import, so
+the switch takes a moment rather than minutes.
 
 French needs a second speech model, about 3 GB, downloaded from huggingface.co
 **only** when you press **Install** in **Settings → Narration languages** (or

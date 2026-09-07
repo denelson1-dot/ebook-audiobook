@@ -193,7 +193,9 @@ Lancez `ebook-audiobook`, ou ouvrez-la depuis votre menu d'applications. Puis :
 
 1. **Ajouter un livre** → choisissez un livre numérique sans DRM sur votre ordinateur.
 2. Choisissez une **voix** et ajustez les réglages — expressivité et rythme
-   en premier, les réglages plus fins du moteur sous *Réglages du moteur*.
+   en premier, les réglages plus fins du moteur sous *Réglages du moteur*. Ces
+   deux-là appartiennent à la voix : essayez un autre narrateur puis revenez, et
+   le livre vous rend les réglages que vous aviez laissés.
 3. **Générez un aperçu** de n'importe quel chapitre. Il utilise exactement le
    même moteur et les mêmes réglages que la narration complète, donc il sonne
    comme le résultat final.
@@ -258,8 +260,10 @@ français, par l'une des voix françaises fournies, avec les nombres, les
 abréviations et la typographie française lus comme un lecteur les lirait —
 « 1625 » devient *mille six cent vingt-cinq*, « M. de Tréville » devient
 *Monsieur de Tréville*, « 12,50 € » devient *douze euros et cinquante centimes*.
-Vous pouvez changer la langue de narration sur la page du livre ; le livre est
-alors relu et le narrateur de cette langue prend le relais.
+Vous pouvez changer la langue de narration sur la page du livre : le narrateur
+de cette langue prend le relais et le texte est préparé à nouveau pour lui,
+sans relire le livre — la conversion faite à l'import est conservée, si bien
+que le changement prend un instant plutôt que plusieurs minutes.
 
 Le français demande un second modèle vocal, d'environ 3 Go, téléchargé depuis
 huggingface.co **uniquement** quand vous appuyez sur **Installer** dans

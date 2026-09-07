@@ -7,6 +7,7 @@ browser polls ``/job/<id>/status`` and ``/api/status``.
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import uuid
@@ -54,6 +55,44 @@ def _parse_pron(text: str) -> dict:
         src = src.strip()
         if src:
             out[src] = dst.strip()
+    return out
+
+
+# A ceiling on how many narrators one job files sliders for. The library ships
+# a handful per language and this map is written by the page, so the cap is
+# only here so that a malformed post cannot grow voice_settings.json without
+# bound.
+_MAX_REMEMBERED_VOICES = 200
+
+
+def _merge_voice_tuning(stored, posted: str | None) -> dict:
+    """Fold the page's per-voice sliders into the ones already on the job.
+
+    The page carries what it remembers for every voice it has shown, including
+    voices the user tried without saving. Merged rather than replaced, so a
+    second tab — which knows nothing of those — cannot wipe them.
+    """
+    out = {k: dict(v) for k, v in (stored or {}).items()
+           if isinstance(k, str) and isinstance(v, dict)}
+    try:
+        incoming = json.loads(posted) if posted else {}
+    except ValueError:
+        incoming = {}
+    if not isinstance(incoming, dict):
+        return out
+    for voice_id, values in incoming.items():
+        if not isinstance(voice_id, str) or not isinstance(values, dict):
+            continue
+        if voice_id not in out and len(out) >= _MAX_REMEMBERED_VOICES:
+            continue
+        clean = {}
+        for field in worker.VOICE_TUNING_FIELDS:
+            try:
+                clean[field] = min(1.0, max(0.0, float(values[field])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if clean:
+            out[voice_id] = {**out.get(voice_id, {}), **clean}
     return out
 
 
@@ -849,6 +888,9 @@ def create_app() -> Flask:
             voice=voice,
             voices=_offerable_voices(voice.extra.get("voice_id"), voice.language),
             selected_voice_id=voice.extra.get("voice_id", "default"),
+            # What this job last used for each narrator, so the picker can hand
+            # a voice back exactly as it was left rather than as it ships.
+            voice_tuning=voice.extra.get("voice_tuning") or {},
             narration_language=voice.language,
             default_repetition_penalty=config.default_repetition_penalty(voice.language),
             narration_languages=_narration_language_choices(),
@@ -991,6 +1033,13 @@ def create_app() -> Flask:
         voice.seed = int(_f(f, "seed", voice.seed))
         voice.extra["bitrate_kbps"] = int(_f(f, "bitrate", config.DEFAULT_BITRATE_KBPS))
         voice.extra["pron"] = _parse_pron(f.get("pron", ""))
+        # Expressiveness and pacing belong to the narrator, so they are filed
+        # under it: what the page remembers for the voices it has shown, and
+        # then what is on screen now for the voice now selected. Coming back to
+        # a voice — or to a language — brings its own settings back with it.
+        voice.extra["voice_tuning"] = _merge_voice_tuning(
+            voice.extra.get("voice_tuning"), f.get("voice_tuning"))
+        worker.remember_voice_tuning(voice)
         store.save_voice(voice)
         return {"ok": True}
 
@@ -1007,7 +1056,7 @@ def create_app() -> Flask:
 
     @app.post("/job/<job_id>/language")
     def set_language(job_id):
-        """Narrate this book in another language, and read it again for that."""
+        """Narrate this book in another language, preparing its text for that."""
         store = _job_or_404(job_id)
         if runner.is_busy(job_id):
             return {"ok": False, "error": _("Already working on this book — stop it first.")}, 409
@@ -1018,10 +1067,12 @@ def create_app() -> Flask:
             worker.set_job_language(store, lang)
         except narration_langs.LanguagePackMissing as e:
             return {"ok": False, "error": str(e), "install_pack": e.pack.id}, 409
-        # The text is prepared per language, so read the book again; the
-        # sections' on/off choices are carried across by the extraction, and
-        # the language just chosen is not second-guessed by the book's metadata.
-        runner.submit(job_id, "extract", keep_language=True)
+        # The text is prepared per language — numbers, abbreviations, the app's
+        # own opening and closing lines — so the sections are built again from
+        # the parse kept at import. The book itself is not read again: nothing
+        # about the source changed, only who reads it. The sections' on/off
+        # choices are carried across, as on a re-read.
+        runner.submit(job_id, "relanguage")
         return {"ok": True, "language": lang}
 
     @app.post("/job/<job_id>/preview")

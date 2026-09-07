@@ -3,6 +3,7 @@ content-addressed cache of rendered segment WAVs.
 
 Layout (under local-data/jobs/<job_id>/):
     book.json            source + metadata + cover path
+    raw_chapters.json    the parse, before any language-specific preparation
     chapters.json        normalized chapters
     segments.jsonl       chunked render units (one JSON object per line)
     voice_settings.json  selected engine/voice; hashed into segment ids
@@ -257,6 +258,44 @@ class JobStore:
         if not p.exists():
             return []
         return [Chapter.from_dict(d) for d in json.loads(p.read_text("utf-8"))]
+
+    # --- raw chapters -------------------------------------------------------
+
+    # The book as the parser produced it, before any language-specific
+    # preparation. Kept so that changing the narration language re-prepares the
+    # text in place instead of running Calibre over the source again: the
+    # conversion is the slow part of an import and none of it depends on who
+    # reads the book. Small beside chapters.json (the same text, normalized)
+    # and tiny beside the audio, so it counts as metadata, not an intermediate —
+    # cleanup keeps it.
+
+    def save_raw_chapters(self, chapters: list, source_hash: str) -> None:
+        _atomic_write(
+            self.dir / "raw_chapters.json",
+            json.dumps({"source_hash": source_hash,
+                        "chapters": [{"title": c.title, "text": c.text} for c in chapters]},
+                       indent=2),
+        )
+
+    def load_raw_chapters(self, source_hash: str) -> list | None:
+        """The cached parse, or None when there isn't one for *this* source.
+
+        Returns None rather than raising for a cache written by an older build,
+        a truncated file, or a job imported before the cache existed — every
+        caller's fallback is to read the book again, which is only slow.
+        """
+        from ..pipeline.extract import RawChapter
+
+        p = self.dir / "raw_chapters.json"
+        if not p.exists():
+            return None
+        try:
+            d = json.loads(p.read_text("utf-8"))
+            if d.get("source_hash") != source_hash:
+                return None
+            return [RawChapter(title=c["title"], text=c["text"]) for c in d["chapters"]]
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
 
     # --- segments -----------------------------------------------------------
 

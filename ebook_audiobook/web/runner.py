@@ -52,7 +52,8 @@ def _terminal_progress(job_id: str):
 @dataclass
 class _Task:
     job_id: str
-    kind: str  # "extract" | "preview" | "render" | "measure" | "voice_test" | "model_download"
+    kind: str  # "extract" | "relanguage" | "preview" | "render" | "measure"
+               # | "voice_test" | "model_download"
     kwargs: dict = field(default_factory=dict)
 
 
@@ -131,6 +132,8 @@ class Runner:
 
         if task.kind == "extract":
             worker.extract_job(task.job_id, keep_language=task.kwargs.get("keep_language", False))
+        elif task.kind == "relanguage":
+            worker.relanguage_job(task.job_id)
         elif task.kind == "preview":
             worker.render_job(
                 task.job_id,

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from .i18n import N_, _
 from . import narration_langs
+import contextlib
 import errno
 import shutil
 import tempfile
@@ -227,12 +228,47 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
     return job_id
 
 
+# The two sliders that belong to a narrator rather than to the book. Each
+# shipped clip suggests its own, and someone who moves them has an opinion
+# about *that* voice — so the job remembers them per voice and hands them back
+# when the voice comes back, instead of resetting to the suggestion. Kept per
+# job, not per library voice: the right expressiveness for a thriller is not
+# the right one for a manual.
+VOICE_TUNING_FIELDS = ("exaggeration", "cfg_weight")
+
+
+def remember_voice_tuning(voice: VoiceSettings) -> None:
+    """File the sliders as they stand now under the voice they were set for."""
+    voice_id = voice.extra.get("voice_id")
+    if not voice_id:
+        return
+    tuning = voice.extra.setdefault("voice_tuning", {})
+    tuning[voice_id] = {f: getattr(voice, f) for f in VOICE_TUNING_FIELDS}
+
+
+def _remembered_tuning(voice: VoiceSettings, voice_id: str) -> dict | None:
+    got = (voice.extra.get("voice_tuning") or {}).get(voice_id)
+    return got if isinstance(got, dict) else None
+
+
 def _choose_narrator(voice: VoiceSettings, lib, voice_id: str) -> None:
-    """Point ``voice`` at a library voice: its clip, its suggested sliders, its id."""
+    """Point ``voice`` at a library voice: its clip, its sliders, its id.
+
+    The sliders are the ones this job last used for that narrator when it has
+    used it before, and the clip's own suggestions otherwise — so trying a
+    second voice, or a second language, and coming back does not quietly
+    discard the tuning of the first.
+    """
     clip = lib.clip_path(voice_id)
     chosen = lib.get(voice_id)
     voice.reference_clip = str(clip) if clip else None
-    if chosen:
+    remembered = _remembered_tuning(voice, voice_id)
+    if remembered:
+        for field in VOICE_TUNING_FIELDS:
+            value = remembered.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                setattr(voice, field, float(value))
+    elif chosen:
         if chosen.pacing is not None:
             voice.cfg_weight = chosen.pacing
         if chosen.expressiveness is not None:
@@ -259,6 +295,10 @@ def set_job_language(store: JobStore, lang: str) -> None:
 
     voice = store.load_voice()
     if voice.language != lang:
+        # The narrator is about to change, so the sliders it is wearing are put
+        # away under its name first — this is the moment they would otherwise
+        # be lost, and the one a person notices.
+        remember_voice_tuning(voice)
         # Each model was tuned with its own repetition penalty. Move the slider
         # only if it still sits at the other model's default, so a value the
         # user chose is never overwritten.
@@ -374,19 +414,45 @@ def _default_included(title: str, lang: str = "en") -> bool:
     return not any(hint in t for hint in hints)
 
 
-def extract_job(job_id: str, keep_language: bool = False) -> list[Chapter]:
-    store = JobStore(job_id)
-    store.set_stage(Stage.EXTRACTING, "extracting")
+@contextlib.contextmanager
+def _recording_failure(store: JobStore):
+    """Write why a stage stopped onto the job before re-raising, so the page can
+    show the reason (the web runner otherwise swallows the exception)."""
     try:
-        return _extract_job(store, keep_language=keep_language)
+        yield
     except Exception as e:  # noqa: BLE001 - surface the reason to the user
-        # Record why extraction stopped so the job page can show it (the web
-        # runner otherwise swallows the exception).
         st = store.load_state()
         st.error = str(e)
         st.stage = Stage.ERROR.value
         store.save_state(st)
         raise
+
+
+def extract_job(job_id: str, keep_language: bool = False) -> list[Chapter]:
+    store = JobStore(job_id)
+    store.set_stage(Stage.EXTRACTING, "extracting")
+    with _recording_failure(store):
+        return _extract_job(store, keep_language=keep_language)
+
+
+def relanguage_job(job_id: str) -> list[Chapter]:
+    """Prepare an already-read book's text for the narration language it now has.
+
+    The language decides how numbers and abbreviations are spoken, where
+    sentences end, and what the app's own opening and closing lines say — so
+    the sections have to be built again. The book does not have to be *read*
+    again: the parse is cached at import, and this is then string work over
+    text already on disk rather than another run of Calibre. A book imported
+    before that cache existed has no parse to reuse, and falls back to the
+    full re-read it would have had anyway.
+    """
+    store = JobStore(job_id)
+    store.set_stage(Stage.EXTRACTING, "preparing the text")
+    with _recording_failure(store):
+        raw = store.load_raw_chapters(store.load_book().source_hash)
+        if raw is None:
+            return _extract_job(store, keep_language=True)
+        return _prepare_chapters(store, raw)
 
 
 def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
@@ -398,7 +464,6 @@ def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
     installed.
     """
     book = store.load_book()
-    previous = {c.chapter_id: c.include for c in store.load_chapters()}
     src = Path(book.source_path)
     if not src.is_file():
         # Say so plainly, rather than letting Calibre fail on a path that
@@ -437,12 +502,28 @@ def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
     book.series_index = raw.series_index
     book.language = raw.language
     store.save_book(book)
+    # Everything above this line is the expensive half — a Calibre run and a
+    # parse — and none of it depends on who narrates the book. Keeping the
+    # result means a later change of narration language re-prepares the text
+    # without reading the book again.
+    store.save_raw_chapters(raw.chapters, book.source_hash)
     # Narrate in the book's own language when its model is installed; when it
     # is not, the voice stays English — what always happened — and the job
     # page says what installing would change.
     if (not keep_language and book.language != "en"
             and narration_langs.language_available(book.language)):
         set_job_language(store, book.language)
+    return _prepare_chapters(store, raw.chapters)
+
+
+def _prepare_chapters(store: JobStore, raw_chapters: list) -> list[Chapter]:
+    """Turn parsed text into the sections that will be narrated.
+
+    Every choice here follows a language, so this is also what runs on its own
+    when the narration language changes.
+    """
+    book = store.load_book()
+    previous = {c.chapter_id: c.include for c in store.load_chapters()}
     # The text is prepared for whoever will read it: numbers, abbreviations and
     # the app's own announcements follow the *narration* language.
     lang = store.load_voice().language or "en"
@@ -451,7 +532,7 @@ def _extract_job(store: JobStore, keep_language: bool = False) -> list[Chapter]:
     intro = _intro_chapter(book, lang)
     if intro:
         chapters.append(intro)
-    for i, rc in enumerate(raw.chapters):
+    for i, rc in enumerate(raw_chapters):
         norm = normalize_text(rc.text, lang)
         title = normalize_title(rc.title, lang)
         chapters.append(
