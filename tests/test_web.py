@@ -679,3 +679,45 @@ def test_flipping_an_unrelated_switch_does_not_dismiss_the_setup_prompt(client):
     assert app_settings.load_settings().setup_dismissed is False
     client.post("/settings", data={"audiobooks_root": ""})
     assert app_settings.load_settings().setup_dismissed is True
+
+
+def test_a_corrupt_settings_file_is_kept_rather_than_overwritten(monkeypatch):
+    """Falling back to defaults is right — the app has to start. Writing those
+    defaults over the file is not: the first-run modal then presents the loss
+    as a fresh install, and the user's library folder is gone with no trace."""
+    import json
+
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook.config import paths
+
+    s = app_settings.load_settings()
+    s.audiobooks_root = "/media/books"
+    s.language = "fr"
+    app_settings.save_settings(s)
+
+    path = paths().root / "settings.json"
+    path.write_text('{"audiobooks_root": "/media/bo', encoding="utf-8")  # a killed write
+
+    loaded = app_settings.load_settings()
+    assert loaded.audiobooks_root is None      # defaults, so the app starts
+    kept = paths().root / "settings.corrupt.json"
+    assert kept.exists(), "the unreadable file was destroyed"
+    assert "media/bo" in kept.read_text("utf-8")
+
+    # Valid JSON that isn't an object used to raise out of from_dict.
+    path.write_text("null", encoding="utf-8")
+    assert app_settings.load_settings() is not None
+
+
+def test_the_settings_mode_buttons_do_not_reach_into_the_onboarding_modal(client):
+    """base.html's first-run modal carries three .mode-btn elements of its own.
+    An unscoped selector bound the Settings handler to them, so clicking Light
+    inside the modal also POSTed the setting and reloaded — discarding the
+    language and palette just chosen there."""
+    import re
+
+    body = client.get("/settings").data.decode()
+    assert "onboardOverlay" in body, "expected the first-run modal on a fresh data root"
+    assert len(re.findall(r'class="mode-btn', body)) == 6
+    assert '#settingsModeToggle .mode-btn' in body
+    assert '#onboardModeToggle .mode-btn' in body

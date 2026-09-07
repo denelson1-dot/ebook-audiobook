@@ -162,3 +162,53 @@ def _drain() -> None:
     import time
 
     time.sleep(0.4)
+
+
+# --- handing over to a fresh copy of the app ---------------------------------
+
+def test_a_departing_process_does_not_delete_its_successors_record():
+    """Restart-to-finish spawns a new copy that writes its own runtime record
+    within a second, while this one is still draining. If the departing process
+    clears that record, the running app becomes unfindable: the next launch
+    probes, sees nothing, and starts a second worker over the same job store —
+    which is the exact corruption runtime.py exists to prevent.
+    """
+    import json
+    import os
+
+    from ebook_audiobook.desktop import runtime
+
+    runtime.write(5005)
+    record = runtime.runtime_path()
+    assert json.loads(record.read_text("utf-8"))["pid"] == os.getpid()
+
+    # The successor's record: same file, a different owner.
+    payload = json.loads(record.read_text("utf-8"))
+    payload.update(pid=os.getpid() + 99_999, port=41234)
+    record.write_text(json.dumps(payload), encoding="utf-8")
+
+    runtime.clear()
+    assert record.exists(), "cleared a record this process did not write"
+    assert json.loads(record.read_text("utf-8"))["port"] == 41234
+
+    runtime.clear(force=True)
+    assert not record.exists()
+
+
+def test_relaunch_works_for_the_documented_python_m_launcher():
+    """`python -m ebook_audiobook.cli web` is what ./run does, and there argv[0]
+    is a .py file with no execute bit. Popen on it raises PermissionError, which
+    the caller swallows — so the app quit while the browser said "coming back
+    up"."""
+    import sys
+
+    from ebook_audiobook.web import server
+
+    original = sys.argv
+    try:
+        sys.argv = ["/somewhere/ebook_audiobook/cli.py", "web", "--no-tray"]
+        cmd = server._relaunch_command()
+        assert cmd[:3] == [sys.executable, "-m", "ebook_audiobook.cli"]
+        assert cmd[3:] == ["web", "--no-tray"]
+    finally:
+        sys.argv = original

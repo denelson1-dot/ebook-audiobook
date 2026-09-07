@@ -170,8 +170,21 @@ def load_settings() -> Settings:
     if not p.exists():
         return Settings(preferences_onboarded=False)
     try:
-        return Settings.from_dict(json.loads(p.read_text("utf-8")))
-    except (ValueError, OSError):
+        loaded = json.loads(p.read_text("utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError("settings.json is not an object")
+        return Settings.from_dict(loaded)
+    except (ValueError, TypeError, OSError):
+        # Unreadable. Falling back to defaults is right — the app has to start —
+        # but the next save would write those defaults over whatever is there,
+        # and the first-run modal would present the loss as a fresh install. So
+        # the file is moved aside first: nothing is destroyed, and there is
+        # something to hand back if someone asks what happened to their library
+        # folder. Best effort; a read-only data dir must not stop the app.
+        try:
+            p.replace(p.with_suffix(".corrupt.json"))
+        except OSError:
+            pass
         return Settings(preferences_onboarded=False)
 
 

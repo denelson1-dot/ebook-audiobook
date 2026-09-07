@@ -69,10 +69,27 @@ def read() -> dict | None:
     return record
 
 
-def clear() -> None:
-    """Forget the recorded instance. Safe to call when there isn't one."""
+def clear(force: bool = False) -> None:
+    """Forget the recorded instance. Safe to call when there isn't one.
+
+    Only clears a record this process wrote, unless ``force``. A restart hands
+    over to a fresh copy of the app that writes its own record within a second,
+    while this one is still draining — and the departing process must not then
+    delete its successor's. That left a live instance nobody could find, so the
+    next launch saw no record, believed nothing was running, and started a
+    second worker over the same job store.
+    """
+    path = runtime_path()
+    if not force:
+        try:
+            import json
+
+            if json.loads(path.read_text("utf-8")).get("pid") != os.getpid():
+                return  # someone else's record; not ours to remove
+        except (OSError, ValueError):
+            pass  # unreadable or already gone: falling through to unlink is fine
     try:
-        runtime_path().unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
     except OSError:
         pass  # read-only data dir, or a race with another instance's cleanup
 

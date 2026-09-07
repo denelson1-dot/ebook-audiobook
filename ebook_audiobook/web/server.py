@@ -142,9 +142,26 @@ def _relaunch() -> None:
                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
         else:
             kwargs["start_new_session"] = True
-        subprocess.Popen(list(sys.argv), **kwargs)
+        subprocess.Popen(_relaunch_command(), **kwargs)
     except Exception:  # noqa: BLE001 - see docstring
         pass
+
+
+def _relaunch_command() -> list[str]:
+    """The command that starts another copy of this process.
+
+    ``sys.argv`` verbatim when argv[0] is really executable — the console-script
+    shim, the Start-Menu .exe, the .app stub — because that is the path the
+    fresh install just rewrote. But the documented dev launcher is
+    ``python -m ebook_audiobook.cli web``, and there argv[0] is a .py file with
+    no execute bit: Popen on it raises PermissionError (WinError 193 on
+    Windows), which the caller swallows, leaving the browser showing "coming
+    back up" for an app that simply went away.
+    """
+    argv = list(sys.argv)
+    if argv and os.access(argv[0], os.X_OK) and not argv[0].endswith(".py"):
+        return argv
+    return [sys.executable, "-m", "ebook_audiobook.cli", *argv[1:]]
 
 
 def _quit_label() -> str:
@@ -229,9 +246,17 @@ def serve(host: str | None = None, port: int | None = None,
         launcher.close_windows()
 
     def request_restart() -> None:
-        """Relaunch, then stop — the update banner's "Restart now"."""
-        _relaunch()
+        """Stop, then relaunch — the update banner's "Restart now".
+
+        In that order: request_stop retracts our runtime record, and doing it
+        first means the successor's record is written into a clean slate rather
+        than racing our cleanup. clear() is ownership-aware as well, so the two
+        cannot trample each other whichever way the timing falls.
+        """
+        if stopping.is_set():
+            return  # two "Restart now" clicks must not start two copies
         request_stop()
+        _relaunch()
 
     # How /quit reaches back into the server it is being served by.
     app.config["EBAB_SHUTDOWN"] = request_stop
@@ -293,7 +318,8 @@ def serve(host: str | None = None, port: int | None = None,
         request_stop()
         drain()
         server_thread.join(timeout=SHUTDOWN_GRACE)
-        runtime.clear()  # belt and braces: request_stop already did this
+        # Belt and braces; ownership-aware, so a restart's successor keeps its own.
+        runtime.clear()
 
 
 def _watch_busy_state(stopping: threading.Event, interval: float = 2.0) -> None:
