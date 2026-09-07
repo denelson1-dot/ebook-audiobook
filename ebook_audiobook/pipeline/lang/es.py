@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 
-from . import Rules
+from . import Rules, keep_on_error
 from .en import PUNCT_MAP as _EN_PUNCT
 
 PUNCT_MAP = {
@@ -35,6 +35,11 @@ PUNCT_MAP = {
     "« ": '"', " »": '"', "« ": '"', " »": '"',
     "« ": '"', " »": '"', "«": '"', "»": '"',
     # "n.º 4" is a number, not a temperature; said here, before ° is.
+    # A degree sign straight after a digit is the Latin American ordinal
+    # spelling ("el 1° de mayo"), not a temperature; folded to the masculine
+    # ordinal marker the number rules already know, before ° becomes "grados".
+    "1°": "1º", "2°": "2º", "3°": "3º", "4°": "4º", "5°": "5º",
+    "6°": "6º", "7°": "7º", "8°": "8º", "9°": "9º", "0°": "0º",
     "n.º": "número ", "N.º": "número ",
     "nº": "número ", "Nº": "número ",
     "n°": "número ", "N°": "número ",
@@ -96,25 +101,31 @@ ABBREVIATIONS = [(re.compile(p), r) for p, r in _ABBREVIATIONS]
 _SEP = "[.   ]"
 _DIGITS = rf"\d{{1,3}}(?:{_SEP}\d{{3}})+|\d+"
 _TIME = re.compile(r"\b(\d{1,2}):(\d{2})\b")
-_EURO = re.compile(r"(\d[\d.,]*)\s?€")
-_DOLLAR = re.compile(r"\$\s?(\d[\d.,]*)|(\d[\d.,]*)\s?\$")
+_EURO = re.compile(r"(\d[\d,.]*\d|\d)\s?€")
+# The trailing separator must be followed by a digit to be part of the number;
+# otherwise "$300." ate the full stop that ended the sentence.
+_DOLLAR = re.compile(r"\$\s?(\d[\d,.]*\d|\d)|(\d[\d,.]*\d|\d)\s?\$")
 _PERCENT = re.compile(rf"({_DIGITS})(?:,(\d+))?\s?%")
 # 1.º 1.ª 1º 1ª 1er 1.er 2.os 3.as — the dot is optional, the marker is not.
-_ORDINAL = re.compile(r"\b(\d+)\.?(º s|ºS|ºs|º|ªs|ª|er|os|as|o|a)\b")
+_ORDINAL = re.compile(r"\b(\d+)\.?(ºs|ºS|º|ªs|ª|er|os|as|o|a)\b")
 # Roman numerals in running text are only safe with a word in front of them:
 # MIL, CIVIL, VID, LID and CID are all ordinary Spanish words spelled entirely
 # in Roman-numeral letters. Titles are handled elsewhere, by
 # normalize._roman_in_headings, which runs before this.
 _ROMAN_CONTEXT = re.compile(
-    r"\b(siglos?|capítulos?|tomos?|libros?|partes?|actos?|escenas?|volúmenes|volumen|"
-    r"números?)"
-    r"(\s+)([IVXLCDM]{1,7})\b")
+    r"\b([Ss]iglos?|[Cc]apítulos?|[Tt]omos?|[Ll]ibros?|[Pp]artes?|[Aa]ctos?|[Ee]scenas?|"
+    r"[Vv]olúmenes|[Vv]olumen|[Nn]úmeros?)"
+    r"(\s+)((?:[IVXLCDM]{2,7})|(?:[IVX](?!\.)))\b")
 # A monarch's number is read as an ordinal — "Carlos tercero" — but only up to
 # ten; from eleven on Spanish switches to the cardinal, "Alfonso trece".
+# Every name here is an ordinary Spanish given name, and Spanish uses middle
+# initials constantly — "Luis M. García", "Juan C. Ramos". A single letter
+# followed by a full stop is an initial, never a monarch, so the numeral must
+# be two letters or more, or one of I/V/X with no period after it.
 _ROMAN_REGNAL = re.compile(
     r"\b(Juan Pablo|Juan|Carlos|Felipe|Fernando|Alfonso|Isabel|Luis|Enrique|Pedro|"
     r"Benedicto|Francisco|Pío|León|Gregorio|Clemente|Inocencio|Urbano|Alejandro)"
-    r"(\s+)([IVXLCDM]{1,7})\b")
+    r"(\s+)((?:[IVXLCDM]{2,7})|(?:[IVX](?!\.)))\b")
 # The trailing guard rejects a dot or comma only when a digit follows it: that
 # is what distinguishes "1.234" (one number, already matched whole by _DIGITS)
 # from "en 1999." (a number, then the end of the sentence). Rejecting every
@@ -209,9 +220,13 @@ def _time(m: re.Match) -> str:
     return words
 
 
+# "dólar" pluralises to "dólares", not "dólars".
+_PLURALS = {"euro": "euros", "dólar": "dólares"}
+
+
 def _money(whole: int, cents: int, currency: str, unit: str) -> str:
     if not cents:  # "cinco euros", not "cinco euros con cero céntimos"
-        return _n(whole) + " " + unit + ("" if whole == 1 else "s")
+        return _n(whole) + " " + (unit if whole == 1 else _PLURALS[unit])
     return _n(whole + cents / 100, to="currency", currency=currency)
 
 
@@ -231,21 +246,24 @@ def _percent(m: re.Match) -> str:
     # is read "coma" and not "punto".
     words = _n(_int(m.group(1)))
     if m.group(2):
-        words += " coma " + _n(int(m.group(2)))
+        words += " coma " + " ".join(_n(int(d)) for d in m.group(2))
     return words + " por ciento"
 
 
 def speak_numbers(text: str) -> str:
-    text = _TIME.sub(_time, text)
-    text = _EURO.sub(_euro, text)
-    text = _DOLLAR.sub(_dollar, text)
-    text = _PERCENT.sub(_percent, text)
-    text = _ROMAN_REGNAL.sub(_regnal, text)
-    text = _ROMAN_CONTEXT.sub(
-        lambda m: f"{m.group(1)}{m.group(2)}{_n(_roman(m.group(3)))}", text)
-    text = _ORDINAL.sub(lambda m: _ordinal(int(m.group(1)), m.group(2)), text)
-    text = _DECIMAL.sub(lambda m: _n(_int(m.group(1))) + " coma " + _n(int(m.group(2))), text)
-    text = _INTEGER.sub(lambda m: _n(_int(m.group(1))), text)
+    text = _TIME.sub(keep_on_error(_time), text)
+    text = _EURO.sub(keep_on_error(_euro), text)
+    text = _DOLLAR.sub(keep_on_error(_dollar), text)
+    text = _PERCENT.sub(keep_on_error(_percent), text)
+    text = _ROMAN_REGNAL.sub(keep_on_error(_regnal), text)
+    text = _ROMAN_CONTEXT.sub(keep_on_error(
+        lambda m: f"{m.group(1)}{m.group(2)}{_n(_roman(m.group(3)))}"), text)
+    text = _ORDINAL.sub(keep_on_error(lambda m: _ordinal(int(m.group(1)), m.group(2))), text)
+    # Digit by digit after the comma: int("05") is 5, which turns 3,05 into
+    # "tres coma cinco" — a different number, not merely a different reading.
+    text = _DECIMAL.sub(keep_on_error(
+        lambda m: _n(_int(m.group(1))) + " coma " + " ".join(_n(int(d)) for d in m.group(2))), text)
+    text = _INTEGER.sub(keep_on_error(lambda m: _n(_int(m.group(1)))), text)
     return text
 
 

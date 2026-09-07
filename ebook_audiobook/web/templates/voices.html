@@ -10,13 +10,13 @@
     <p class="page-sub" style="max-width:62ch">{{ _("A voice is one short recording. About ten seconds is enough — the engine copies its timbre and reads your whole book in it.") }}</p>
   </div>
   <div class="head-actions">
-    {% if languages|length > 1 %}
+    {% if voice_languages|length > 1 %}
     {# Which language's narrators to show. A plain navigation, not a fetch: the
        grid is rendered by the server, and this way the page has a URL someone
        can bookmark or reload. #}
     <select id="voiceLang" aria-label="{{ _("Which language's narrators to show") }}"
             data-base="{{ url_for('voices_page') }}" style="width:auto">
-      {% for l in languages %}
+      {% for l in voice_languages %}
       <option value="{{ l.code }}" {{ 'selected' if l.code == language }}>{{ l.name }} ({{ l.count }})</option>
       {% endfor %}
     </select>
@@ -54,7 +54,7 @@
       <div class="field">
         <label for="voiceLanguage">{{ _("Language it speaks") }}</label>
         <select id="voiceLanguage" name="language">
-          {% for l in languages %}
+          {% for l in voice_languages %}
           <option value="{{ l.code }}" {{ 'selected' if l.code == language }}>{{ l.name }}</option>
           {% endfor %}
         </select>
@@ -163,7 +163,15 @@ document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> ' + _("Rendering…");
     try {
-      await postForm(`/voices/${vid}/test`, {});
+      // postFormResult, not postForm: this route answers a missing language
+      // model with a 409 and a sentence naming what to install, and postForm
+      // throws on any non-2xx — which turned that into the generic "couldn't
+      // render a sample" and threw the useful part away.
+      const started = await postFormResult(`/voices/${vid}/test`, {});
+      if (!started.ok) {
+        toast(started.error || _("Couldn't render a sample"));
+        return;
+      }
       const url = `/voices/${encodeURIComponent(vid)}/sample.wav`;
       let ready = false;
       for (let i = 0; i < 240; i++) {

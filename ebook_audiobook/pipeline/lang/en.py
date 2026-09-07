@@ -10,7 +10,7 @@ import re
 
 import inflect
 
-from . import Rules
+from . import Rules, keep_on_error
 
 _p = inflect.engine()
 
@@ -84,11 +84,11 @@ def _say_currency(m: re.Match) -> str:
 
 
 def speak_numbers(text: str) -> str:
-    text = _CURRENCY.sub(_say_currency, text)
-    text = _PERCENT.sub(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="") + " percent", text)
-    text = _YEAR.sub(_say_year, text)
-    text = _ORDINAL.sub(lambda m: _p.ordinal(_p.number_to_words(int(m.group(1)), andword="")), text)
-    text = _INTEGER.sub(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword=""), text)
+    text = _CURRENCY.sub(keep_on_error(_say_currency), text)
+    text = _PERCENT.sub(keep_on_error(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="") + " percent"), text)
+    text = _YEAR.sub(keep_on_error(_say_year), text)
+    text = _ORDINAL.sub(keep_on_error(lambda m: _p.ordinal(_p.number_to_words(int(m.group(1)), andword=""))), text)
+    text = _INTEGER.sub(keep_on_error(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="")), text)
     return text
 
 

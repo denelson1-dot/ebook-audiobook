@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 
-from . import Rules
+from . import Rules, keep_on_error
 
 # Japanese punctuation the model is trained on — 。、！？「」 — is left alone.
 # What is folded away is the typographic furniture around it: the wave dash and
@@ -70,9 +70,16 @@ _DAYS = {1: "ついたち", 2: "ふつか", 3: "みっか", 4: "よっか", 5: "
 
 _YEAR = re.compile(r"(?<!\d)(\d{3,4})年")
 _MONTH_DAY = re.compile(r"(?<!\d)(\d{1,2})月(?:(\d{1,2})日)?")
-_DAY = re.compile(r"(?<!\d)(\d{1,2})日")
-_TIME = re.compile(r"(?<!\d)(\d{1,2})時(?:(\d{1,2})分)?(?:(\d{1,2})秒)?")
-_MINUTE = re.compile(r"(?<!\d)(\d{1,3})分")
+# 1日 is ついたち on a calendar but いちにち as a span, and only the day-of-month
+# reading is irregular — so a following 中/で/かけて marks it as a duration.
+_DAY = re.compile(r"(?<!\d)(\d{1,2})日(?!間|中)")
+_DAYS_SPAN = re.compile(r"(?<!\d)(\d{1,3})日(?=間|中)")
+# 2時 is "two o'clock"; 2時間 is "two hours". Without the guard the 時 was
+# eaten and the 間 left stranded, so pykakasi could no longer read the compound.
+_TIME = re.compile(r"(?<!\d)(\d{1,2})時(?!間)(?:(\d{1,2})分)?(?:(\d{1,2})秒)?")
+_HOURS = re.compile(r"(?<!\d)(\d{1,3})時間")
+# 分 is minutes, except in 3分の1 (a third), where it is the denominator.
+_MINUTE = re.compile(r"(?<!\d)(\d{1,3})分(?!の\d)")
 _PERCENT = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*[%％]")
 _YEN = re.compile(r"[¥￥]\s?(\d[\d,]*)|(\d[\d,]*)\s?円")
 _DOLLAR = re.compile(r"[$＄]\s?(\d[\d,]*(?:\.\d+)?)")
@@ -104,6 +111,8 @@ def _int(s: str) -> int:
 
 def _minutes(n: int) -> str:
     """1 → いっぷん, 10 → じゅっぷん, 30 → さんじゅっぷん, 45 → よんじゅうごふん."""
+    if n == 0:
+        return "れいふん"          # "0 minutes"; without this it was a bare っぷん
     ones, tens = n % 10, n - (n % 10)
     prefix = _hira(tens) if tens else ""
     if ones == 0:
@@ -114,6 +123,8 @@ def _minutes(n: int) -> str:
 
 def _hours(n: int) -> str:
     """4時 → よじ, 9時 → くじ, 14時 → じゅうよじ."""
+    if n == 0:
+        return "れいじ"            # midnight on a 24-hour clock
     ones, tens = n % 10, n - (n % 10)
     special = {4: "よじ", 7: "しちじ", 9: "くじ"}
     prefix = _hira(tens) if tens else ""
@@ -143,33 +154,60 @@ def _month_day(m: re.Match) -> str:
 def _time(m: re.Match) -> str:
     h, mins, secs = m.group(1), m.group(2), m.group(3)
     out = _hours(int(h))
-    if mins:
+    # "10時00分" is ten o'clock, not ten o'clock and zero minutes.
+    if mins and int(mins):
         out += _minutes(int(mins))
     if secs:
         out += _hira(int(secs)) + "びょう"
     return out
 
 
+def _decimal_number(raw: str) -> str:
+    """A figure that may carry a fractional part, read whole then digit by
+    digit — "3.5" as 三てんご, not truncated to 三."""
+    whole, _, frac = raw.replace(",", "").partition(".")
+    out = _kanji(int(whole or 0))
+    if frac:
+        out += "てん" + "".join(_hira(int(d)) for d in frac)
+    return out
+
+
+def _dollars(m: re.Match) -> str:
+    """Money is dollars and cents, not a decimal read digit by digit: $3.50 is
+    三ドル五十セント, never 三てんごゼロドル."""
+    whole, _, frac = m.group(1).replace(",", "").partition(".")
+    out = _kanji(int(whole or 0)) + "ドル"
+    cents = int(frac.ljust(2, "0")[:2]) if frac else 0
+    if cents:
+        out += _kanji(cents) + "セント"
+    return out
+
+
+def _percent(m: re.Match) -> str:
+    return _decimal_number(m.group(1)) + "パーセント"
+
+
 def speak_numbers(text: str) -> str:
     text = text.translate(_FULLWIDTH_DIGITS)
     # Order matters: the more specific counter wins before the digits inside it
     # are read as a plain number.
-    text = _YEAR.sub(_year, text)
-    text = _MONTH_DAY.sub(_month_day, text)
-    text = _DAY.sub(lambda m: _day(int(m.group(1))), text)
-    text = _TIME.sub(_time, text)
-    text = _MINUTE.sub(lambda m: _minutes(int(m.group(1))), text)
-    text = _PERCENT.sub(
-        lambda m: _kanji(int(float(m.group(1).replace(",", "")))) + "パーセント", text)
-    text = _YEN.sub(lambda m: _kanji(_int(m.group(1) or m.group(2))) + "円", text)
-    text = _DOLLAR.sub(lambda m: _kanji(int(float(m.group(1).replace(",", "")))) + "ドル", text)
+    text = _HOURS.sub(keep_on_error(lambda m: _hira(int(m.group(1))) + "じかん"), text)
+    text = _DAYS_SPAN.sub(keep_on_error(lambda m: _hira(int(m.group(1))) + "にち"), text)
+    text = _YEAR.sub(keep_on_error(_year), text)
+    text = _MONTH_DAY.sub(keep_on_error(_month_day), text)
+    text = _DAY.sub(keep_on_error(lambda m: _day(int(m.group(1)))), text)
+    text = _TIME.sub(keep_on_error(_time), text)
+    text = _MINUTE.sub(keep_on_error(lambda m: _minutes(int(m.group(1)))), text)
+    text = _PERCENT.sub(keep_on_error(_percent), text)
+    text = _YEN.sub(keep_on_error(lambda m: _kanji(_int(m.group(1) or m.group(2))) + "円"), text)
+    text = _DOLLAR.sub(keep_on_error(_dollars), text)
     # The digits after the point are read one at a time, and in hiragana: left
     # as kanji, 四 comes back as し where a decimal wants よん.
-    text = _DECIMAL.sub(
-        lambda m: _kanji(_int(m.group(1))) + "てん" + "".join(_hira(int(d)) for d in m.group(2)),
+    text = _DECIMAL.sub(keep_on_error(
+        lambda m: _kanji(_int(m.group(1))) + "てん" + "".join(_hira(int(d)) for d in m.group(2))),
         text)
     # Everything else: kanji numerals, and pykakasi supplies the counter reading.
-    text = _INTEGER.sub(lambda m: _kanji(_int(m.group(1))), text)
+    text = _INTEGER.sub(keep_on_error(lambda m: _kanji(_int(m.group(1)))), text)
     return text
 
 
@@ -187,7 +225,7 @@ CLAUSE = re.compile(r'(?<=[、，])')
 # まえがき, あとがき, 序文, 解説 — those are the book, not its wrapper.
 SKIP_TITLE_HINTS = (
     "目次", "奥付", "著作権", "版権", "謝辞", "参考文献", "索引", "用語集",
-    "献辞", "著者について", "著者紹介", "訳者紹介", "扉", "中扉", "凡例",
+    "献辞", "著者について", "著者紹介", "訳者紹介", "中扉", "凡例",
     "初出一覧", "装丁", "図版一覧", "isbn", "copyright",
 )
 

@@ -336,7 +336,7 @@
         bodyHtml: `<p>${escapeHtml(detail)}</p>`,
       });
       if (!ok) return false;
-      r = await fetch(base + "&force=1", { method: "POST" });
+      r = await fetch(base + (base.includes("?") ? "&" : "?") + "force=1", { method: "POST" });
     }
     if (!r.ok) { toast(_("Couldn't quit — see the terminal or the logs.")); return false; }
     const body = await r.json().catch(() => ({}));

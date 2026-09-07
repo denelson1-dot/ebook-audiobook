@@ -33,7 +33,12 @@ const PLURAL_RULES = {
 };
 function _fmt(s, params) {
   // Always a format string, as in the templates: %% is a literal percent.
-  const filled = params ? s.replace(/%\((\w+)\)[sd]/g, (m, k) => (k in params ? params[k] : m)) : s;
+  // Matches the flags/width/precision forms too, not just %(name)s — the
+  // narrow version left "%(m)02d" on the page as literal text.
+  const filled = params
+    ? s.replace(/%\((\w+)\)[-+ #0]*\d*(?:\.\d+)?[diouxXeEfFgGcrs]/g,
+                (m, k) => (k in params ? params[k] : m))
+    : s;
   return filled.replace(/%%/g, "%");
 }
 function _(msgid, params) {

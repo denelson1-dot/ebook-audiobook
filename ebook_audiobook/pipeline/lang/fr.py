@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from . import Rules
+from . import Rules, keep_on_error
 from .en import PUNCT_MAP as _EN_PUNCT
 
 # French typography, on top of the shared map. Longest keys first: a
@@ -136,15 +136,15 @@ def _dollar(m: re.Match) -> str:
 
 
 def speak_numbers(text: str) -> str:
-    text = _TIME.sub(_time, text)
-    text = _EURO.sub(_euro, text)
-    text = _DOLLAR.sub(_dollar, text)
-    text = _PERCENT.sub(lambda m: _n(float(f"{_int(m.group(1))}.{m.group(2) or 0}")
-                                     if m.group(2) else _int(m.group(1))) + " pour cent", text)
-    text = _ROMAN_ORDINAL.sub(lambda m: _ordinal(_roman(m.group(1)), m.group(2)), text)
-    text = _ORDINAL.sub(lambda m: _ordinal(int(m.group(1)), m.group(2)), text)
-    text = _DECIMAL.sub(lambda m: _n(_int(m.group(1))) + " virgule " + _n(int(m.group(2))), text)
-    text = _INTEGER.sub(lambda m: _n(_int(m.group(1))), text)
+    text = _TIME.sub(keep_on_error(_time), text)
+    text = _EURO.sub(keep_on_error(_euro), text)
+    text = _DOLLAR.sub(keep_on_error(_dollar), text)
+    text = _PERCENT.sub(keep_on_error(lambda m: _n(float(f"{_int(m.group(1))}.{m.group(2) or 0}")
+                                     if m.group(2) else _int(m.group(1))) + " pour cent"), text)
+    text = _ROMAN_ORDINAL.sub(keep_on_error(lambda m: _ordinal(_roman(m.group(1)), m.group(2))), text)
+    text = _ORDINAL.sub(keep_on_error(lambda m: _ordinal(int(m.group(1)), m.group(2))), text)
+    text = _DECIMAL.sub(keep_on_error(lambda m: _n(_int(m.group(1))) + " virgule " + _n(int(m.group(2)))), text)
+    text = _INTEGER.sub(keep_on_error(lambda m: _n(_int(m.group(1)))), text)
     return text
 
 

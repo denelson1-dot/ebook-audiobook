@@ -343,8 +343,13 @@ let audioRate = {{ audio_rate|tojson }};
 let measuredHere = {{ measured_here|tojson }};
 const DEFAULT_CHARS_PER_AUDIO_SECOND = {{ chars_per_audio_second|tojson }};
 const AUTOPLAY_PREVIEW = {{ autoplay_preview|tojson }};
+// The repetition penalty is the one default that is not the same for every
+// language: at the English model's 1.2 the multilingual one stops generating a
+// few words in, turning a nine-second sentence into two. Reset has to restore
+// the value for THIS job's language, not the English one.
 const DEFAULTS = { exaggeration:0.5, cfg_weight:0.5, temperature:0.8,
-                   repetition_penalty:1.2, min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
+                   repetition_penalty:{{ default_repetition_penalty|tojson }},
+                   min_p:0.05, top_p:1.0, seed:0, bitrate:64 };
 const form = document.getElementById("settingsForm");
 
 // Live slider value labels

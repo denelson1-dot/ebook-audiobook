@@ -77,6 +77,7 @@ def _hard_wrap(text: str, max_chars: int, joiner: str = " ") -> list[str]:
 
 def _wrap_by_character(text: str, max_chars: int) -> list[str]:
     out = []
+    max_chars = max(1, max_chars)   # a non-positive budget would never advance
     while len(text) > max_chars:
         cut = max_chars
         # Never leave a character that cannot open a line at the start of the

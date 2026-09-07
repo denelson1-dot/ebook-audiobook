@@ -456,7 +456,11 @@ def create_app() -> Flask:
             voices=_offerable_voices(language=shown),
             default_voice_id=default_voice_id(shown),
             language=shown,
-            languages=choices,
+            # Deliberately not "languages": base.html's onboarding modal reads
+            # that name from the context processor, and a page-level kwarg
+            # shadows it — which blanked the modal's language picker on this
+            # page and marked every language unreviewed.
+            voice_languages=choices,
             # Auditioning uses the real engine, so a language whose model is not
             # on this machine cannot be previewed at all.
             language_available=narration_langs.language_available(shown),
@@ -625,14 +629,34 @@ def create_app() -> Flask:
     def updates_apply():
         """Install the release the background check found.
 
-        The confirmation happens in the browser, in the dialog the "Install"
-        button opens — by the time this arrives the user has already agreed.
+        The confirmation dialog lives in the browser, but it cannot be the only
+        gate: this endpoint runs the installer, which is `curl … | bash`, and
+        the app listens on a fixed localhost port with no CSRF token. A plain
+        cross-origin form POST is a CORS-simple request, so without the checks
+        below any page the user happens to be visiting could make the app
+        reinstall itself unattended. The three conditions are the same ones the
+        banner needs before it will offer the button at all.
+
         Runs in the background; the banner polls /api/updates/status for
         progress rather than this request staying open for however long the
         installer takes.
         """
         from . import update_watch
 
+        # A browser sends this on cross-origin requests and omits it on
+        # same-origin ones in the browsers that implement it; when it is
+        # present and says otherwise, this did not come from our own page.
+        site = request.headers.get("Sec-Fetch-Site")
+        if site and site not in ("same-origin", "none"):
+            return {"ok": False, "error": _("That request didn't come from this app.")}, 403
+        state = update_watch.status()
+        if not state["enabled"]:
+            return {"ok": False, "error": _("Update checks are turned off.")}, 409
+        if not state["available"]:
+            return {"ok": False, "error": _("There is no newer release to install.")}, 409
+        if runner.is_busy():
+            # pip replaces torch and this package underneath a running render.
+            return {"ok": False, "error": _("Something else is running.")}, 409
         started = update_watch.start_apply()
         return {"ok": True, "started": started}
 
@@ -826,6 +850,7 @@ def create_app() -> Flask:
             voices=_offerable_voices(voice.extra.get("voice_id"), voice.language),
             selected_voice_id=voice.extra.get("voice_id", "default"),
             narration_language=voice.language,
+            default_repetition_penalty=config.default_repetition_penalty(voice.language),
             narration_languages=_narration_language_choices(),
             narration_notice=worker.narration_notice(store),
             default_chapter_id=default_ch,
@@ -1398,6 +1423,16 @@ def create_app() -> Flask:
         voice = VoiceLibrary().get(voice_id)
         if not voice:
             abort(404)
+        # The template hides this button for the engine's own voice; the route
+        # has to agree, or a POST can set as default the one voice the picker
+        # deliberately never offers.
+        if voice.is_default:
+            abort(400, "the engine's own voice cannot be a default")
+        lg = narration_langs.LANGUAGES.get(voice.language)
+        if lg is None or lg.tier != "supported":
+            # Nothing would ever read such a key back, and the redirect would
+            # land on a page that cannot show this voice.
+            abort(400, "that voice's language is not one this can narrate")
         s = app_settings.load_settings()
         # Per language: a Spanish narrator chosen here must not become the
         # narrator of the next English book.
@@ -1420,8 +1455,9 @@ def create_app() -> Flask:
         # Auditioning runs the real engine, so a voice whose model is not on
         # this machine is refused here rather than four minutes into a queue.
         if not narration_langs.language_available(voice.language):
-            return {"ok": False, "install_pack": narration_langs.LANGUAGES[
-                        voice.language].pack,
+            known = narration_langs.LANGUAGES.get(
+                voice.language, narration_langs.LANGUAGES["en"])
+            return {"ok": False, "install_pack": known.pack,
                     "error": _("Narrating in this language needs its model. "
                                "Install it in Settings.")}, 409
         # The page waits for the sample by polling for the file, which only

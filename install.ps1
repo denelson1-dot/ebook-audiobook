@@ -187,53 +187,71 @@ $Spanish = [ordered]@{
     "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Nota: abre un terminal NUEVO para que se encuentre el comando 'ebook-audiobook'."
 }
 
-$Japanese = [ordered]@{
-    "Uninstalling ebook-audiobook" = "ebook-audiobook をアンインストールしています"
-    "program removed" = "プログラムを削除しました"
-    "  Your books, settings, and audiobooks were NOT deleted. They're in:" = "  本、設定、オーディオブックは削除されていません。場所:"
-    "  Delete that folder yourself if you want them gone." = "  不要であれば、そのフォルダーはご自分で削除してください。"
-    "ebook-audiobook installer" = "ebook-audiobook インストーラー"
-    "Turns ebooks you own into narrated audiobooks, entirely offline." = "お手持ちの電子書籍を、完全にオフラインでオーディオブックにします。"
-    "Looking for Python 3.11 or newer" = "Python 3.11 以上を探しています"
-    "no Python 3.11+ found" = "Python 3.11 以上が見つかりません"
-    "Install Python 3.12 now with winget?" = "winget で Python 3.12 を今すぐインストールしますか？"
-    "Creating a private environment" = "専用の環境を作成しています"
-    "reusing the existing environment (upgrading in place)" = "既存の環境を再利用します（その場で更新します）"
-    "created" = "作成しました"
-    "Installing ebook-audiobook" = "ebook-audiobook をインストールしています"
-    "installed *" = "インストール済み *"
-    "Skipping the speech engine (-NoTts)" = "音声エンジンをスキップします（-NoTts）"
-    "you can import books, but rendering audio needs the engine" = "本の取り込みはできますが、音声の生成にはエンジンが必要です"
-    "Setting up the speech engine" = "音声エンジンを準備しています"
-    "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "どの PyTorch を使うかアプリに問い合わせられませんでした。CPU 版で続行します"
-    "Download and install the speech engine now?" = "音声エンジンを今すぐダウンロードしてインストールしますか？"
-    "speech engine ready*" = "音声エンジンの準備ができました*"
-    "The ~1 GB voice model downloads the first time you render." = "音声モデル（約 1 GB）は、最初に生成するときにダウンロードされます。"
-    "skipped - re-run this installer to add it later." = "スキップしました - あとで追加するにはこのインストーラーを再実行してください。"
-    "Checking for Calibre (needed to read ebook files)" = "Calibre を確認しています（電子書籍の読み込みに必要です）"
-    "Calibre found" = "Calibre が見つかりました"
-    "Calibre is not installed" = "Calibre がインストールされていません"
-    "Install it now with 'winget install calibre.calibre'?" = "'winget install calibre.calibre' で今すぐインストールしますか？"
-    "winget install failed" = "winget によるインストールに失敗しました"
-    "Calibre installed" = "Calibre をインストールしました"
-    "install Calibre before converting a book:" = "本を変換する前に Calibre をインストールしてください:"
-    "or download it from https://calibre-ebook.com/download" = "または https://calibre-ebook.com/download からダウンロードしてください"
-    "Creating the launcher" = "ランチャーを作成しています"
-    "command: *" = "コマンド: *"
-    "added to your PATH (new terminals will find it)" = "PATH に追加しました（新しいターミナルで見つかります）"
-    "Start Menu shortcut" = "スタートメニューのショートカット"
-    "Add a Desktop shortcut too?" = "デスクトップにもショートカットを作成しますか？"
-    "Desktop shortcut" = "デスクトップのショートカット"
-    "couldn't create shortcuts: *" = "ショートカットを作成できませんでした: *"
-    "Verifying the install" = "インストールを検証しています"
-    "all required components are working" = "必要な構成要素はすべて動作しています"
-    "some checks failed - run 'ebook-audiobook check' for details" = "一部の確認に失敗しました - 詳しくは 'ebook-audiobook check' を実行してください"
-    "Installed." = "インストールが完了しました。"
-    "  Start it from the Start Menu, or run: " = "  スタートメニューから起動するか、次を実行してください: "
-    "  Your books live in: " = "  本の場所: "
-    "  Check setup:  " = "  設定の確認:  "
-    "  Uninstall:    " = "  アンインストール:    "
-    "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  注意: 'ebook-audiobook' コマンドを使うには、新しいターミナルを開いてください。"
+# Japanese, base64-encoded — deliberately, and this is not decoration.
+#
+# This file has no byte-order mark, because the text `irm | iex` hands to the
+# parser cannot start with one. Windows PowerShell 5.1 therefore decodes it
+# with the system ANSI code page, and several kana have UTF-8 bytes that land
+# on the CP125x "smart quote" code points (U+201C-201F), which the tokenizer
+# accepts as string delimiters. A literal Japanese table ends the string
+# mid-line and the parse cascades: install.ps1 would not run at all on the
+# default Windows shell, in ANY language, not merely fail to translate.
+#
+# Base64 keeps this table pure ASCII, so the file parses under every code
+# page, and the text is exact at runtime under both editions. French and
+# Spanish need no such treatment: their accents are C2/C3 + A0-BF, which
+# never collide with a delimiter.
+$JapaneseB64 = [ordered]@{
+    "Uninstalling ebook-audiobook" = "ZWJvb2stYXVkaW9ib29rIOOCkuOCouODs+OCpOODs+OCueODiOODvOODq+OBl+OBpuOBhOOBvuOBmQ=="
+    "program removed" = "44OX44Ot44Kw44Op44Og44KS5YmK6Zmk44GX44G+44GX44Gf"
+    "  Your books, settings, and audiobooks were NOT deleted. They're in:" = "ICDmnKzjgIHoqK3lrprjgIHjgqrjg7zjg4fjgqPjgqrjg5bjg4Pjgq/jga/liYrpmaTjgZXjgozjgabjgYTjgb7jgZvjgpPjgILloLTmiYA6"
+    "  Delete that folder yourself if you want them gone." = "ICDkuI3opoHjgafjgYLjgozjgbDjgIHjgZ3jga7jg5Xjgqnjg6vjg4Djg7zjga/jgZToh6rliIbjgafliYrpmaTjgZfjgabjgY/jgaDjgZXjgYTjgII="
+    "ebook-audiobook installer" = "ZWJvb2stYXVkaW9ib29rIOOCpOODs+OCueODiOODvOODqeODvA=="
+    "Turns ebooks you own into narrated audiobooks, entirely offline." = "44GK5omL5oyB44Gh44Gu6Zu75a2Q5pu457GN44KS44CB5a6M5YWo44Gr44Kq44OV44Op44Kk44Oz44Gn44Kq44O844OH44Kj44Kq44OW44OD44Kv44Gr44GX44G+44GZ44CC"
+    "Looking for Python 3.11 or newer" = "UHl0aG9uIDMuMTEg5Lul5LiK44KS5o6i44GX44Gm44GE44G+44GZ"
+    "no Python 3.11+ found" = "UHl0aG9uIDMuMTEg5Lul5LiK44GM6KaL44Gk44GL44KK44G+44Gb44KT"
+    "Install Python 3.12 now with winget?" = "d2luZ2V0IOOBpyBQeXRob24gMy4xMiDjgpLku4rjgZnjgZDjgqTjg7Pjgrnjg4jjg7zjg6vjgZfjgb7jgZnjgYvvvJ8="
+    "Creating a private environment" = "5bCC55So44Gu55Kw5aKD44KS5L2c5oiQ44GX44Gm44GE44G+44GZ"
+    "reusing the existing environment (upgrading in place)" = "5pei5a2Y44Gu55Kw5aKD44KS5YaN5Yip55So44GX44G+44GZ77yI44Gd44Gu5aC044Gn5pu05paw44GX44G+44GZ77yJ"
+    "created" = "5L2c5oiQ44GX44G+44GX44Gf"
+    "Installing ebook-audiobook" = "ZWJvb2stYXVkaW9ib29rIOOCkuOCpOODs+OCueODiOODvOODq+OBl+OBpuOBhOOBvuOBmQ=="
+    "installed *" = "44Kk44Oz44K544OI44O844Or5riI44G/ICo="
+    "Skipping the speech engine (-NoTts)" = "6Z+z5aOw44Ko44Oz44K444Oz44KS44K544Kt44OD44OX44GX44G+44GZ77yILU5vVHRz77yJ"
+    "you can import books, but rendering audio needs the engine" = "5pys44Gu5Y+W44KK6L6844G/44Gv44Gn44GN44G+44GZ44GM44CB6Z+z5aOw44Gu55Sf5oiQ44Gr44Gv44Ko44Oz44K444Oz44GM5b+F6KaB44Gn44GZ"
+    "Setting up the speech engine" = "6Z+z5aOw44Ko44Oz44K444Oz44KS5rqW5YKZ44GX44Gm44GE44G+44GZ"
+    "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "44Gp44GuIFB5VG9yY2gg44KS5L2/44GG44GL44Ki44OX44Oq44Gr5ZWP44GE5ZCI44KP44Gb44KJ44KM44G+44Gb44KT44Gn44GX44Gf44CCQ1BVIOeJiOOBp+e2muihjOOBl+OBvuOBmQ=="
+    "Download and install the speech engine now?" = "6Z+z5aOw44Ko44Oz44K444Oz44KS5LuK44GZ44GQ44OA44Km44Oz44Ot44O844OJ44GX44Gm44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
+    "speech engine ready*" = "6Z+z5aOw44Ko44Oz44K444Oz44Gu5rqW5YKZ44GM44Gn44GN44G+44GX44GfKg=="
+    "The ~1 GB voice model downloads the first time you render." = "6Z+z5aOw44Oi44OH44Or77yI57SEIDEgR0LvvInjga/jgIHmnIDliJ3jgavnlJ/miJDjgZnjgovjgajjgY3jgavjg4Djgqbjg7Pjg63jg7zjg4njgZXjgozjgb7jgZnjgII="
+    "skipped - re-run this installer to add it later." = "44K544Kt44OD44OX44GX44G+44GX44GfIC0g44GC44Go44Gn6L+95Yqg44GZ44KL44Gr44Gv44GT44Gu44Kk44Oz44K544OI44O844Op44O844KS5YaN5a6f6KGM44GX44Gm44GP44Gg44GV44GE44CC"
+    "Checking for Calibre (needed to read ebook files)" = "Q2FsaWJyZSDjgpLnorroqo3jgZfjgabjgYTjgb7jgZnvvIjpm7vlrZDmm7jnsY3jga7oqq3jgb/ovrzjgb/jgavlv4XopoHjgafjgZnvvIk="
+    "Calibre found" = "Q2FsaWJyZSDjgYzopovjgaTjgYvjgorjgb7jgZfjgZ8="
+    "Calibre is not installed" = "Q2FsaWJyZSDjgYzjgqTjg7Pjgrnjg4jjg7zjg6vjgZXjgozjgabjgYTjgb7jgZvjgpM="
+    "Install it now with 'winget install calibre.calibre'?" = "J3dpbmdldCBpbnN0YWxsIGNhbGlicmUuY2FsaWJyZScg44Gn5LuK44GZ44GQ44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
+    "winget install failed" = "d2luZ2V0IOOBq+OCiOOCi+OCpOODs+OCueODiOODvOODq+OBq+WkseaVl+OBl+OBvuOBl+OBnw=="
+    "Calibre installed" = "Q2FsaWJyZSDjgpLjgqTjg7Pjgrnjg4jjg7zjg6vjgZfjgb7jgZfjgZ8="
+    "install Calibre before converting a book:" = "5pys44KS5aSJ5o+b44GZ44KL5YmN44GrIENhbGlicmUg44KS44Kk44Oz44K544OI44O844Or44GX44Gm44GP44Gg44GV44GEOg=="
+    "or download it from https://calibre-ebook.com/download" = "44G+44Gf44GvIGh0dHBzOi8vY2FsaWJyZS1lYm9vay5jb20vZG93bmxvYWQg44GL44KJ44OA44Km44Oz44Ot44O844OJ44GX44Gm44GP44Gg44GV44GE"
+    "Creating the launcher" = "44Op44Oz44OB44Oj44O844KS5L2c5oiQ44GX44Gm44GE44G+44GZ"
+    "command: *" = "44Kz44Oe44Oz44OJOiAq"
+    "added to your PATH (new terminals will find it)" = "UEFUSCDjgavov73liqDjgZfjgb7jgZfjgZ/vvIjmlrDjgZfjgYTjgr/jg7zjg5/jg4rjg6vjgafopovjgaTjgYvjgorjgb7jgZnvvIk="
+    "Start Menu shortcut" = "44K544K/44O844OI44Oh44OL44Ol44O844Gu44K344On44O844OI44Kr44OD44OI"
+    "Add a Desktop shortcut too?" = "44OH44K544Kv44OI44OD44OX44Gr44KC44K344On44O844OI44Kr44OD44OI44KS5L2c5oiQ44GX44G+44GZ44GL77yf"
+    "Desktop shortcut" = "44OH44K544Kv44OI44OD44OX44Gu44K344On44O844OI44Kr44OD44OI"
+    "couldn't create shortcuts: *" = "44K344On44O844OI44Kr44OD44OI44KS5L2c5oiQ44Gn44GN44G+44Gb44KT44Gn44GX44GfOiAq"
+    "Verifying the install" = "44Kk44Oz44K544OI44O844Or44KS5qSc6Ki844GX44Gm44GE44G+44GZ"
+    "all required components are working" = "5b+F6KaB44Gq5qeL5oiQ6KaB57Sg44Gv44GZ44G544Gm5YuV5L2c44GX44Gm44GE44G+44GZ"
+    "some checks failed - run 'ebook-audiobook check' for details" = "5LiA6YOo44Gu56K66KqN44Gr5aSx5pWX44GX44G+44GX44GfIC0g6Kmz44GX44GP44GvICdlYm9vay1hdWRpb2Jvb2sgY2hlY2snIOOCkuWun+ihjOOBl+OBpuOBj+OBoOOBleOBhA=="
+    "Installed." = "44Kk44Oz44K544OI44O844Or44GM5a6M5LqG44GX44G+44GX44Gf44CC"
+    "  Start it from the Start Menu, or run: " = "ICDjgrnjgr/jg7zjg4jjg6Hjg4vjg6Xjg7zjgYvjgonotbfli5XjgZnjgovjgYvjgIHmrKHjgpLlrp/ooYzjgZfjgabjgY/jgaDjgZXjgYQ6IA=="
+    "  Your books live in: " = "ICDmnKzjga7loLTmiYA6IA=="
+    "  Check setup:  " = "ICDoqK3lrprjga7norroqo06ICA="
+    "  Uninstall:    " = "ICDjgqLjg7PjgqTjg7Pjgrnjg4jjg7zjg6s6ICAgIA=="
+    "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "ICDms6jmhI86ICdlYm9vay1hdWRpb2Jvb2snIOOCs+ODnuODs+ODieOCkuS9v+OBhuOBq+OBr+OAgeaWsOOBl+OBhOOCv+ODvOODn+ODiuODq+OCkumWi+OBhOOBpuOBj+OBoOOBleOBhOOAgg=="
+}
+$Japanese = [ordered]@{}
+foreach ($k in $JapaneseB64.Keys) {
+    $Japanese[$k] = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($JapaneseB64[$k]))
 }
 
 function Tr($msg) {

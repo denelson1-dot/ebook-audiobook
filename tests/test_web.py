@@ -457,12 +457,55 @@ def test_updates_status_is_off_by_default(client):
     assert d["apply_state"] == "idle"
 
 
-def test_updates_apply_starts_in_the_background(client, monkeypatch):
+def _offer_an_update(monkeypatch):
+    """Put the app in the only state from which an install is allowed: checks
+    on, and a newer release actually found."""
+    from ebook_audiobook import settings as app_settings
     from ebook_audiobook import update
+    from ebook_audiobook.web import update_watch
 
+    s = app_settings.load_settings()
+    s.check_for_updates = True
+    app_settings.save_settings(s)
+    release = update.Release(version="99.0.0", tag="v99.0.0", url="")
+    with update_watch._state.lock:
+        update_watch._state.release = release
     monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600: 0)
+
+
+def test_updates_apply_starts_in_the_background(client, monkeypatch):
+    _offer_an_update(monkeypatch)
     r = client.post("/updates/apply")
     assert r.get_json()["ok"] is True
+
+
+def test_updates_apply_refuses_unless_an_update_is_actually_on_offer(client, monkeypatch):
+    """This endpoint runs the installer, which is `curl … | bash`, and the app
+    listens on a fixed localhost port with no CSRF token. The confirm dialog
+    lives in the browser, so it cannot be the only gate: a plain cross-origin
+    form POST is a CORS-simple request and would otherwise make the app
+    reinstall itself unattended, on a machine whose promise is that nothing
+    happens without being asked.
+    """
+    from ebook_audiobook import settings as app_settings
+    from ebook_audiobook import update
+
+    invoked = []
+    monkeypatch.setattr(update, "apply_update",
+                        lambda yes=False, timeout=3600: invoked.append(yes) or 0)
+
+    # Checks turned off, and no release known.
+    s = app_settings.load_settings()
+    s.check_for_updates = False
+    app_settings.save_settings(s)
+    assert client.post("/updates/apply").status_code == 409
+
+    # Checks on and a release found, but the request came from another site.
+    _offer_an_update(monkeypatch)
+    assert client.post("/updates/apply",
+                       headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+
+    assert invoked == [], "the installer must not have run"
 
 
 def test_updates_dismiss_is_remembered(client):

@@ -57,7 +57,10 @@ class Language:
 
 SUPPORTED: dict[str, Language] = {
     "en": Language("en", "English", lambda n: int(n != 1), ".", ","),
-    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " "),
+    # Also unreviewed: a native speaker has been lined up to read it since
+    # 1.4.0 and has not yet, and an adversarial pass found real grammar errors
+    # in it. It says so until that review actually happens.
+    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " ", reviewed=False),
     # Spanish separators are the reverse of English, and they are not a free
     # choice: a page renders numbers from Python and from JavaScript both, and
     # toLocaleString("es") gives "1.234.567" and "1,5".

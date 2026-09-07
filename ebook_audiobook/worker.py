@@ -136,17 +136,22 @@ def render_voice_sample(voice_id: str, params: dict | None = None) -> Path:
     lib = VoiceLibrary()
     entry = lib.get(voice_id)
     lang = (entry.language if entry else "en") or "en"
-    # Refuse before queueing rather than failing inside the worker: the caller
-    # turns this into a 409 that names the model to install.
+    # Also checked by the route (web/app.py), which turns it into a 409 naming
+    # the model to install. Repeated here because this runs in the worker and
+    # the CLI can reach it without passing through that route.
     narration_langs.require_installed(lang)
     clip = lib.clip_path(voice_id)
-    voice = VoiceSettings(
-        engine="chatterbox",
-        reference_clip=str(clip) if clip else None,
-        language=lang,
-        repetition_penalty=config.default_repetition_penalty(lang),
+    # Merged rather than splatted after the keywords: params exists to override
+    # voice settings, and language/repetition_penalty — the two most likely to
+    # be passed — would otherwise be duplicate keyword arguments.
+    fields = {
+        "engine": "chatterbox",
+        "reference_clip": str(clip) if clip else None,
+        "language": lang,
+        "repetition_penalty": config.default_repetition_penalty(lang),
         **(params or {}),
-    )
+    }
+    voice = VoiceSettings(**fields)
     adapter = get_adapter(voice, config.SAMPLE_RATE)
     adapter.load()
     try:

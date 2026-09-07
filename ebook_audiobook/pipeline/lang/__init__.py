@@ -64,6 +64,31 @@ class Rules:
     chunk_max_chars: int | None = None
 
 
+def keep_on_error(fn):
+    """Wrap a re.sub callback so it leaves the text alone instead of raising.
+
+    ``inflect`` and ``num2words`` both have hard range limits — 37 digits for
+    English, 28 for Spanish, 52 for Japanese — and raise past them. A digit run
+    that long is not a number anyone wants read aloud, but it does occur: OCR
+    noise, an identifier, a hash in a technical book. Unguarded it propagates
+    out of ``normalize_text`` and aborts the whole extraction, so one such run
+    anywhere makes a book unimportable.
+
+    Per callback rather than per document, so one impossible number leaves the
+    rest of the page's numbers spoken.
+    """
+    from functools import wraps
+
+    @wraps(fn)
+    def guarded(m):
+        try:
+            return fn(m)
+        except Exception:  # noqa: BLE001 - any library limit, not our business
+            return m.group(0)
+
+    return guarded
+
+
 # Languages with a rules module of their own. Everything else — including the
 # narration languages the engine speaks but we have written no rules for — falls
 # back to English, which is why this maps to a module name rather than gating on

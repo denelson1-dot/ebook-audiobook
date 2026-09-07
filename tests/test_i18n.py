@@ -95,7 +95,10 @@ def test_unreviewed_languages_say_so_where_the_language_is_chosen():
     """Neither Spanish nor Japanese has had a native speaker through it. That
     is worth shipping, and worth admitting."""
     unreviewed = {c for c, l in i18n.SUPPORTED.items() if not l.reviewed}
-    assert unreviewed == {"es", "ja"}
+    # English is the source, so it is never "unreviewed"; every translation
+    # here was written without a native speaker reading it.
+    assert "en" not in unreviewed
+    assert unreviewed == set(i18n.SUPPORTED) - {"en"}
     assert all("reviewed" in c for c in i18n.language_choices())
 
     client = create_app().test_client()
@@ -347,3 +350,35 @@ def test_the_job_page_renders_in_french(monkeypatch, synthetic_epub):
         assert french in body, french
     for english in ("Narrate the book", "What gets narrated", "Engine settings", "Hear it first"):
         assert english not in body, english
+
+
+def test_no_translation_smuggles_markup_the_english_did_not_have():
+    """Newstyle gettext treats a msgstr as trusted Markup — only the %(…)s
+    parameters are escaped — because several msgids deliberately carry inline
+    <code> and <a href="…">. That trust is fine for text we wrote, and this app
+    now invites strangers to send .po corrections, so a catalog is an HTML
+    injection path into every page.
+
+    A translation may keep the markup its English has. It may not introduce
+    any, and it may not introduce a quote that could close an attribute.
+    """
+    import re as _re
+
+    tool = _tool()
+    tags = _re.compile(r"</?[a-zA-Z][\w-]*[^>]*>")
+    for lang in TRANSLATED:
+        for msg in tool.read_catalog(lang):
+            if not msg.id:
+                continue
+            ids = [msg.id] if isinstance(msg.id, str) else list(msg.id)
+            strings = [msg.string] if isinstance(msg.string, str) else list(msg.string)
+            source = " ".join(ids)
+            allowed = set(tags.findall(source))
+            for translated in strings:
+                if not translated:
+                    continue
+                introduced = set(tags.findall(translated)) - allowed
+                assert not introduced, \
+                    f"{lang}: {msg.id!r} introduces markup {sorted(introduced)}"
+                if '"' in translated:
+                    assert '"' in source, f"{lang}: {msg.id!r} introduces a double quote"

@@ -181,9 +181,11 @@ class VoiceLibrary:
         for d in self._load_index():
             if d.get("id") and d["id"] not in bundled_ids:
                 # Index entries written before voices carried a language are
-                # English, which is what they were treated as at the time.
+                # English, which is what they were treated as at the time —
+                # and so is anything unreadable, so that a hand-edited file
+                # cannot strand a voice or break the page that lists it.
                 voices.append(Voice(d["id"], d.get("name", d["id"]), d.get("clip_filename"),
-                                    language=d.get("language") or "en"))
+                                    language=self._language(d.get("language"))))
         return voices
 
     def get(self, voice_id: str) -> Voice | None:
@@ -197,6 +199,23 @@ class VoiceLibrary:
             return None
         path = (BUNDLED_DIR if v.bundled else self.dir) / v.clip_filename
         return path if path.is_file() else None
+
+    @staticmethod
+    def _language(raw) -> str:
+        """A language code this app can actually show a voice under.
+
+        The index is a JSON file a user can edit, and ``add`` is reachable from
+        the CLI as well as the form, so this is neither trusted nor assumed to
+        be a string. Anything unknown becomes English rather than a code no
+        page filters for — a voice nobody can see is a voice nobody can play,
+        rename or delete, which is a worse outcome than one filed in the wrong
+        place.
+        """
+        from . import narration_langs
+
+        code = raw.strip().lower() if isinstance(raw, str) else ""
+        lang = narration_langs.LANGUAGES.get(code)
+        return code if lang is not None and lang.tier == "supported" else "en"
 
     def add(self, name: str, src_path: str | None = None, file_storage=None,
             orig_filename: str | None = None, language: str = "en") -> Voice:
@@ -253,7 +272,7 @@ class VoiceLibrary:
             else:
                 raise ValueError("provide src_path or file_storage")
 
-        language = (language or "en").strip() or "en"
+        language = self._language(language)
         items.append({"id": vid, "name": name, "clip_filename": clip_filename,
                       "language": language})
         self._save_index(items)
