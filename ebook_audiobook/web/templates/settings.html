@@ -121,10 +121,12 @@
     <section class="panel">
       <div class="panel-head"><h3>{{ _("Language") }}</h3></div>
       <div class="panel-body">
-        <div class="field" style="max-width:320px">
+        <div class="field">
           {# Native names, never translated: someone who picked the wrong
-             language must still be able to find their own. #}
-          <select id="langSelect">
+             language must still be able to find their own. The width belongs on
+             the dropdown, not on the field: capping the field narrows the
+             sentences under it too, for no reason a reader can see. #}
+          <select id="langSelect" style="max-width:320px">
             <option value="" {% if not language_setting %}selected{% endif %}>{{ _("Automatic — follow the browser") }}</option>
             {% for l in languages %}
             <option value="{{ l.code }}" {% if l.code == language_setting %}selected{% endif %}>{{ l.native }}</option>
