@@ -337,8 +337,42 @@ def test_clearing_the_library_folder_still_works(client, tmp_path):
 
 
 def test_an_invented_power_mode_is_rejected_not_stored(client):
+    """Falls back to full speed rather than to the new-install default: a value
+    nobody can parse is no reason to halve someone's throughput."""
     r = client.post("/settings", data={"power_mode": "ludicrous"})
     assert r.get_json()["power_mode"] == "full"
+
+
+def test_a_fresh_install_starts_on_balanced():
+    """No settings.json at all — the only case that counts as a new machine.
+    Contrast Settings()'s own dataclass default, which stays "full" so that
+    filling in a missing key from an *existing* file can't slow it down."""
+    from ebook_audiobook import power, settings
+
+    assert settings.Settings().power_mode == power.MODE_FULL
+    assert settings.load_settings().power_mode == power.MODE_BALANCED
+    assert settings.default_power_mode() == power.MODE_BALANCED
+
+
+def test_an_existing_install_keeps_full_speed_across_the_upgrade():
+    """The regression that matters: render intensity postdates settings.json,
+    so a machine that has been at full speed since before the setting existed
+    has no power_mode key at all. Reading that file must not quietly move it to
+    Balanced — the render it is midway through would just get slower."""
+    from ebook_audiobook import power, settings
+
+    existing = settings.Settings(audiobooks_root="/tmp/somewhere").to_dict()
+    del existing["power_mode"]
+    settings.save_settings(settings.Settings.from_dict(existing))
+    assert settings.load_settings().power_mode == power.MODE_FULL
+
+
+def test_a_saved_choice_survives_the_new_default():
+    """Someone who deliberately picked Full speed keeps it."""
+    from ebook_audiobook import power, settings
+
+    settings.save_settings(settings.Settings(power_mode=power.MODE_FULL))
+    assert settings.default_power_mode() == power.MODE_FULL
 
 
 # --- appearance ---------------------------------------------------------------

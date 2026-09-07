@@ -518,8 +518,9 @@ def build_parser() -> argparse.ArgumentParser:
     def power_flag(sp):
         sp.add_argument(
             "--power", choices=list(power.MODES), default=None,
-            help="how hard to push this machine: full (default), balanced, "
-                 "or quiet (background — cooler and slower, good on a laptop)")
+            help="how hard to push this machine: full, balanced, or quiet "
+                 "(background — cooler and slower, good on a laptop). "
+                 "Defaults to the render intensity saved in Settings")
 
     def voice_flags(sp):
         sp.add_argument("--engine", choices=["chatterbox", "fake"], default="chatterbox")

@@ -506,13 +506,15 @@ octet ; seul le temps change.
 
 | Mode | Ce qu'il fait | Coût |
 |---|---|---|
-| **Pleine vitesse** | Tout ce qui est disponible. Par défaut. | — |
+| **Pleine vitesse** | Tout ce qui est disponible. | — |
 | **Équilibré** | Limite les fils du processeur, baisse la priorité, courtes pauses | ~10 à 25 % plus lent |
 | **Discret / arrière-plan** | Peu de fils, priorité minimale, pause la moitié du temps ; sur Apple Silicon, passe sur les **cœurs efficaces** | ~2× plus lent |
 
-En ligne de commande : `--power quiet`. La vitesse mesurée en caractères par
-seconde ignore les pauses, donc changer de mode ne fait pas paraître votre
-matériel plus lent qu'il n'est.
+Une nouvelle installation démarre en **Équilibré**, pour que la première
+narration laisse la machine utilisable ; une mise à jour conserve le réglage
+déjà en place. En ligne de commande : `--power quiet`. La vitesse mesurée en
+caractères par seconde ignore les pauses, donc changer de mode ne fait pas
+paraître votre matériel plus lent qu'il n'est.
 
 **Si un GPU manque de mémoire** en cours de route, la narration ne meurt pas —
 elle réessaie une fois, puis passe sur le processeur et termine. Tout ce qui
