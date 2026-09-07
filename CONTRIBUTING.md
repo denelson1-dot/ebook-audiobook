@@ -148,9 +148,26 @@ Rules that keep it working:
 - Never call `locale.setlocale`: it is process-global and thread-unsafe.
 - Commit the `.po` and the `.mo` together. A translator edits the `.po` in
   Poedit; `compile` then `check` before committing what comes back.
+- A catalog written without a native speaker's review sets `reviewed=False` on
+  its `i18n.SUPPORTED` entry. The Settings panel and the first-run modal then
+  say so and link to the locale files. Shipping a machine-written translation
+  is right — it beats an English-only app — but letting someone assume a person
+  wrote it is not.
 - Not translated, on purpose: CLI output, the bug report from `ebook-audiobook
   report`, the "Unknown Title"/"Unknown Author" fallbacks (they name folders and
   tags), raw exception text, and the shell commands in "how to fix it" hints.
+
+**Adding one** is `python tools/i18n.py add <code>`, an entry in
+`i18n.SUPPORTED` (native name, a plural lambda that mirrors the new `.po`
+header, and the decimal and thousands separators), a matching rule in
+`PLURAL_RULES` in `app.js`, an LCID in `_WINDOWS_PRIMARY_LANGUAGES`, and a
+message table in each installer. Two things are decided for you rather than
+chosen: the separators must be what `toLocaleString` gives for that language,
+because a page renders numbers from Python and from JavaScript both; and a
+one-form language (`nplurals=1`, like Japanese) has a single-entry `msgstr[]`,
+which `app.js` indexes with `PLURAL_RULES` — a rule that ever returned 1 would
+index past the end. No test names a language literally, so they all cover the
+new one as soon as it is in `SUPPORTED`.
 
 ## Narration languages
 
@@ -162,10 +179,27 @@ disk, never the network). Per-language text preparation lives in
 `ebook_audiobook/pipeline/lang/<code>.py`: punctuation, abbreviations, numbers,
 front/back-matter titles, and the sentences the app narrates itself. English
 is the reference and `tests/data/golden_en.json` pins its output; adding a
-language is one such module, an entry in `narration_langs.LANGUAGES` (tier
-`supported`), bundled voices with that `language` in `voices.py`, and a
-default in `DEFAULT_BUNDLED_BY_LANGUAGE`. `VoiceSettings.language` is part of
-the render key except when it is English, so old caches stay valid.
+language is one such module (registered in `lang/__init__.py`'s `_MODULES`), an
+entry in `narration_langs.LANGUAGES` (tier `supported`), bundled voices with
+that `language` in `voices.py`, and a default in `DEFAULT_BUNDLED_BY_LANGUAGE`.
+`VoiceSettings.language` is part of the render key except when it is English,
+so old caches stay valid.
+
+A language whose script does not put spaces between words needs more than a
+rules module, and `lang/ja.py` is the worked example. `Rules` carries
+`sentence_end`, `clause`, `joiner` and a pair of chunk budgets for exactly
+this: the shared sentence splitter looks for a full stop *followed by a space*,
+and the hard-wrapper splits on whitespace, so without them a paragraph arrives
+as one sentence and is sliced at whatever character sits at the budget. Two
+traps that are easy to miss: Python's `\w` matches kanji and kana, so the Latin
+number guards reject every digit touching the text; and a character carries far
+more speech in a logographic script, so the budget has to come down — measure
+it against a real render rather than guessing, as `lang/ja.py` records.
+
+Which `repetition_penalty` a model wants is decided in exactly one place,
+`config.default_repetition_penalty`. At the English model's 1.2 the
+multilingual one stops generating a few words in, so anything building a
+`VoiceSettings` from scratch for a non-English language has to ask.
 
 ## Cutting a release
 

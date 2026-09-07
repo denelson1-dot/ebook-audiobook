@@ -237,3 +237,14 @@ def test_japanese_chunks_are_budgeted_for_a_denser_script():
     assert ja.joiner == "" and en.joiner == " "
     # English keeps the global budget rather than naming one of its own.
     assert en.chunk_target_chars is None
+
+
+def test_a_japanese_heading_keeps_the_gap_before_its_title():
+    """An ideographic space is paragraph indentation in body text, but in a
+    heading it separates the chapter number from the title. Deleting it ran
+    "第三章" and "旅の始まり" together into one word."""
+    assert n.normalize_title("第3章　旅の始まり", "ja") == "第三章 旅の始まり"
+    # Indentation still goes, because chunking strips each paragraph.
+    text = n.normalize_text("第3章　旅の始まり\n\n　彼は歩いた。", "ja")
+    assert [c for c, _ in chunk.chunk_structured(text, lang="ja")] == [
+        "第三章 旅の始まり", "彼は歩いた。"]

@@ -97,9 +97,12 @@ def main() -> int:
     print("\nthe translations are in the wheel")
     # A package-data glob that misses locale/ ships an app that is English
     # whatever the setting says — quiet enough that only this would notice.
-    _, body = get(base + "/", headers={"Accept-Language": "fr"})
-    check('lang="fr"' in body, "Accept-Language: fr renders the page in French")
-    check("Bibliothèque" in body, "the French strings came from the compiled catalog")
+    # One known word per language, so this fails if a catalog is missing from
+    # the wheel rather than merely if the negotiation broke.
+    for code, word in (("fr", "Bibliothèque"), ("es", "Biblioteca"), ("ja", "ライブラリ")):
+        _, body = get(base + "/", headers={"Accept-Language": code})
+        check(f'lang="{code}"' in body, f"Accept-Language: {code} renders the page in {code}")
+        check(word in body, f"the {code} strings came from the compiled catalog")
     _, body = get(base + "/")
     check('lang="en"' in body, "no Accept-Language -> English")
 

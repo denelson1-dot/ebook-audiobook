@@ -43,7 +43,11 @@ from . import Rules
 PUNCT_MAP = {
     "〜": "、", "～": "、", "―": "、", "─": "、", "‥": "、", "…": "、",
     "・": "、",
-    "　": "",                  # ideographic space: Japanese needs no spaces
+    # An ideographic space is usually paragraph indentation, but in a heading
+    # it is the gap between a chapter number and its title — "第三章　旅の始まり".
+    # Deleting it runs the two together; a plain space keeps the boundary, and
+    # the engine collapses runs of whitespace before tokenising anyway.
+    "　": " ",
     " ": " ", " ": " ",
     "­": "",                  # soft hyphen
     "＆": "、",
