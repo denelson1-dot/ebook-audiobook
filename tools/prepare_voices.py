@@ -61,6 +61,8 @@ SOURCES = {
     "spanish_mexico_male_mario_pineda_60s.wav": "male-spanish-latin-american.flac",
     "spanish_spain_female_dreamvoz_marian_60s.wav": "female-spanish-european.flac",
     "spanish_spain_male_tux_60s.wav": "male-spanish-european.flac",
+    "japanese_female_kaseumin_60s.wav": "female-japanese.flac",
+    "japanese_male_ekzemplaro_60s.wav": "male-japanese.flac",
 }
 
 

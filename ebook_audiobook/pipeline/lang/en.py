@@ -47,7 +47,17 @@ _YEAR = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
 _ORDINAL = re.compile(r"\b(\d+)(st|nd|rd|th)\b", re.IGNORECASE)
 _CURRENCY = re.compile(r"\$(\d[\d,]*)(\.\d{1,2})?")
 _PERCENT = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*%")
-_INTEGER = re.compile(r"(?<![\w.])(\d[\d,]*)(?![\w.])")
+# Two boundaries, both of which used to be wrong at the end of a sentence.
+#
+# The group must end in a digit: "\d[\d,]*" greedily ate the comma in "to 300,
+# then stopped", so the pause the comma exists for was lost.
+#
+# The trailing guard rejects a following dot only when a digit follows it —
+# that is a decimal ("3.14", left alone) rather than a full stop. Rejecting
+# every dot, as it did, meant a number ending a sentence was never spoken at
+# all: "He counted to 300." reached the model as digits. Years escaped only
+# because _YEAR runs first and has no such guard.
+_INTEGER = re.compile(r"(?<![\w.])(\d[\d,]*\d|\d)(?!\w|\.\d)")
 
 
 def _say_year(m: re.Match) -> str:

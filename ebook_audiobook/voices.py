@@ -63,13 +63,18 @@ BUNDLED = (
      "language": "es", "file": "female-spanish-european.flac", "pacing": 0.42},
     {"id": "male-spanish-european", "name": N_("Spanish — Male, European"),
      "language": "es", "file": "male-spanish-european.flac", "pacing": 0.42},
+    {"id": "female-japanese", "name": N_("Japanese — Female"), "language": "ja",
+     "file": "female-japanese.flac", "pacing": 0.42},
+    {"id": "male-japanese", "name": N_("Japanese — Male"), "language": "ja",
+     "file": "male-japanese.flac", "pacing": 0.42},
 )
 
 # Which voice a newly imported book starts with, per language. Until a book
 # carries its own language, the interface language decides: someone using the
 # app in French is, for now, taken to be narrating French books.
 DEFAULT_BUNDLED_BY_LANGUAGE = {"en": "male-north-american", "fr": "female-french",
-                               "es": "female-spanish-latin-american"}
+                               "es": "female-spanish-latin-american",
+                               "ja": "female-japanese"}
 DEFAULT_BUNDLED_ID = DEFAULT_BUNDLED_BY_LANGUAGE["en"]
 # Accepted upload/import formats. Anything that isn't already a WAV is transcoded
 # to WAV via ffmpeg on import (see VoiceLibrary.add), so container/AAC formats

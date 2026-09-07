@@ -1,8 +1,8 @@
 # Bundled narrator voices
 
-Ten reference clips shipped with the application, so a new install has
+Twelve reference clips shipped with the application, so a new install has
 usable voices without anyone having to find or record one: four English,
-two French, four Spanish. Each carries the language it was recorded in, and
+two French, four Spanish, two Japanese. Each carries the language it was recorded in, and
 each language has its own default narrator (`DEFAULT_BUNDLED_BY_LANGUAGE` in
 `ebook_audiobook/voices.py`).
 
@@ -22,6 +22,8 @@ narration samples (WAV), one reader each, converted here to 24 kHz mono FLAC.
 - **Spanish** — `female-spanish-latin-american`: Karen Savage;
   `male-spanish-latin-american`: Mario Pineda; `female-spanish-european`:
   Marian (dreamvoz); `male-spanish-european`: "tux". Added 2026-09-07.
+- **Japanese** — `female-japanese`: kaseumin; `male-japanese`: ekzemplaro.
+  Added 2026-09-07.
 
 The "floor" figure `tools/prepare_voices.py` prints is not a noise measure for
 any of these: it is the level of the quietest frames, and a continuous

@@ -70,8 +70,10 @@ _ORDINAL = re.compile(r"\b(\d+)(ers|er|res|re|ères|ère|èmes|ème|es|e)\b")
 _ROMAN_ORDINAL = re.compile(r"\b((?:[IVXLC]{2,7})|[IVX])(ers|er|res|re|ères|ère|èmes|ème|es|e)\b")
 # A comma after a number is a decimal only when digits follow it: "1625, le
 # bourg" is a year and a pause.
-_DECIMAL = re.compile(rf"(?<![\w,.])({_DIGITS}),(\d+)(?![\w.]|,\d)")
-_INTEGER = re.compile(rf"(?<![\w,.])({_DIGITS})(?![\w.]|,\d)")
+_DECIMAL = re.compile(rf"(?<![\w,.])({_DIGITS}),(\d+)(?!\w|[.,]\d)")
+# The trailing guard rejects a dot only when a digit follows: otherwise a
+# number ending a sentence — "Il est arrivé en 1999." — was never spoken.
+_INTEGER = re.compile(rf"(?<![\w,.])({_DIGITS})(?!\w|[.,]\d)")
 
 
 def _n(value, **kw) -> str:

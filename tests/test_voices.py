@@ -90,7 +90,8 @@ def test_the_shipped_voices_are_present_and_readable():
         "male-north-american", "female-north-american", "male-british", "female-british",
         "female-french", "male-french",
         "female-spanish-latin-american", "male-spanish-latin-american",
-        "female-spanish-european", "male-spanish-european"]
+        "female-spanish-european", "male-spanish-european",
+        "female-japanese", "male-japanese"]
     for b in BUNDLED:
         clip = BUNDLED_DIR / b["file"]
         assert clip.is_file(), f"{b['file']} is missing from the package"
@@ -213,7 +214,8 @@ def test_a_voice_may_suggest_settings_or_leave_them_alone():
 # The display name leads with the language, so a picker showing several reads
 # as a list rather than a jumble. Extend this when a language is added — which
 # is the point: the name is part of shipping a voice, not an afterthought.
-LANGUAGE_NAME_PREFIX = {"en": "English — ", "fr": "French — ", "es": "Spanish — "}
+LANGUAGE_NAME_PREFIX = {"en": "English — ", "fr": "French — ",
+                        "es": "Spanish — ", "ja": "Japanese — "}
 
 
 def test_every_bundled_voice_names_its_language():

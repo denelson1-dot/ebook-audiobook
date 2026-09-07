@@ -313,40 +313,40 @@ msgid "Spanish"
 msgstr "espagnol"
 
 #: ebook_audiobook/narration_langs.py:76
+msgid "Japanese"
+msgstr "japonais"
+
+#: ebook_audiobook/narration_langs.py:77
 msgid "Arabic"
 msgstr "arabe"
 
-#: ebook_audiobook/narration_langs.py:77
+#: ebook_audiobook/narration_langs.py:78
 msgid "Danish"
 msgstr "danois"
 
-#: ebook_audiobook/narration_langs.py:78
+#: ebook_audiobook/narration_langs.py:79
 msgid "German"
 msgstr "allemand"
 
-#: ebook_audiobook/narration_langs.py:79
+#: ebook_audiobook/narration_langs.py:80
 msgid "Greek"
 msgstr "grec"
 
-#: ebook_audiobook/narration_langs.py:80
+#: ebook_audiobook/narration_langs.py:81
 msgid "Finnish"
 msgstr "finnois"
 
-#: ebook_audiobook/narration_langs.py:81
+#: ebook_audiobook/narration_langs.py:82
 msgid "Hebrew"
 msgstr "hébreu"
 
-#: ebook_audiobook/narration_langs.py:82
+#: ebook_audiobook/narration_langs.py:83
 msgid "Hindi"
 msgstr "hindi"
 
-#: ebook_audiobook/narration_langs.py:83
+#: ebook_audiobook/narration_langs.py:84
 msgid "Italian"
 msgstr "italien"
-
-#: ebook_audiobook/narration_langs.py:84
-msgid "Japanese"
-msgstr "japonais"
 
 #: ebook_audiobook/narration_langs.py:85
 msgid "Korean"
@@ -621,7 +621,15 @@ msgstr "Espagnol — Femme, Europe"
 msgid "Spanish — Male, European"
 msgstr "Espagnol — Homme, Europe"
 
-#: ebook_audiobook/voices.py:152
+#: ebook_audiobook/voices.py:66
+msgid "Japanese — Female"
+msgstr "Japonais — Femme"
+
+#: ebook_audiobook/voices.py:68
+msgid "Japanese — Male"
+msgstr "Japonais — Homme"
+
+#: ebook_audiobook/voices.py:157
 msgid "Default narrator"
 msgstr "Narrateur par défaut"
 
@@ -645,7 +653,7 @@ msgstr "Impossible de créer le dossier de sortie « %(path)s » : %(e)s"
 msgid "No write permission for output folder “%(path)s”: %(e)s"
 msgstr "Pas de permission d'écriture sur le dossier de sortie « %(path)s » : %(e)s"
 
-#: ebook_audiobook/worker.py:169
+#: ebook_audiobook/worker.py:170
 msgid ""
 "KFX (newer Kindle) isn't supported directly. Open it in Calibre and "
 "convert/export it to EPUB, then import the EPUB."
@@ -653,7 +661,7 @@ msgstr ""
 "Le format KFX (Kindle récent) n'est pas pris en charge directement. "
 "Ouvrez-le dans Calibre, convertissez-le en EPUB, puis importez l'EPUB."
 
-#: ebook_audiobook/worker.py:171
+#: ebook_audiobook/worker.py:172
 msgid ""
 "This is a KFX-era Kindle file. Convert it to EPUB in Calibre first, then "
 "import the EPUB."
@@ -661,7 +669,7 @@ msgstr ""
 "C'est un fichier Kindle de l'ère KFX. Convertissez-le d'abord en EPUB "
 "dans Calibre, puis importez l'EPUB."
 
-#: ebook_audiobook/worker.py:173
+#: ebook_audiobook/worker.py:174
 msgid ""
 "An .acsm file is an Adobe download token, not the book itself. Open it in"
 " Adobe Digital Editions or Calibre to fetch the actual book, then import "
@@ -671,22 +679,22 @@ msgstr ""
 "même. Ouvrez-le dans Adobe Digital Editions ou Calibre pour récupérer le "
 "vrai livre, puis importez celui-ci."
 
-#: ebook_audiobook/worker.py:176
+#: ebook_audiobook/worker.py:177
 msgid "Old Palm/PDB ebooks aren't supported. Convert it to EPUB in Calibre first."
 msgstr ""
 "Les vieux livres Palm/PDB ne sont pas pris en charge. Convertissez-le "
 "d'abord en EPUB dans Calibre."
 
-#: ebook_audiobook/worker.py:197
+#: ebook_audiobook/worker.py:198
 #, python-format
 msgid "“%(ext)s” files"
 msgstr "Les fichiers « %(ext)s »"
 
-#: ebook_audiobook/worker.py:197
+#: ebook_audiobook/worker.py:198
 msgid "files with no extension"
 msgstr "Les fichiers sans extension"
 
-#: ebook_audiobook/worker.py:199
+#: ebook_audiobook/worker.py:200
 #, python-format
 msgid ""
 "%(kind)s aren't supported. Supported formats: %(formats)s. For best "
@@ -696,7 +704,7 @@ msgstr ""
 " de meilleurs résultats, convertissez d'abord votre livre en EPUB dans "
 "Calibre."
 
-#: ebook_audiobook/worker.py:286
+#: ebook_audiobook/worker.py:287
 #, python-format
 msgid ""
 "This book is in %(language)s. Narrating it in %(language)s needs the "

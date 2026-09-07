@@ -68,7 +68,7 @@ class Rules:
 # narration languages the engine speaks but we have written no rules for — falls
 # back to English, which is why this maps to a module name rather than gating on
 # membership somewhere else.
-_MODULES = {"en": "en", "fr": "fr", "es": "es"}
+_MODULES = {"en": "en", "fr": "fr", "es": "es", "ja": "ja"}
 
 
 def rules_for(lang: str | None) -> Rules:
