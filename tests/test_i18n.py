@@ -35,6 +35,76 @@ def _tool():
 
 # --- the catalog itself ---------------------------------------------------------
 
+TRANSLATED = sorted(set(i18n.SUPPORTED) - {"en"})
+
+
+@pytest.mark.parametrize("lang", TRANSLATED)
+def test_every_catalog_is_compiled_complete_and_well_formed(lang):
+    """Stale .mo, placeholder drift, %-format validity, HTML tag mismatch,
+    untranslated and fuzzy entries — for every language that ships, not just
+    the first one that did."""
+    assert _tool().problems(lang) == []
+
+
+@pytest.mark.parametrize("lang", TRANSLATED)
+def test_every_plural_rule_matches_its_po_header(lang):
+    tool = _tool()
+    header = tool.read_catalog(lang).plural_expr
+    for n in (0, 1, 2, 5, 21, 1_000_000):
+        assert i18n.SUPPORTED[lang].plural(n) == int(eval(header, {}, {"n": n}))  # noqa: S307
+
+
+@pytest.mark.parametrize("lang", TRANSLATED)
+def test_every_language_renders_every_page(lang, monkeypatch):
+    """A page that still says "Library" is a page whose catalog did not load."""
+    import re as _re
+
+    # conftest pins EBAB_LANG=en so no developer's own locale can change a
+    # test's answer, and the env override beats everything by design.
+    monkeypatch.delenv("EBAB_LANG", raising=False)
+    client = create_app().test_client()
+    client.post("/settings", data={"onboarding_complete": "1"})
+    for page in ("/", "/new", "/voices", "/settings", "/storage"):
+        body = client.get(page, headers={"Accept-Language": lang}).data.decode()
+        assert f'<html lang="{lang}" ' in body, page
+        stripped = _re.sub(r"<script.*?</script>", "", body, flags=_re.S)
+        for marker in ("Library", "Settings", "Voices", "Add a book"):
+            assert not _re.search(rf">\s*{marker}\s*<", stripped), (lang, page, marker)
+
+
+def test_python_and_javascript_format_numbers_the_same_way():
+    """Both render numbers into the same page, so a separator chosen for one
+    has to be the one the other uses. These are the values Intl gives."""
+    assert (i18n.fmt_int(1234567, "en"), i18n.fmt_number(1.5, 1, "en")) == ("1,234,567", "1.5")
+    assert (i18n.fmt_int(1234567, "fr"), i18n.fmt_number(1.5, 1, "fr")) == ("1\u202f234\u202f567", "1,5")
+    assert (i18n.fmt_int(1234567, "es"), i18n.fmt_number(1.5, 1, "es")) == ("1.234.567", "1,5")
+    assert (i18n.fmt_int(1234567, "ja"), i18n.fmt_number(1.5, 1, "ja")) == ("1,234,567", "1.5")
+
+
+def test_a_one_form_language_round_trips_through_the_js_catalog():
+    """Japanese is nplurals=1, the first shipped language whose msgstr[] has a
+    single entry. app.js indexes that list with PLURAL_RULES, so a rule that
+    ever returned 1 would index past the end."""
+    cat = i18n.js_catalog("ja")
+    plurals = [v for v in cat.values() if isinstance(v, list)]
+    assert plurals and all(len(v) == 1 for v in plurals)
+    assert i18n.SUPPORTED["ja"].plural(0) == i18n.SUPPORTED["ja"].plural(1_000_000) == 0
+
+
+def test_unreviewed_languages_say_so_where_the_language_is_chosen():
+    """Neither Spanish nor Japanese has had a native speaker through it. That
+    is worth shipping, and worth admitting."""
+    unreviewed = {c for c, l in i18n.SUPPORTED.items() if not l.reviewed}
+    assert unreviewed == {"es", "ja"}
+    assert all("reviewed" in c for c in i18n.language_choices())
+
+    client = create_app().test_client()
+    modal = client.get("/").data.decode()          # fresh data root: onboarding shows
+    assert "community translation" in modal
+    client.post("/settings", data={"onboarding_complete": "1"})
+    assert "community translation" in client.get("/settings").data.decode()
+
+
 def test_french_catalog_is_compiled_complete_and_well_formed():
     """Exactly what CI's `tools/i18n.py check` asks, so pytest cannot disagree."""
     assert _tool().problems("fr") == []

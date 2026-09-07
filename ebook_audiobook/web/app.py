@@ -157,6 +157,12 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
+# Translations written without a native speaker's review say so, and point
+# here. The locale files are plain .po, which is what a translator expects.
+CORRECTIONS_URL = ("https://github.com/denelson1-dot/ebook-audiobook"
+                   "/tree/main/ebook_audiobook/locale")
+
+
 def _offerable_voices(current_id: str | None = None, language: str = "en") -> list[dict]:
     """The voices a person may pick from: the ones that speak ``language``.
 
@@ -333,6 +339,8 @@ def create_app() -> Flask:
             "lang": lang,
             "language_setting": s.language,
             "languages": i18n.language_choices(),
+            # Where a reader of an unreviewed translation sends a correction.
+            "CORRECTIONS_URL": CORRECTIONS_URL,
             "js_catalog": i18n.js_catalog(lang),
             "home_dir": str(Path.home()),
             "data_root": str(paths().root),

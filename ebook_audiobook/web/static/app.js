@@ -27,6 +27,9 @@ function baseName(p) {
 const PLURAL_RULES = {
   en: (n) => (n !== 1 ? 1 : 0),
   fr: (n) => (n > 1 ? 1 : 0),
+  es: (n) => (n !== 1 ? 1 : 0),
+  // Japanese has a single form: nplurals=1, so every count indexes msgstr[0].
+  ja: () => 0,
 };
 function _fmt(s, params) {
   // Always a format string, as in the templates: %% is a literal percent.

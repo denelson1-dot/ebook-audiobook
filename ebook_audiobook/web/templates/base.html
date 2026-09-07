@@ -48,9 +48,13 @@
         <select id="onboardLang">
           <option value="" selected>{{ _("Automatic — follow the browser") }}</option>
           {% for l in languages %}
-          <option value="{{ l.code }}">{{ l.native }}</option>
+          <option value="{{ l.code }}">{{ l.native }}{{ " *" if not l.reviewed }}</option>
           {% endfor %}
         </select>
+        {%- set unreviewed = languages | rejectattr("reviewed") | list %}
+        {% if unreviewed %}
+        <p class="onboard-hint">{{ _("* community translation, not yet reviewed by a native speaker") }}</p>
+        {% endif %}
       </div>
 
       <div class="onboard-field">

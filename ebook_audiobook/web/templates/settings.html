@@ -131,6 +131,13 @@
             {% endfor %}
           </select>
           <p class="hint">{{ _("Also used by the menu-bar icon, whose title changes the next time the app starts.") }}</p>
+          {# Said once, where the language is chosen, rather than on every page:
+             these translations were written without a native speaker reviewing
+             them, and someone should know that before they trust the wording. #}
+          {%- set unreviewed = languages | rejectattr("reviewed") | map(attribute="native") | list %}
+          {% if unreviewed %}
+          <p class="hint">{{ _("%(langs)s are community translations, written without a native speaker's review. Corrections are welcome — the wording lives in <a href=\"%(url)s\">the locale files</a>.", langs=unreviewed | join(", "), url=CORRECTIONS_URL) }}</p>
+          {% endif %}
         </div>
       </div>
     </section>
