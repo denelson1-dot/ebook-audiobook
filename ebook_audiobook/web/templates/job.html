@@ -515,17 +515,17 @@ function computeEstimate() {
   paintChapterMinutes();
 }
 
-// Say plainly whether these numbers were measured or guessed. An estimate that
-// does not admit which it is invites the user to trust it equally either way.
+// Say when these numbers were measured. Unmeasured says nothing: the estimate
+// is a rough guide by default, the Measure button beside it is already marked
+// stale, and a paragraph repeating that under every book is one more thing to
+// read past every time.
 function paintEstimateBasis() {
   const el = document.getElementById("estBasis");
   const btn = document.getElementById("remeasureBtn");
   const note = document.getElementById("staleNote");
   if (!el) return;
   const measured = measuredHere && audioRate > 0;
-  el.textContent = measured
-    ? _("Measured from this voice at these settings.")
-    : _("A rough guide — a generic reading speed that ignores the voice and pacing. Measure it for a real figure.");
+  el.textContent = measured ? _("Measured from this voice at these settings.") : "";
   if (btn) btn.classList.toggle("stale", !measured);
   if (note) note.hidden = measured;
 }
