@@ -687,25 +687,19 @@ form.addEventListener("change", (e) => {
   // them. The voice arriving gets its own if this book has tuned it before,
   // and otherwise the pacing its clip suits — they all read a little
   // deliberately at the engine default. Moving the slider rather than applying
-  // it invisibly means the change is something you can see and undo.
+  // it invisibly means the change is something you can see and undo — and it
+  // is its own feedback, so this says nothing: a toast on every voice change
+  // is noise in front of the thing it is describing.
   rememberTuning(tunedVoiceId);
   tunedVoiceId = e.target.value;
   const opt = e.target.selectedOptions[0];
   const remembered = voiceTuning[tunedVoiceId];
-  let moved = false;
   for (const [attr, field] of [["pacing", "cfg_weight"], ["expressiveness", "exaggeration"]]) {
     const want = remembered ? remembered[field] : parseFloat(opt && opt.dataset[attr]);
     const slider = form.querySelector(`input[name="${field}"]`);
-    if (slider && Number.isFinite(want) && +slider.value !== want) {
-      slider.value = want;
-      moved = true;
-    }
+    if (slider && Number.isFinite(want) && +slider.value !== want) slider.value = want;
   }
-  if (moved) {
-    syncRanges();
-    toast(remembered ? _("Back to your settings for this voice")
-                     : _("Settings adjusted to suit this voice"));
-  }
+  syncRanges();
   if (measuredHere) { measuredHere = false; }
   computeEstimate();
 });
