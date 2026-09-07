@@ -10,7 +10,7 @@ import re
 
 import inflect
 
-from . import Rules
+from . import Rules, keep_on_error
 
 _p = inflect.engine()
 
@@ -47,7 +47,17 @@ _YEAR = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
 _ORDINAL = re.compile(r"\b(\d+)(st|nd|rd|th)\b", re.IGNORECASE)
 _CURRENCY = re.compile(r"\$(\d[\d,]*)(\.\d{1,2})?")
 _PERCENT = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*%")
-_INTEGER = re.compile(r"(?<![\w.])(\d[\d,]*)(?![\w.])")
+# Two boundaries, both of which used to be wrong at the end of a sentence.
+#
+# The group must end in a digit: "\d[\d,]*" greedily ate the comma in "to 300,
+# then stopped", so the pause the comma exists for was lost.
+#
+# The trailing guard rejects a following dot only when a digit follows it —
+# that is a decimal ("3.14", left alone) rather than a full stop. Rejecting
+# every dot, as it did, meant a number ending a sentence was never spoken at
+# all: "He counted to 300." reached the model as digits. Years escaped only
+# because _YEAR runs first and has no such guard.
+_INTEGER = re.compile(r"(?<![\w.])(\d[\d,]*\d|\d)(?!\w|\.\d)")
 
 
 def _say_year(m: re.Match) -> str:
@@ -74,11 +84,11 @@ def _say_currency(m: re.Match) -> str:
 
 
 def speak_numbers(text: str) -> str:
-    text = _CURRENCY.sub(_say_currency, text)
-    text = _PERCENT.sub(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="") + " percent", text)
-    text = _YEAR.sub(_say_year, text)
-    text = _ORDINAL.sub(lambda m: _p.ordinal(_p.number_to_words(int(m.group(1)), andword="")), text)
-    text = _INTEGER.sub(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword=""), text)
+    text = _CURRENCY.sub(keep_on_error(_say_currency), text)
+    text = _PERCENT.sub(keep_on_error(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="") + " percent"), text)
+    text = _YEAR.sub(keep_on_error(_say_year), text)
+    text = _ORDINAL.sub(keep_on_error(lambda m: _p.ordinal(_p.number_to_words(int(m.group(1)), andword=""))), text)
+    text = _INTEGER.sub(keep_on_error(lambda m: _p.number_to_words(m.group(1).replace(",", ""), andword="")), text)
     return text
 
 
@@ -110,5 +120,6 @@ RULES = Rules(
         "by_author_tail": ", by %(author)s.",
         "this_book": "this book",
         "the_end": "The End",
+        "voice_sample": "This is a sample of the selected narrator voice. The quiet town slept beneath a wide and indifferent sky, and somewhere a single bell rang twice.",
     },
 )

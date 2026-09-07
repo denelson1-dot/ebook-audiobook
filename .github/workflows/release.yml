@@ -51,7 +51,7 @@ jobs:
       - name: Verify the wheel contains its data files
         run: |
           python - <<'PY'
-          import glob, sys, zipfile
+          import glob, pathlib, sys, zipfile
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           required = ["ebook_audiobook/web/templates/base.html",
@@ -61,9 +61,16 @@ jobs:
                       # an explicit check catches it.
                       "ebook_audiobook/assets/icon-256.png",
                       "ebook_audiobook/assets/icon.ico",
-                      "ebook_audiobook/assets/icon.icns",
-                      # The compiled translations, or the app is English-only.
-                      "ebook_audiobook/locale/fr/LC_MESSAGES/messages.mo"]
+                      "ebook_audiobook/assets/icon.icns"]
+          # Derived from the source tree, not listed: adding a language or a
+          # narrator must not be able to ship without its files. A missing .mo
+          # runs the app in English whatever the setting says, and 1.4.0 really
+          # did go out without the English clips it announced.
+          src = pathlib.Path("ebook_audiobook")
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("assets/voices/*.flac"))]
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("locale/*/LC_MESSAGES/*.mo"))]
           missing = [r for r in required if r not in names]
           if missing:
               sys.exit("MISSING FROM WHEEL: " + ", ".join(missing))

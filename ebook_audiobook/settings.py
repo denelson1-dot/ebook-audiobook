@@ -10,7 +10,7 @@ is trivial to back up or wipe with the rest of ``local-data/``.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .config import paths
@@ -39,7 +39,21 @@ class Settings:
     # Which narrator a newly imported book starts with. Empty means the shipped
     # default. Existing books are never touched by this — their voice is part of
     # their own settings, and changing it would re-render them.
+    #
+    # Kept as the English entry of default_voice_ids below, and still written so
+    # that an older build reading this file finds the default it expects. Note
+    # the reverse leg does not hold: an older build rewrites the whole file
+    # without the per-language key, so a downgrade-then-upgrade keeps the
+    # English default and loses the others.
     default_voice_id: str = ""
+
+    # The same choice, per narration language: {"en": "male-british", ...}.
+    #
+    # One global default cannot work once more than one language ships. Picking
+    # a Spanish narrator for new books would otherwise hand that voice to the
+    # next English book too — a voice that cannot speak its language, chosen by
+    # nobody. from_dict migrates the single old value in as the English entry.
+    default_voice_ids: dict = field(default_factory=dict)
 
     # Where the app window was last time, as {"x","y","width","height"}.
     #
@@ -103,7 +117,37 @@ class Settings:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Settings":
-        return cls(**{k: d.get(k) for k in cls.__dataclass_fields__ if k in d})
+        s = cls(**{k: d.get(k) for k in cls.__dataclass_fields__ if k in d})
+        if not isinstance(s.default_voice_ids, dict):
+            s.default_voice_ids = {}
+        # A settings file written before narrators were per-language carries a
+        # single default_voice_id that applied to every book. It belongs under
+        # the language that voice actually speaks — filing it under "en"
+        # regardless meant a user whose default was a French narrator silently
+        # stopped getting it. Resolved lazily, because voices.py imports this
+        # module and the library is not readable at import time.
+        if s.default_voice_id and not s.default_voice_ids:
+            s.default_voice_ids = {"": s.default_voice_id}
+        return s
+
+    def default_voice_for(self, language: str) -> str:
+        """This machine's chosen narrator for a language, or "" for none.
+
+        The empty key is the pre-per-language default, which applied to every
+        book; it answers for any language until a real per-language choice
+        replaces it. voices.default_voice_id still checks that the voice speaks
+        the language asked for, so this cannot hand a Spanish book an English
+        narrator — it only stops an upgrade from silently discarding a choice.
+        """
+        ids = self.default_voice_ids or {}
+        return ids.get(language or "en") or ids.get("", "")
+
+    def set_default_voice(self, language: str, voice_id: str) -> None:
+        ids = dict(self.default_voice_ids or {})
+        ids[language or "en"] = voice_id
+        self.default_voice_ids = ids
+        # Mirrored so an older build still finds a default it understands.
+        self.default_voice_id = ids.get("en", "")
 
 
 def _settings_path() -> Path:
@@ -126,8 +170,21 @@ def load_settings() -> Settings:
     if not p.exists():
         return Settings(preferences_onboarded=False)
     try:
-        return Settings.from_dict(json.loads(p.read_text("utf-8")))
-    except (ValueError, OSError):
+        loaded = json.loads(p.read_text("utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError("settings.json is not an object")
+        return Settings.from_dict(loaded)
+    except (ValueError, TypeError, OSError):
+        # Unreadable. Falling back to defaults is right — the app has to start —
+        # but the next save would write those defaults over whatever is there,
+        # and the first-run modal would present the loss as a fresh install. So
+        # the file is moved aside first: nothing is destroyed, and there is
+        # something to hand back if someone asks what happened to their library
+        # folder. Best effort; a read-only data dir must not stop the app.
+        try:
+            p.replace(p.with_suffix(".corrupt.json"))
+        except OSError:
+            pass
         return Settings(preferences_onboarded=False)
 
 

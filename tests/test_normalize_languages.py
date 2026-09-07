@@ -20,8 +20,14 @@ GOLDEN = json.loads((Path(__file__).parent / "data" / "golden_en.json").read_tex
 # --- English is unchanged, byte for byte -------------------------------------------------
 
 def test_english_normalisation_matches_the_golden_output():
-    """Captured before the rules moved into pipeline/lang/en.py. Every cached
-    segment of every existing render hangs on this staying equal."""
+    """Captured before the rules moved into pipeline/lang/en.py.
+
+    This fixture is the "nothing else moved" pin: every rule but one still
+    produces exactly what it produced then. The exception is deliberate and
+    covered below — a number ending a sentence used to be left as digits, and
+    now is spoken — which this input happens not to contain, so it is still an
+    honest pin for everything around it.
+    """
     assert n.normalize_text(GOLDEN["input"]) == GOLDEN["normalize_text"]
     for title, expected in GOLDEN["titles"].items():
         assert n.normalize_title(title) == expected, title
@@ -38,6 +44,42 @@ def test_english_hashes_are_pinned():
     vk = hashing.voice_key(VoiceSettings(engine="fake"), SAMPLE_RATE)
     assert vk == GOLDEN["voice_key_fake"]
     assert hashing.segment_id("Hello world.", "fake-1", vk) == GOLDEN["segment_id"]
+
+
+# --- a number at the end of a sentence ---------------------------------------
+
+def test_a_number_that_ends_a_sentence_is_spoken():
+    """It never was, in English or French, until 2026-09-07.
+
+    The trailing guard rejected any following dot, so it could not tell a
+    decimal point from a full stop and refused both. "He counted to 300."
+    reached the model as digits for it to read however it liked. Years escaped
+    only because _YEAR runs first and carries no such guard.
+
+    This changes the text of affected segments, so those segments re-render.
+    """
+    assert n.normalize_text("He counted to 300.") == "He counted to three hundred."
+    assert n.normalize_text("She was 42.") == "She was forty-two."
+    assert n.normalize_text("Il est arrivé en 1999.", "fr") == \
+        "Il est arrivé en mille neuf cent quatre-vingt-dix-neuf."
+    assert n.normalize_text("Elle avait 42.", "fr") == "Elle avait quarante-deux."
+
+
+def test_a_decimal_point_is_still_not_a_full_stop():
+    """The other half of the same guard: relaxing it must not start reading
+    version numbers and decimals as sentences full of integers."""
+    assert n.normalize_text("It was 3.14 exactly.") == "It was 3.14 exactly."
+    assert n.normalize_text("Version 1.2.3 shipped.") == "Version 1.2.3 shipped."
+
+
+def test_a_comma_after_a_number_survives_it():
+    """"\\d[\\d,]*" ate the comma in "to 300, then stopped", taking the pause
+    it exists for with it."""
+    assert n.normalize_text("He counted to 300, then stopped.") == \
+        "He counted to three hundred, then stopped."
+    # A grouped thousand is still one number, comma and all.
+    assert n.normalize_text("She had 1,200 books.") == \
+        "She had one thousand, two hundred books."
 
 
 def test_unknown_languages_get_the_english_rules():
@@ -133,3 +175,76 @@ def test_the_fallback_chapter_title_is_in_the_books_language():
 
     assert _fallback_title("en", 2) == "Chapter 2"
     assert _fallback_title("fr", 2) == "Chapitre 2"
+
+
+# --- Japanese ----------------------------------------------------------------
+
+def test_japanese_digits_become_kanji_so_the_engine_can_read_them():
+    """The engine runs Japanese through pykakasi, which turns kanji into the
+    hiragana the model was trained on but leaves Arabic digits alone. Left as
+    digits they reach the model as bare glyphs."""
+    assert n.normalize_text("第3章を読んだ。", "ja") == "第三章を読んだ。"
+    assert n.normalize_text("2冊の本と6本の鉛筆。", "ja") == "二冊の本と六本の鉛筆。"
+
+
+def test_japanese_number_guards_are_not_the_latin_ones():
+    """Python's \\w matches kanji, so the Latin word-boundary guard rejected
+    every digit touching Japanese text — which, with no spaces, is nearly all
+    of them. "第3章" kept its digit."""
+    assert "3" not in n.normalize_text("第3章", "ja")
+    assert "14" not in n.normalize_text("彼は3.14を計算した。", "ja")
+
+
+def test_japanese_counters_pykakasi_gets_wrong_are_written_out():
+    """Kanji numerals are used almost everywhere because pykakasi reads the
+    counter irregularities well. These three it does not: it reads 九十九 as the
+    poetic つくも, 一分 as いちぶ, and 十四日 as じゅうよんにち."""
+    assert n.normalize_text("1999年", "ja").startswith("せんきゅうひゃくきゅうじゅうきゅうねん")
+    assert n.normalize_text("8分", "ja") == "はっぷん"
+    assert n.normalize_text("10分", "ja") == "じゅっぷん"
+    assert n.normalize_text("1月14日", "ja") == "一月じゅうよっか"
+    assert n.normalize_text("4時", "ja") == "よじ"
+
+
+def test_japanese_sentences_split_without_any_whitespace():
+    """The shared splitter needs a space after the full stop. Japanese has
+    none, so a whole paragraph arrived as one sentence and was then sliced at
+    whatever character sat at the budget."""
+    para = "吾輩は猫である。名前はまだ無い。「どこで生れたか」と彼は言った。"
+    assert chunk.split_sentences(para, "ja") == [
+        "吾輩は猫である。", "名前はまだ無い。", "「どこで生れたか」と彼は言った。"]
+    # A quoted sentence ends where the bracket closes, not inside it.
+    assert chunk.split_sentences("「行こう。」と言った。", "ja") == ["「行こう。」", "と言った。"]
+
+
+def test_japanese_wrapping_never_starts_a_chunk_on_a_trailing_mark():
+    """With no spaces there are no word boundaries to wrap on, so the slice
+    point is walked back off any character that may not open a line."""
+    para = "彼は言った、" + "そして彼は静かに歩き続けた、" * 20
+    out = chunk.chunk_text(para, lang="ja")
+    assert len(out) > 1
+    assert all(len(c) <= 200 for c in out)
+    assert not any(c[0] in "」』）】〕》〉”’、。，．！？ぁぃぅぇぉっゃゅょ" for c in out)
+    # Nothing is lost or gained, and no space is invented between chunks.
+    assert "".join(out) == para
+
+
+def test_japanese_chunks_are_budgeted_for_a_denser_script():
+    from ebook_audiobook.pipeline.lang import rules_for
+
+    ja, en = rules_for("ja"), rules_for("en")
+    assert ja.chunk_target_chars == 140 and ja.chunk_max_chars == 200
+    assert ja.joiner == "" and en.joiner == " "
+    # English keeps the global budget rather than naming one of its own.
+    assert en.chunk_target_chars is None
+
+
+def test_a_japanese_heading_keeps_the_gap_before_its_title():
+    """An ideographic space is paragraph indentation in body text, but in a
+    heading it separates the chapter number from the title. Deleting it ran
+    "第三章" and "旅の始まり" together into one word."""
+    assert n.normalize_title("第3章　旅の始まり", "ja") == "第三章 旅の始まり"
+    # Indentation still goes, because chunking strips each paragraph.
+    text = n.normalize_text("第3章　旅の始まり\n\n　彼は歩いた。", "ja")
+    assert [c for c, _ in chunk.chunk_structured(text, lang="ja")] == [
+        "第三章 旅の始まり", "彼は歩いた。"]

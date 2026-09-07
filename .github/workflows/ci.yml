@@ -95,9 +95,16 @@ jobs:
               "ebook_audiobook/web/templates/job.html",
               "ebook_audiobook/web/static/app.css",
               "ebook_audiobook/web/static/app.js",
-              # Without this the app runs in English whatever the setting says.
-              "ebook_audiobook/locale/fr/LC_MESSAGES/messages.mo",
           ]
+          # Derived from the source tree rather than listed, so adding a language
+          # or a narrator cannot silently ship without its files. Both globs have
+          # bitten before: 1.4.0 went out without the new English clips, and a
+          # missing .mo runs the app in English whatever the setting says.
+          src = pathlib.Path("ebook_audiobook")
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("assets/voices/*.flac"))]
+          required += [f"ebook_audiobook/{q.relative_to(src).as_posix()}"
+                       for q in sorted(src.glob("locale/*/LC_MESSAGES/*.mo"))]
           missing = [r for r in required if r not in names]
           if missing:
               print("MISSING FROM WHEEL:", *missing, sep="\n  ")
@@ -313,6 +320,30 @@ jobs:
           bash -n install.sh
           if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh || true; fi
 
+      # Every language the installer claims to speak actually says something
+      # different. A message table is a long case statement, and the way it
+      # fails is silently: a missing table falls through to English and nobody
+      # notices until a user reports the installer is in the wrong language.
+      - name: Every installer language has its own words
+        if: runner.os != 'Windows'
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, sys
+          block = re.search(r"# --- language.*?(?=\nhave_sudo)", open("install.sh").read(), re.S).group(0)
+          probe = "Installing ebook-audiobook"
+          said = {}
+          for code in ("en", "fr", "es", "ja"):
+              out = subprocess.run(
+                  ["bash", "-c", f'{block}\nLANG_CODE={code}\nresolve_lang\ntr_msg "{probe}"'],
+                  capture_output=True, text=True, check=True).stdout.strip()
+              said[code] = out
+              print(f"  {code}: {out}")
+          if len(set(said.values())) != len(said):
+              sys.exit(f"two languages produced the same text: {said}")
+          if said["en"] != probe:
+              sys.exit("English must pass through unchanged")
+          PY
+
       # This gate decides whether a Mac user is told to expect a three-hour
       # render or a thirty-hour one, and it only ever executes on macOS — where
       # the runner reports one OS version, so CI would exercise a single branch
@@ -408,7 +439,42 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile(
             "$PWD/install.ps1", [ref]$null, [ref]$errs) | Out-Null
           if ($errs) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
-          Write-Host "install.ps1 parses cleanly"
+          Write-Host "install.ps1 parses cleanly as UTF-8"
+
+      # ...and as the ANSI code page, which is what actually reads it on the
+      # default Windows shell.
+      #
+      # install.ps1 carries no byte-order mark, because the text `irm | iex`
+      # hands to the parser cannot start with one. Windows PowerShell 5.1
+      # therefore decodes the file with the system code page — and a non-Latin
+      # character whose UTF-8 bytes land on the CP125x smart-quote range
+      # (U+201C-201F) is read as a string delimiter, ending the literal
+      # mid-line and cascading into a syntax error. That breaks the installer
+      # for EVERY user on that shell, in every language, not merely for the
+      # language whose text caused it. Parsing only as UTF-8 cannot see it:
+      # PowerShell 7 reads a BOM-less file as UTF-8 and is perfectly happy.
+      - name: install.ps1 parses under the ANSI code pages too
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          [Text.Encoding]::RegisterProvider([Text.CodePagesEncodingProvider]::Instance)
+          $bytes = [IO.File]::ReadAllBytes("$PWD/install.ps1")
+          $bad = 0
+          foreach ($cp in 1252, 1251, 1253, 1254, 1256, 932, 936, 949, 950, 874) {
+            $text = [Text.Encoding]::GetEncoding($cp).GetString($bytes)
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseInput(
+              $text, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) {
+              Write-Host "cp$cp : $($errs.Count) parse errors -- $($errs[0].Message)"
+              $bad++
+            } else { Write-Host "cp$cp : OK" }
+          }
+          if ($bad) {
+            Write-Host "install.ps1 must be parseable however Windows decodes it."
+            Write-Host "Encode non-Latin message tables as base64, as the Japanese one is."
+            exit 1
+          }
 
       # --no-tts keeps this to seconds instead of downloading gigabytes of torch;
       # everything else the installer does is exercised for real.

@@ -52,6 +52,17 @@ SOURCES = {
     "Ruth_Golding_British_Female_ebook_narration_60s.wav": "female-british.flac",
     "Nadine_Eckert-Boulet_ebook_narration_60s.wav": "female-french.flac",
     "Gilles_G_Le_Blanc_ebook_narration_60s.wav": "male-french.flac",
+    # Spanish ships two accent regions rather than one "neutral" reader, because
+    # there is no such thing: a Mexican and a Peninsular narrator are audibly
+    # different, and a listener notices within a sentence. The display names say
+    # the region, matching how the English clips say "North American"/"British";
+    # the individual readers are named in assets/voices/README.md.
+    "spanish_mexico_female_karen_savage_60s.wav": "female-spanish-latin-american.flac",
+    "spanish_mexico_male_mario_pineda_60s.wav": "male-spanish-latin-american.flac",
+    "spanish_spain_female_dreamvoz_marian_60s.wav": "female-spanish-european.flac",
+    "spanish_spain_male_tux_60s.wav": "male-spanish-european.flac",
+    "japanese_female_kaseumin_60s.wav": "female-japanese.flac",
+    "japanese_male_ekzemplaro_60s.wav": "male-japanese.flac",
 }
 
 

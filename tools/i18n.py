@@ -53,8 +53,18 @@ COMMENT_TAGS = ("NOTE:",)
 INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
 JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
 
-PLACEHOLDER = re.compile(r"%\((\w+)\)[sd]")
-HTML_TAG = re.compile(r"</?[a-zA-Z][\w-]*")
+# A named conversion, including the flags, width and precision a plain
+# "%(name)s" does not have. The narrow version of this missed the "m" in
+# "%(h)dh %(m)02dm" entirely, so a translation that dropped or renamed that
+# placeholder passed the check and raised KeyError at render time.
+PLACEHOLDER = re.compile(r"%\((\w+)\)[-+ #0]*\*?\d*(?:\.\d+)?[hlL]?[diouxXeEfFgGcrsa]")
+# A positional conversion. _SafeDict makes "%s" % {...} succeed and print the
+# dict, so one smuggled into a translation is user-visible garbage rather than
+# an error — which means it has to be looked for rather than caught.
+POSITIONAL = re.compile(r"%[-+ #0]*\*?\d*(?:\.\d+)?[hlL]?[diouxXeEfFgGcrsa]")
+# A whole tag, attributes and all, so that a translation cannot quietly add an
+# attribute (an onclick, say) to a tag the source only opened bare.
+HTML_TAG = re.compile(r"</?[a-zA-Z][\w-]*[^>]*>")
 
 
 def is_translated(message) -> bool:
@@ -300,8 +310,17 @@ def problems(lang: str, allow_missing: bool = False) -> list[str]:
                 translated % _SafeDict()
             except (ValueError, TypeError) as e:
                 out.append(f"{where}: not a valid format string ({e}); a literal % must be %%")
-            if sorted(HTML_TAG.findall(source)) != sorted(HTML_TAG.findall(translated)):
-                out.append(f"{where}: HTML tags differ from the English")
+            # A positional conversion cannot raise here — _SafeDict makes it
+            # succeed and print the mapping — so it has to be looked for.
+            stray = set(POSITIONAL.findall(translated)) - set(POSITIONAL.findall(source))
+            if stray:
+                out.append(f"{where}: translation uses positional {sorted(stray)}; "
+                           f"placeholders are named, as %(name)s")
+            # Whole tags, in order: a reordering is broken nesting, and a tag
+            # that gained an attribute is a translation adding behaviour.
+            if HTML_TAG.findall(source) != HTML_TAG.findall(translated):
+                out.append(f"{where}: HTML differs from the English "
+                           f"{HTML_TAG.findall(source)} vs {HTML_TAG.findall(translated)}")
 
     # 3. Completeness.
     if not allow_missing:

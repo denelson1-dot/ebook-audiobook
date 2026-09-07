@@ -140,7 +140,7 @@
 
   {% if finished %}
     <section style="margin-bottom:26px">
-      <div class="sectionbar"><h2>{{ _("Finished") }}</h2><span class="mono dim" style="font-size:11.5px">{{ finished|length }}</span><span class="rule"></span></div>
+      <div class="sectionbar"><h2>{{ pgettext("shelf heading, many books", "Finished") }}</h2><span class="mono dim" style="font-size:11.5px">{{ finished|length }}</span><span class="rule"></span></div>
       {{ shelf(finished) }}
     </section>
   {% endif %}

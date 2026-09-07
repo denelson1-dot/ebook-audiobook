@@ -48,11 +48,25 @@ class Language:
     plural: Callable[[int], int]
     decimal: str                    # "," for French
     thousands: str                  # U+202F narrow no-break space for French
+    # Has a native speaker been through this catalog? A machine-written
+    # translation is worth shipping — it is far better than an English-only
+    # app — but it is worth saying so, and saying where to send corrections,
+    # rather than letting someone assume a person wrote it.
+    reviewed: bool = True
 
 
 SUPPORTED: dict[str, Language] = {
     "en": Language("en", "English", lambda n: int(n != 1), ".", ","),
-    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " "),
+    # Also unreviewed: a native speaker has been lined up to read it since
+    # 1.4.0 and has not yet, and an adversarial pass found real grammar errors
+    # in it. It says so until that review actually happens.
+    "fr": Language("fr", "Français", lambda n: int(n > 1), ",", " ", reviewed=False),
+    # Spanish separators are the reverse of English, and they are not a free
+    # choice: a page renders numbers from Python and from JavaScript both, and
+    # toLocaleString("es") gives "1.234.567" and "1,5".
+    "es": Language("es", "Español", lambda n: int(n != 1), ",", ".", reviewed=False),
+    # Japanese has a single plural form, and groups numbers as English does.
+    "ja": Language("ja", "日本語", lambda n: 0, ".", ",", reviewed=False),
 }
 
 
@@ -112,7 +126,7 @@ def detect_os_language() -> str | None:
 
 # Windows primary-language identifiers (the low byte of an LCID), for the
 # languages we ship. Extend when a language is added.
-_WINDOWS_PRIMARY_LANGUAGES = {0x09: "en", 0x0C: "fr"}
+_WINDOWS_PRIMARY_LANGUAGES = {0x09: "en", 0x0C: "fr", 0x0A: "es", 0x11: "ja"}
 
 
 def resolve(setting: str | None, negotiated: str | None = None) -> str:
@@ -245,8 +259,10 @@ def js_catalog(lang: str) -> dict:
 
 
 def language_choices() -> list[dict]:
-    """For the Settings select: code and native name, in a stable order."""
-    return [{"code": code, "native": lang.native} for code, lang in SUPPORTED.items()]
+    """For the Settings select and the first-run modal: code, native name, and
+    whether a native speaker has been through the catalog."""
+    return [{"code": code, "native": lang.native, "reviewed": lang.reviewed}
+            for code, lang in SUPPORTED.items()]
 
 
 # --- numbers, in the language's own habits -----------------------------------

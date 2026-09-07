@@ -109,7 +109,7 @@
           </label>
         </div>
         <p class="eyebrow" style="margin:16px 0 8px">{{ _("Mode") }}</p>
-        <div class="mode-toggle" role="radiogroup" aria-label="{{ _('Mode') }}">
+        <div class="mode-toggle" id="settingsModeToggle" role="radiogroup" aria-label="{{ _('Mode') }}">
           <button type="button" class="mode-btn{% if color_mode == 'system' %} selected{% endif %}" data-mode="system">{{ _("Match my system") }}</button>
           <button type="button" class="mode-btn{% if color_mode == 'light' %} selected{% endif %}" data-mode="light">{{ _("Light") }}</button>
           <button type="button" class="mode-btn{% if color_mode == 'dark' %} selected{% endif %}" data-mode="dark">{{ _("Dark") }}</button>
@@ -131,6 +131,13 @@
             {% endfor %}
           </select>
           <p class="hint">{{ _("Also used by the menu-bar icon, whose title changes the next time the app starts.") }}</p>
+          {# Said once, where the language is chosen, rather than on every page:
+             these translations were written without a native speaker reviewing
+             them, and someone should know that before they trust the wording. #}
+          {%- set unreviewed = languages | rejectattr("reviewed") | map(attribute="native") | list %}
+          {% if unreviewed %}
+          <p class="hint">{{ _("%(langs)s are community translations, written without a native speaker's review. Corrections are welcome — the wording lives in <a href=\"%(url)s\">the locale files</a>.", langs=unreviewed | join(", "), url=CORRECTIONS_URL) }}</p>
+          {% endif %}
         </div>
       </div>
     </section>
@@ -257,7 +264,11 @@ document.querySelectorAll('input[name="color_scheme"]').forEach((radio) => {
     location.reload();
   });
 });
-document.querySelectorAll(".mode-btn").forEach((btn) => {
+// Scoped to this panel: the first-run modal in base.html has three .mode-btn
+// elements of its own, and an unscoped selector bound this handler to them too
+// — so choosing Light inside the modal also POSTed the setting and reloaded,
+// throwing away the language and palette the user had just picked there.
+document.querySelectorAll("#settingsModeToggle .mode-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     if (btn.classList.contains("selected")) return;
     await postForm("/settings", { color_mode: btn.dataset.mode });

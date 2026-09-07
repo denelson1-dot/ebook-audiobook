@@ -10,6 +10,17 @@
     <p class="page-sub" style="max-width:62ch">{{ _("A voice is one short recording. About ten seconds is enough — the engine copies its timbre and reads your whole book in it.") }}</p>
   </div>
   <div class="head-actions">
+    {% if voice_languages|length > 1 %}
+    {# Which language's narrators to show. A plain navigation, not a fetch: the
+       grid is rendered by the server, and this way the page has a URL someone
+       can bookmark or reload. #}
+    <select id="voiceLang" aria-label="{{ _("Which language's narrators to show") }}"
+            data-base="{{ url_for('voices_page') }}" style="width:auto">
+      {% for l in voice_languages %}
+      <option value="{{ l.code }}" {{ 'selected' if l.code == language }}>{{ l.name }} ({{ l.count }})</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     <button type="button" class="btn primary" id="addToggle">{{ ic.icon('plus', 15) }} {{ _("Add a voice") }}</button>
   </div>
 </header>
@@ -18,6 +29,14 @@
 {% block body %}
 
 {% if error %}<div class="alert-error" style="margin-bottom:18px">{{ error }}</div>{% endif %}
+
+{% if not language_available %}
+<div class="note warn" style="margin-bottom:18px">
+  {{ ic.icon('download', 16) }}
+  <span>{{ _("These narrators can't be auditioned yet: the model for this language isn't on this computer.") }}
+    <a href="{{ url_for('settings_page') }}">{{ _("Install it in Settings") }}</a>.</span>
+</div>
+{% endif %}
 
 <div class="note info" style="margin-bottom:18px">
   {{ ic.icon('shield', 16) }}
@@ -33,6 +52,14 @@
         <input type="text" id="voiceName" name="name" placeholder="{{ _("Warm baritone") }}" required>
       </div>
       <div class="field">
+        <label for="voiceLanguage">{{ _("Language it speaks") }}</label>
+        <select id="voiceLanguage" name="language">
+          {% for l in voice_languages %}
+          <option value="{{ l.code }}" {{ 'selected' if l.code == language }}>{{ l.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
         <label>{{ _("Reference clip") }}</label>
         <div class="btn-row">
           <button type="button" class="btn" id="clipBrowse">{{ ic.icon('folder', 15) }} {{ _("Browse…") }}</button>
@@ -42,6 +69,7 @@
       </div>
     </div>
     <p class="hint">{{ _("WAV, MP3, FLAC, M4A, MP4, OGG, Opus, AAC or WebM — converted to WAV on the way in. Ten seconds of clear, unaccompanied speech works best.") }}</p>
+    <p class="hint">{{ _("The language decides which books can be read in this voice, and which sentence the audition reads back. It is not guessed from the recording.") }}</p>
     <div class="btn-row" style="margin-top:14px">
       <button type="submit" class="btn primary" id="addBtn" disabled>{{ _("Add this voice") }}</button>
     </div>
@@ -74,7 +102,12 @@
       </div>
 
       <div class="btn-row" style="margin-top:auto">
-        <button class="btn sm test-btn" data-vid="{{ v.id }}" style="flex:1">{{ ic.icon('play', 12) }} {{ _("Audition") }}</button>
+        {# Auditioning runs the real engine. Without this language's model there
+           is nothing to run, so the button says so rather than failing later. #}
+        <button class="btn sm test-btn" data-vid="{{ v.id }}" style="flex:1"
+                {{ 'disabled' if not language_available }}
+                {% if not language_available %}title="{{ _("Needs this language's model — install it in Settings.") }}"{% endif %}>
+          {{ ic.icon('play', 12) }} {{ _("Audition") }}</button>
         {% if v.id != default_voice_id and not v.is_default %}
         <form method="post" action="{{ url_for('voices_set_default', voice_id=v.id) }}" title="{{ _("Use this voice for books you add from now on") }}">
           <button class="btn sm ghost" type="submit">{{ _("Use for new books") }}</button>
@@ -96,6 +129,13 @@
 
 {% block script %}
 <script>
+const langSel = document.getElementById("voiceLang");
+if (langSel) {
+  langSel.addEventListener("change", () => {
+    window.location = langSel.dataset.base + "?lang=" + encodeURIComponent(langSel.value);
+  });
+}
+
 const addCard = document.getElementById("addCard");
 document.getElementById("addToggle").addEventListener("click", () => {
   addCard.hidden = false;
@@ -123,7 +163,15 @@ document.querySelectorAll(".test-btn").forEach((btn) => {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> ' + _("Rendering…");
     try {
-      await postForm(`/voices/${vid}/test`, {});
+      // postFormResult, not postForm: this route answers a missing language
+      // model with a 409 and a sentence naming what to install, and postForm
+      // throws on any non-2xx — which turned that into the generic "couldn't
+      // render a sample" and threw the useful part away.
+      const started = await postFormResult(`/voices/${vid}/test`, {});
+      if (!started.ok) {
+        toast(started.error || _("Couldn't render a sample"));
+        return;
+      }
       const url = `/voices/${encodeURIComponent(vid)}/sample.wav`;
       let ready = false;
       for (let i = 0; i < 240; i++) {
