@@ -196,12 +196,6 @@ def _same_volume(a: Path, b: Path) -> bool:
         return False
 
 
-# Translations written without a native speaker's review say so, and point
-# here. The locale files are plain .po, which is what a translator expects.
-CORRECTIONS_URL = ("https://github.com/denelson1-dot/ebook-audiobook"
-                   "/tree/main/ebook_audiobook/locale")
-
-
 def _offerable_voices(current_id: str | None = None, language: str = "en") -> list[dict]:
     """The voices a person may pick from: the ones that speak ``language``.
 
@@ -216,11 +210,15 @@ def _offerable_voices(current_id: str | None = None, language: str = "en") -> li
 
 
 def _narration_language_choices() -> list[dict]:
-    """Every language the engine can speak, said in the interface language,
-    with whether its model is on this machine."""
-    # Names head a list here, so they are capitalised; in a sentence ("en
-    # français") the catalog's lowercase form is the right one.
-    return [{"code": lg.code, "name": _capitalized(_(lg.name)), "tier": lg.tier,
+    """Every language the engine can speak, each said in itself, with whether
+    its model is on this machine.
+
+    Native names rather than translated ones: this list is picked from, and
+    someone looking for their own language looks for its own name — the same
+    reason the interface-language picker reads "Español" and not "Spanish".
+    The translated ``name`` still exists for sentences about a language.
+    """
+    return [{"code": lg.code, "name": lg.native, "tier": lg.tier,
              "available": narration_langs.language_available(lg.code)}
             for lg in narration_langs.LANGUAGES.values()]
 
@@ -378,8 +376,6 @@ def create_app() -> Flask:
             "lang": lang,
             "language_setting": s.language,
             "languages": i18n.language_choices(),
-            # Where a reader of an unreviewed translation sends a correction.
-            "CORRECTIONS_URL": CORRECTIONS_URL,
             "js_catalog": i18n.js_catalog(lang),
             "home_dir": str(Path.home()),
             "data_root": str(paths().root),
@@ -498,7 +494,7 @@ def create_app() -> Flask:
             # Deliberately not "languages": base.html's onboarding modal reads
             # that name from the context processor, and a page-level kwarg
             # shadows it — which blanked the modal's language picker on this
-            # page and marked every language unreviewed.
+            # page.
             voice_languages=choices,
             # Auditioning uses the real engine, so a language whose model is not
             # on this machine cannot be previewed at all.

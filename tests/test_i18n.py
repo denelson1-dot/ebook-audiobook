@@ -91,23 +91,6 @@ def test_a_one_form_language_round_trips_through_the_js_catalog():
     assert i18n.SUPPORTED["ja"].plural(0) == i18n.SUPPORTED["ja"].plural(1_000_000) == 0
 
 
-def test_unreviewed_languages_say_so_where_the_language_is_chosen():
-    """Neither Spanish nor Japanese has had a native speaker through it. That
-    is worth shipping, and worth admitting."""
-    unreviewed = {c for c, l in i18n.SUPPORTED.items() if not l.reviewed}
-    # English is the source, so it is never "unreviewed"; every translation
-    # here was written without a native speaker reading it.
-    assert "en" not in unreviewed
-    assert unreviewed == set(i18n.SUPPORTED) - {"en"}
-    assert all("reviewed" in c for c in i18n.language_choices())
-
-    client = create_app().test_client()
-    modal = client.get("/").data.decode()          # fresh data root: onboarding shows
-    assert "community translation" in modal
-    client.post("/settings", data={"onboarding_complete": "1"})
-    assert "community translation" in client.get("/settings").data.decode()
-
-
 def test_french_catalog_is_compiled_complete_and_well_formed():
     """Exactly what CI's `tools/i18n.py check` asks, so pytest cannot disagree."""
     assert _tool().problems("fr") == []

@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="La bibliothèque : un livre en cours de narration, quatre terminés, un en attente" width="100%">
+  <img src="docs/screenshots/library.png" alt="La bibliothèque : un livre en cours de narration, un terminé, trois en attente" width="100%">
 </p>
 
 Pas de cloud, pas de compte, pas de télémétrie. Le modèle vocal tourne sur votre
@@ -42,9 +42,10 @@ rien de ce que vous convertissez ne quitte l'ordinateur.
 - **Un vrai livre audio, pas une synthèse vocale brute.** Un `.m4b` par livre,
   avec un marqueur par chapitre, la couverture intégrée et les étiquettes que
   Plex et Audiobookshelf attendent. Rangé sous la forme `Auteur / Titre (Année) / Titre.m4b`.
-- **Un narrateur que vous choisiriez.** Sept voix du domaine public sont
-  fournies, réglées à l'oreille — cinq anglaises, deux françaises. Ou clonez
-  un extrait dont vous avez les droits, en une dizaine de secondes d'audio.
+- **Un narrateur que vous choisiriez.** Douze voix du domaine public sont
+  fournies, réglées à l'oreille — quatre anglaises, quatre espagnoles, deux
+  françaises, deux japonaises. Ou clonez un extrait dont vous avez les droits,
+  en une dizaine de secondes d'audio.
 - **Honnête sur les heures.** Une narration prend du temps ; l'application
   mesure votre machine, vous dit combien, et garde la progression visible sur
   chaque écran. Fermez la fenêtre et elle continue dans la barre des tâches.
@@ -58,15 +59,22 @@ rien de ce que vous convertissez ne quitte l'ordinateur.
 - **Une seule commande pour installer**, sur Windows, macOS et Linux. Elle
   installe son propre Python, choisit la bonne version de PyTorch pour votre
   matériel, et embarque ffmpeg.
-- **En français.** L'interface suit la langue de votre navigateur (ou celle que
-  vous choisissez dans les Réglages), et les livres en français sont narrés en
-  français, par des voix françaises — voir [Langues](#langues).
+- **Dans votre langue, et dans celle du livre.** L'interface suit la langue de
+  votre navigateur (ou celle que vous choisissez dans les Réglages) — anglais,
+  français, espagnol et japonais — et un livre qui se déclare français,
+  espagnol ou japonais est narré dans cette langue, par des voix qui la
+  parlent — voir [Langues](#langues).
 
 ## À quoi ça ressemble
 
 <p align="center">
   <img src="docs/screenshots/book.png" alt="Un livre avant narration : quelles sections lire, quelle voix, et ce que ça coûtera en temps et en disque" width="100%">
   <br><sub>La page d'un livre. Ce qui sera narré à gauche, qui le narre à droite, et une barre en bas qui dit toujours à quoi vous vous engagez.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Réglages : où vont les audiolivres, à quel point solliciter la machine, la palette et le mode clair/sombre, et la langue de l'interface" width="100%">
+  <br><sub>Les Réglages. Deux palettes et un mode clair/sombre indépendants l'un de l'autre, et la langue de l'interface à côté.</sub>
 </p>
 
 <p align="center">
@@ -154,7 +162,7 @@ délibérément.
 | `--cuda128` / `-Cuda128` | Forcer la version CUDA 12.8 (RTX série 20 et plus récentes) |
 | `--cuda126` / `-Cuda126` | Forcer la version CUDA 12.6 (GTX séries 900/1000) |
 | `--no-tts` / `-NoTts` | Ne pas installer PyTorch pour l'instant — importer des livres, ajouter le moteur plus tard |
-| `--lang fr` / `-Lang fr` | Messages de l'installateur en français |
+| `--lang fr` / `-Lang fr` | Messages de l'installateur en français — aussi `es`, `ja` |
 | `--version X.Y.Z` | Installer une version précise |
 | `--dir CHEMIN` / `-InstallDir` | Installer ailleurs que dans le dossier par défaut |
 | `--yes` / `-Yes` | Accepter toutes les questions (installations scriptées) |
@@ -252,26 +260,31 @@ Deux choses distinctes, qui ne se mélangent pas :
 
 **La langue de l'interface.** L'application suit la langue de votre navigateur.
 Pour la fixer, ouvrez **Réglages → Langue** ; le choix est mémorisé, et le menu
-de l'icône le suit aussi. Anglais et français aujourd'hui.
+de l'icône le suit aussi. Anglais, français, espagnol et japonais aujourd'hui.
+Les installateurs acceptent `--lang fr` / `-Lang fr` (ou `es`, `ja`), et
+`EBAB_LANG` prime sur tout.
 
 **La langue de la narration.** Elle appartient au livre, pas à vous : un livre
-qui se déclare en français (ce que font presque tous les EPUB) est narré en
-français, par l'une des voix françaises fournies, avec les nombres, les
-abréviations et la typographie française lus comme un lecteur les lirait —
-« 1625 » devient *mille six cent vingt-cinq*, « M. de Tréville » devient
-*Monsieur de Tréville*, « 12,50 € » devient *douze euros et cinquante centimes*.
+qui se déclare en français, en espagnol ou en japonais (presque tous les EPUB
+se déclarent) est narré dans cette langue, par l'une des voix fournies qui la
+parlent, avec les nombres, les abréviations et la typographie lus comme un
+lecteur de cette langue les lirait — « 1625 » devient *mille six cent
+vingt-cinq*, « M. de Tréville » devient *Monsieur de Tréville*, « 12,50 € »
+devient *douze euros et cinquante centimes* ; « Luis M. García » garde son
+initiale et « 1° de mayo » est une date et non une température ; « 2時間 » se
+dit *にじかん* et non *にじ間*.
 Vous pouvez changer la langue de narration sur la page du livre : le narrateur
 de cette langue prend le relais et le texte est préparé à nouveau pour lui,
 sans relire le livre — la conversion faite à l'import est conservée, si bien
 que le changement prend un instant plutôt que plusieurs minutes.
 
-Le français demande un second modèle vocal, d'environ 3 Go, téléchargé depuis
-huggingface.co **uniquement** quand vous appuyez sur **Installer** dans
-**Réglages → Langues de narration** (ou avec `ebook-audiobook languages install fr`).
-Tant qu'il n'est pas là, un livre français est narré en anglais et la page du
-livre vous dit ce qu'installer. Ce même modèle parle vingt et une autres
-langues, proposées comme *expérimentales* : il les prononce, mais les nombres et
-abréviations y sont lus tels quels.
+Le français, l'espagnol et le japonais partagent un second modèle vocal,
+d'environ 3 Go, téléchargé depuis huggingface.co **uniquement** quand vous
+appuyez sur **Installer** dans **Réglages → Langues de narration** (ou avec
+`ebook-audiobook languages install fr`). Tant qu'il n'est pas là, un tel livre
+est narré en anglais et la page du livre vous dit ce qu'installer. Ce même
+modèle parle dix-neuf autres langues, proposées comme *expérimentales* : il les
+prononce, mais les nombres et abréviations y sont lus tels quels.
 
 <details>
 <summary>Traduire l'interface</summary>

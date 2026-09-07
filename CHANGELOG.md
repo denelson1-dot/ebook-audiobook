@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.5.0 — 2026-09-07
+
+### Spanish and Japanese, spoken and written
+
+- The interface adds Spanish and Japanese beside English and French — 594
+  strings each, in the Settings picker, the first-run modal and the installers.
+- Books declaring themselves Spanish or Japanese are narrated in that language:
+  four Spanish narrators across two accent regions, two Japanese. Japanese
+  brought its own sentence splitting, line breaking and digit reading, since
+  nothing separates its words.
+- The Voices page is per-language, with a default narrator per language — the
+  French voices added in 1.4.0 were invisible there until now.
+- Every language is named in itself wherever one is picked — "Español", not
+  "Spanish" — as the interface-language picker already did, and the narrators
+  lead with the same name ("Español — Female, Latin American").
+
+### Updates, onboarding, and a second palette
+
+<p align="center">
+  <img src="docs/screenshots/onboarding.png" alt="The first-run modal: interface language, Classic or Modern, light or dark, and automatic updates" width="100%">
+</p>
+
+- Background update checks, off by default and never a silent install.
+- A first-run modal picks language, look and update behavior before the
+  interface is usable.
+- Settings → Appearance adds a cooler "Modern" palette beside "Classic", and a
+  Light/Dark/System mode independent of it.
+- A machine that has never run the app starts on Balanced render intensity; an
+  upgrade keeps full speed.
+
+### Fixes
+
+- Changing a book's narration language no longer re-reads the book — the import
+  parse is kept and the text re-prepared from it.
+- A number ending a sentence was never spoken, in every language; a long digit
+  run made a book unimportable. Affected segments re-render.
+- `install.ps1` would not parse at all on Windows PowerShell 5.1, in any
+  language, once Japanese was in the file.
+- Restart-to-finish could leave two workers on one job store; a corrupt
+  `settings.json` is now kept rather than silently replaced.
+- Assorted Spanish and Japanese misreadings, translation defects the catalog
+  checker could not see, and interface polish across the settings and book
+  pages.
+
 ## 1.4.1 — 2026-09-02
 
 A hotfix. Two things 1.4.0 got wrong, and one it merely promised.
