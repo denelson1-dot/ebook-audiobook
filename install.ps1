@@ -152,7 +152,7 @@ function Ask($question, $default = "y") {
     $question = Tr $question
     $hint = if ($Lang -eq "fr") { if ($default -eq "y") { "[O/n]" } else { "[o/N]" } }
             else { if ($default -eq "y") { "[Y/n]" } else { "[y/N]" } }
-    if ($Yes) { Write-Host "  $question $hint y (auto)"; return ($default -eq "y") }
+    if ($Yes) { Write-Host "  $question $hint $default (auto)"; return ($default -eq "y") }
     $reply = Read-Host "  $question $hint"
     if ([string]::IsNullOrWhiteSpace($reply)) { $reply = $default }
     if ($reply -match '^(o|oui)$') { $reply = "y" }

@@ -83,6 +83,42 @@
 
   <div class="stack">
     <section class="panel">
+      <div class="panel-head"><h3>{{ _("Appearance") }}</h3></div>
+      <div class="panel-body">
+        <p class="eyebrow" style="margin-bottom:8px">{{ _("Look") }}</p>
+        <div class="theme-cards">
+          <label class="theme-card{% if color_scheme == 'classic' %} selected{% endif %}">
+            <input type="radio" name="color_scheme" value="classic" {% if color_scheme == 'classic' %}checked{% endif %}>
+            <span class="theme-swatch" style="background:#FBFAF8;border-color:#E4DED4">
+              <span style="background:#B4541F"></span><span style="background:#1A1614"></span>
+            </span>
+            <span class="theme-card-label">
+              <strong>{{ _("Classic") }}</strong>
+              <span class="meta">{{ _("Warm, amber accent — the original look") }}</span>
+            </span>
+          </label>
+          <label class="theme-card{% if color_scheme == 'modern' %} selected{% endif %}">
+            <input type="radio" name="color_scheme" value="modern" {% if color_scheme == 'modern' %}checked{% endif %}>
+            <span class="theme-swatch" style="background:#FFFFFF;border-color:#E4E4E9">
+              <span style="background:#5352D6"></span><span style="background:#16161A"></span>
+            </span>
+            <span class="theme-card-label">
+              <strong>{{ _("Modern") }}</strong>
+              <span class="meta">{{ _("Cooler and neutral, one indigo accent") }}</span>
+            </span>
+          </label>
+        </div>
+        <p class="eyebrow" style="margin:16px 0 8px">{{ _("Mode") }}</p>
+        <div class="mode-toggle" role="radiogroup" aria-label="{{ _('Mode') }}">
+          <button type="button" class="mode-btn{% if color_mode == 'system' %} selected{% endif %}" data-mode="system">{{ _("Match my system") }}</button>
+          <button type="button" class="mode-btn{% if color_mode == 'light' %} selected{% endif %}" data-mode="light">{{ _("Light") }}</button>
+          <button type="button" class="mode-btn{% if color_mode == 'dark' %} selected{% endif %}" data-mode="dark">{{ _("Dark") }}</button>
+        </div>
+        <p class="hint" style="margin-top:10px">{{ _("Applies everywhere, including the tray. Match my system follows the light/dark setting of Windows, macOS or your desktop.") }}</p>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3>{{ _("Language") }}</h3></div>
       <div class="panel-body">
         <div class="field" style="max-width:320px">
@@ -156,8 +192,8 @@
         <label class="switch">
           <input type="checkbox" id="autoUpdateCheck" {% if check_for_updates %}checked{% endif %}>
           <span style="flex:1">
-            <b>{{ _("Check when this page loads") }}</b>
-            <span id="updateHint">{{ _("Off. Turning it on is the only thing that makes this app talk to a server without you asking.") }}</span>
+            <b>{{ _("Automatically check for updates") }}</b>
+            <span id="updateHint">{{ _("Off. Turning it on checks here, on this page, and every few hours in the background — a banner appears if there's something newer. Nothing installs on its own: you still choose when, from that banner or from here.") }}</span>
           </span>
         </label>
       </div>
@@ -211,6 +247,22 @@ if (clearBtn) clearBtn.addEventListener("click", async () => {
 document.getElementById("langSelect").addEventListener("change", async (e) => {
   await postForm("/settings", { language: e.target.value });
   location.reload();
+});
+
+// Appearance: saves on pick and reloads — simplest way to be sure every panel,
+// including this one's own selected-card outline, agrees with what was saved.
+document.querySelectorAll('input[name="color_scheme"]').forEach((radio) => {
+  radio.addEventListener("change", async () => {
+    await postForm("/settings", { color_scheme: radio.value });
+    location.reload();
+  });
+});
+document.querySelectorAll(".mode-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    if (btn.classList.contains("selected")) return;
+    await postForm("/settings", { color_mode: btn.dataset.mode });
+    location.reload();
+  });
 });
 
 // Saves on pick — no separate button, and deliberately posts only power_mode so
@@ -352,6 +404,7 @@ autoBox.addEventListener("change", async () => {
   });
   toast(_("Saved"));
   if (autoBox.checked) checkUpdates();
+  refreshUpdateBanner();  // defined in base.html; reacts to the toggle right away
 });
 if (autoBox.checked) checkUpdates();
 

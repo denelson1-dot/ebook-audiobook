@@ -315,6 +315,20 @@ def create_app() -> Flask:
     def inject_globals():
         s = getattr(g, "settings", None) or app_settings.load_settings()
         lang = getattr(g, "lang", None) or i18n.DEFAULT
+        # Nothing chosen yet: the onboarding modal is about to ask, so it (and
+        # the page underneath it) render with the same pre-selected answers
+        # the modal itself shows — Classic, Match my system, off — rather
+        # than reading s.color_scheme/s.color_mode directly, so the two can
+        # never disagree about what "not chosen yet" looks like even if a
+        # future default changes one but not the other. Once the modal is
+        # answered, s.color_scheme/s.color_mode hold a real choice and this
+        # branch never runs again on this machine.
+        onboarding_needed = not s.preferences_onboarded
+        if onboarding_needed:
+            color_scheme, color_mode = "classic", "system"
+        else:
+            color_scheme = app_settings.normalize_color_scheme(s.color_scheme)
+            color_mode = app_settings.normalize_color_mode(s.color_mode)
         return {
             "lang": lang,
             "language_setting": s.language,
@@ -325,6 +339,10 @@ def create_app() -> Flask:
             "audiobooks_root": s.audiobooks_root,
             # First-run nudge: no library folder chosen and not yet dismissed.
             "setup_needed": not s.audiobooks_root and not s.setup_dismissed,
+            # The modal: language, appearance, automatic updates — asked once,
+            # before onboarding_needed's owner has seen anything else. See
+            # Settings.preferences_onboarded for exactly what "once" means.
+            "onboarding_needed": onboarding_needed,
             # True only when there is a real server to shut down, so the Quit
             # control doesn't appear under `flask run` or in tests, where it
             # could not work. Read at render time, after serve() sets it.
@@ -338,6 +356,8 @@ def create_app() -> Flask:
             "check_for_updates": s.check_for_updates,
             "auto_free_working_files": s.auto_free_working_files,
             "autoplay_preview": s.autoplay_preview,
+            "color_scheme": color_scheme,
+            "color_mode": color_mode,
             "app_version": _app_version(),
         }
 
@@ -499,6 +519,16 @@ def create_app() -> Flask:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
         if "language" in request.form:
             s.language = i18n.normalize(request.form.get("language"))
+        if "color_scheme" in request.form:
+            s.color_scheme = app_settings.normalize_color_scheme(request.form.get("color_scheme"))
+        if "color_mode" in request.form:
+            s.color_mode = app_settings.normalize_color_mode(request.form.get("color_mode"))
+        if request.form.get("onboarding_complete") == "1":
+            # The first-run modal's one and only write: language, appearance
+            # and check_for_updates above are all set in this same request,
+            # so this just marks the modal as answered — see
+            # Settings.preferences_onboarded for what "answered" gates.
+            s.preferences_onboarded = True
         if "audiobooks_root" in request.form:
             # Choosing (or clearing) the folder answers the first-run question.
             # Flipping an unrelated switch does not, and must not silently
@@ -512,7 +542,9 @@ def create_app() -> Flask:
                 "check_for_updates": s.check_for_updates,
                 "auto_free_working_files": s.auto_free_working_files,
                 "autoplay_preview": s.autoplay_preview,
-                "language": s.language}
+                "language": s.language,
+                "color_scheme": s.color_scheme,
+                "color_mode": s.color_mode}
 
     # ----- updates, backup, diagnostics -------------------------------------
 
@@ -536,6 +568,45 @@ def create_app() -> Flask:
             "notes_url": release.notes_url if release else None,
             "command": update_mod.install_command(),
         }
+
+    @app.get("/api/updates/status")
+    def api_updates_status():
+        """The automatic-update banner's state, from memory — no network.
+
+        Polled every few minutes by every page. What it reports is only ever
+        the result of the background check Settings -> Updates authorised (see
+        ebook_audiobook.web.update_watch); this route itself never contacts
+        GitHub, which is what makes polling it harmless.
+        """
+        from . import update_watch
+
+        return update_watch.status()
+
+    @app.post("/updates/apply")
+    def updates_apply():
+        """Install the release the background check found.
+
+        The confirmation happens in the browser, in the dialog the "Install"
+        button opens — by the time this arrives the user has already agreed.
+        Runs in the background; the banner polls /api/updates/status for
+        progress rather than this request staying open for however long the
+        installer takes.
+        """
+        from . import update_watch
+
+        started = update_watch.start_apply()
+        return {"ok": True, "started": started}
+
+    @app.post("/updates/dismiss")
+    def updates_dismiss():
+        """"Not now" for one release. Remembered, so it doesn't ask again
+        about the same version every time a page loads."""
+        from . import update_watch
+
+        version = (request.form.get("version") or "").strip()
+        if version:
+            update_watch.dismiss(version)
+        return {"ok": True}
 
     @app.get("/backup/estimate")
     def backup_estimate():
@@ -1355,7 +1426,8 @@ def create_app() -> Flask:
 
     @app.post("/quit")
     def quit_app():
-        """Shut the whole application down.
+        """Shut the whole application down — or, with ``?restart=1``,
+        relaunch it right after (the update banner's "Restart now").
 
         Refuses while work is in flight unless asked twice. The window is a
         browser window and the server outlives it, so this is the only
@@ -1375,10 +1447,14 @@ def create_app() -> Flask:
 
         if runner.current:
             runner.cancel(runner.current.split(":", 1)[0])
+        restart = request.args.get("restart") == "1"
+        # Falls back to a plain shutdown if the app was started some other way
+        # (the test client, `flask run`) and never got a restart hook wired up.
+        action = current_app.config.get("EBAB_RESTART") if restart else None
         # Answer before stopping, or the browser sees a dropped connection and
         # shows its own error page in what is supposed to be our app window.
-        threading.Timer(0.25, shutdown).start()
-        return {"ok": True}
+        threading.Timer(0.25, action or shutdown).start()
+        return {"ok": True, "restarting": bool(action)}
 
     # Every page asks for this on load, and answering means running
     # `ffmpeg -version` and `ebook-convert --version` as subprocesses. Process

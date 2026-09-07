@@ -96,6 +96,10 @@ def test_forced_quit_cancels_the_running_job(app, runner):
     runner.current = "job123:render"
     app.test_client().post("/quit?force=1")
     assert runner._cancel_requested("job123")
+    # Drain the shutdown Timer this scheduled before the next test runs — left
+    # pending, it fires mid-way through whichever test happens to be running a
+    # few hundred ms later and appends a stray "shutdown" to the shared `calls`.
+    _drain()
 
 
 def test_quit_is_unavailable_without_a_server_to_stop():
@@ -113,6 +117,43 @@ def test_quit_control_is_hidden_when_it_cannot_work():
 
 def test_quit_control_is_shown_in_the_app(app):
     assert b'id="quitBtn"' in app.test_client().get("/").data
+
+
+# --- restart (the update banner's "Restart now") ------------------------------
+
+def test_restart_calls_the_restart_hook_not_plain_shutdown(app):
+    """?restart=1 must relaunch, not just stop — that's the whole point of the
+    button over plain Quit."""
+    app.config["EBAB_RESTART"] = lambda: calls.append("restart")
+    r = app.test_client().post("/quit?restart=1")
+    assert r.status_code == 200
+    assert r.get_json()["restarting"] is True
+    _drain()
+    assert calls == ["restart"]
+
+
+def test_restart_falls_back_to_shutdown_without_a_restart_hook(app):
+    """Started some other way (flask run, an older build without EBAB_RESTART),
+    ?restart=1 must still shut down cleanly rather than 500 or hang."""
+    r = app.test_client().post("/quit?restart=1")
+    assert r.status_code == 200
+    assert r.get_json()["restarting"] is False
+    _drain()
+    assert calls == ["shutdown"]
+
+
+def test_restart_refuses_mid_render_unless_forced(app, runner):
+    app.config["EBAB_RESTART"] = lambda: calls.append("restart")
+    runner.current = "job123:render"
+    r = app.test_client().post("/quit?restart=1")
+    assert r.status_code == 409
+    _drain()
+    assert calls == []
+
+    r = app.test_client().post("/quit?restart=1&force=1")
+    assert r.status_code == 200
+    _drain()
+    assert calls == ["restart"]
 
 
 def _drain() -> None:

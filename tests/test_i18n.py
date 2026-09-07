@@ -99,15 +99,15 @@ def test_browser_language_is_honoured(monkeypatch):
     client = create_app().test_client()
     r = client.get("/", headers={"Accept-Language": FRENCH})
     body = r.data.decode()
-    assert '<html lang="fr">' in body
+    assert '<html lang="fr" ' in body
     assert r.headers["Content-Language"] == "fr"
     assert "Bibliothèque" in body
     assert "Ajouter un livre" in body
 
     r = client.get("/", headers={"Accept-Language": "de"})
-    assert '<html lang="en">' in r.data.decode()
+    assert '<html lang="en" ' in r.data.decode()
     r = client.get("/")
-    assert '<html lang="en">' in r.data.decode()
+    assert '<html lang="en" ' in r.data.decode()
     assert r.headers["Content-Language"] == "en"
 
 
@@ -116,11 +116,11 @@ def test_setting_beats_the_browser(monkeypatch):
     client = create_app().test_client()
     r = client.post("/settings", data={"language": "fr"})
     assert r.get_json()["language"] == "fr"
-    assert '<html lang="fr">' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
+    assert '<html lang="fr" ' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
 
     # Back to automatic, and an unknown code is the same as automatic.
     assert client.post("/settings", data={"language": ""}).get_json()["language"] == ""
-    assert '<html lang="en">' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
+    assert '<html lang="en" ' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
     assert client.post("/settings", data={"language": "xx"}).get_json()["language"] == ""
 
 
@@ -128,7 +128,7 @@ def test_environment_beats_everything(monkeypatch):
     monkeypatch.setenv("EBAB_LANG", "fr")
     client = create_app().test_client()
     client.post("/settings", data={"language": "en"})
-    assert '<html lang="fr">' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
+    assert '<html lang="fr" ' in client.get("/", headers={"Accept-Language": "en"}).data.decode()
 
 
 def test_a_request_language_does_not_leak_out_of_the_request(monkeypatch):

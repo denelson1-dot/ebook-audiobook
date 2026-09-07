@@ -71,6 +71,33 @@ class Settings:
     # the desktop). Precedence lives in ebook_audiobook.i18n.resolve.
     language: str = ""
 
+    # The version this machine has already been told about and said "not now"
+    # to — so the update banner doesn't nag about the same release on every
+    # page for the rest of its life. Cleared implicitly the moment a newer tag
+    # is published, since that no longer matches the latest release.
+    updates_dismissed_version: str = ""
+
+    # Which palette: "classic" (the original warm, amber-accented theme) or
+    # "modern" (a cooler, neutral pair closer to what most 2026 desktop apps
+    # ship). Two independent axes — see color_mode for light/dark — so either
+    # can change without the other. Defaults to "classic" so an existing
+    # install never re-skins itself out from under someone — also, not
+    # coincidentally, the pre-selected answer the first-run onboarding modal
+    # itself shows (see web/app.py), so "not chosen yet" reads the same way
+    # whether you're looking at this fallback or at the modal.
+    color_scheme: str = "classic"
+
+    # "system" (follow the OS, the historical and still-default behaviour),
+    # "light" or "dark" — an explicit override of prefers-color-scheme.
+    color_mode: str = "system"
+
+    # Has this machine been through the first-run onboarding modal (language,
+    # automatic updates, appearance) yet? Defaults to True deliberately — see
+    # load_settings(). The point is to show the modal exactly once, to a
+    # person who has never touched Settings at all, never to someone upgrading
+    # from a version that predates it.
+    preferences_onboarded: bool = True
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -84,13 +111,24 @@ def _settings_path() -> Path:
 
 
 def load_settings() -> Settings:
+    """The current settings — or, the first time this ever runs on a machine,
+    the defaults with ``preferences_onboarded`` forced to False.
+
+    That flag defaults to True on the dataclass itself, so that reading an
+    *existing* settings.json written before onboarding existed — which simply
+    lacks the key — fills it in as "already done" and never nags someone
+    who has been using the app for months. Only the genuine absence of a
+    settings file at all (a fresh install, or a corrupt one being reset to
+    defaults) means "show the modal", so those are the two places that
+    override the dataclass default back to False.
+    """
     p = _settings_path()
     if not p.exists():
-        return Settings()
+        return Settings(preferences_onboarded=False)
     try:
         return Settings.from_dict(json.loads(p.read_text("utf-8")))
     except (ValueError, OSError):
-        return Settings()
+        return Settings(preferences_onboarded=False)
 
 
 def save_settings(settings: Settings) -> Settings:
@@ -113,3 +151,17 @@ def default_power_mode() -> str:
     from .power import normalize_mode
 
     return normalize_mode(load_settings().power_mode)
+
+
+COLOR_SCHEMES = ("classic", "modern")
+COLOR_MODES = ("system", "light", "dark")
+
+
+def normalize_color_scheme(value: str | None) -> str:
+    """A hand-edited or outdated settings file must never hand the page a
+    palette name its CSS doesn't define."""
+    return value if value in COLOR_SCHEMES else "classic"
+
+
+def normalize_color_mode(value: str | None) -> str:
+    return value if value in COLOR_MODES else "system"

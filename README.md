@@ -103,6 +103,13 @@ That opens the app in its own window — no terminal to leave sitting there, and
 no tab lost among your others. You'll also find it in the Start Menu on Windows,
 the Applications folder on macOS, and the application menu on Linux.
 
+On a genuinely fresh install (never on top of an existing one — upgrading
+never resets a choice you've already made), the app itself asks three quick
+questions the first time it opens, before anything else: interface language,
+whether to turn on automatic update checking (off unless you say yes — see
+[Updates](#updates)), and a look for the app (see [Appearance](#appearance)).
+All three can be changed any time afterwards in **Settings**.
+
 **Closing the window doesn't stop a render.** The app keeps running in the
 system tray so an overnight conversion finishes on its own; open the window
 again from the tray or by launching the app a second time. To stop it properly,
@@ -300,13 +307,38 @@ ebook-audiobook update            # ask GitHub what the latest release is
 ebook-audiobook update --apply    # download and run the official installer
 ```
 
-Nothing checks for updates on its own. The check is a request to GitHub, and
-this app's whole premise is that it doesn't talk to anyone without being asked —
-so it happens when you run that command or press the button in **Settings**. The
-Settings page has an opt-in to check when it loads; it's off until you turn it on.
+Nothing checks for updates on its own by default. The check is a request to
+GitHub, and this app's whole premise is that it doesn't talk to anyone without
+being asked — so it stays off until you turn it on, in the installer or later
+in **Settings → Updates**.
 
-Upgrading re-runs the same installer a new user runs, rather than a separate
-upgrade path that gets less testing. Your books and settings are untouched.
+Turning it on doesn't hand over control, though: it checks in the background
+every couple of hours (and once shortly after the app starts) and, if there's
+something newer, shows a banner — you still click **Install**, and confirm,
+before anything downloads. Once installed, you restart the app yourself (a
+button on the banner does it in one click) to start using it. `ebook-audiobook
+update` and the button in Settings always work regardless of the setting;
+running either *is* the consent for that one check.
+
+Upgrading — automatic or manual — re-runs the same installer a new user runs,
+rather than a separate upgrade path that gets less testing. Your books and
+settings are untouched.
+
+---
+
+## Appearance
+
+Two independent choices, both in **Settings → Appearance** (and offered once
+by the installer, on a fresh install):
+
+- **Look** — **Classic**, the original warm, amber-accented theme, or
+  **Modern**, a cooler, neutral pair with one indigo accent, closer to what
+  most 2026 desktop apps ship.
+- **Mode** — **Match my system** (the historical, and still default,
+  behaviour — it follows Windows/macOS/your desktop's light/dark setting live,
+  no reload needed), **Light**, or **Dark**.
+
+Applies everywhere the interface appears, including the tray.
 
 ---
 
@@ -594,12 +626,16 @@ traffic this app ever makes, in full:
 | Downloading the app | Install and upgrade |
 | The ~3 GB English voice model from Hugging Face | Your first render |
 | The ~3 GB multilingual voice model from Hugging Face | Only when you press **Install** under Settings → Narration languages |
-| Asking GitHub for the latest version number | Only when you run `ebook-audiobook update` or press **Check for updates** |
+| Asking GitHub for the latest version number | Only when you run `ebook-audiobook update`, press **Check for updates**, or have turned on automatic updates in Settings (or the installer) |
 
-The version check is off by default and never happens on a timer or at start-up.
-Turning on "check when this page loads" in Settings is the only way it happens
-without you pressing something, and it is opt-in. Nothing about you or your
-library is sent with it — it is a request for a version number.
+The version check is off by default and never happens on a timer or at
+start-up unless you've explicitly opted in. Turning on "Automatically check for
+updates" in Settings — or answering yes to it in the installer — is the only
+way it happens without you pressing something; it then checks every couple of
+hours and shortly after each launch. Installing what it finds is a separate,
+still-manual step: a banner appears and you press **Install** and confirm.
+Nothing about you or your library is sent with the check — it is a request for
+a version number.
 
 The failure log is local: it is written to your data folder, capped in size,
 deleted after two weeks, and never transmitted. `ebook-audiobook report` prints

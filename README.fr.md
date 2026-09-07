@@ -109,6 +109,15 @@ traîner, pas d'onglet perdu parmi les autres. Vous la trouverez aussi dans le
 menu Démarrer sur Windows, le dossier Applications sur macOS, et le menu des
 applications sur Linux.
 
+Sur une installation vraiment neuve (jamais par-dessus une existante —
+mettre à jour ne remet jamais à zéro un choix déjà fait), l'application
+elle-même pose trois questions rapides dès sa première ouverture, avant
+toute autre chose : la langue de l'interface, s'il faut activer la
+vérification automatique des mises à jour (désactivée sauf réponse positive
+— voir [Mises à jour](#mises-à-jour)), et une apparence pour l'application
+(voir [Apparence](#apparence)). Les trois se changent à tout moment ensuite
+dans **Réglages**.
+
 **Fermer la fenêtre n'arrête pas une narration.** L'application continue de
 tourner dans la barre des tâches, pour qu'une conversion lancée le soir se
 termine toute seule ; rouvrez la fenêtre depuis l'icône ou en lançant
@@ -328,16 +337,43 @@ ebook-audiobook update            # demander à GitHub quelle est la dernière v
 ebook-audiobook update --apply    # télécharger et lancer l'installateur officiel
 ```
 
-Rien ne vérifie les mises à jour tout seul. La vérification est une requête à
-GitHub, et tout le principe de cette application est de ne parler à personne
-sans qu'on le lui demande — cela n'arrive donc que lorsque vous lancez cette
-commande ou appuyez sur le bouton dans les **Réglages**. La page des réglages
-propose de vérifier à son ouverture ; c'est désactivé tant que vous ne
-l'activez pas.
+Par défaut, rien ne vérifie les mises à jour tout seul. La vérification est une
+requête à GitHub, et tout le principe de cette application est de ne parler à
+personne sans qu'on le lui demande — c'est donc désactivé tant que vous ne
+l'activez pas, dans l'installateur ou plus tard dans **Réglages → Mises à
+jour**.
 
-Mettre à jour relance le même installateur qu'un nouvel utilisateur, plutôt
-qu'un chemin de mise à niveau à part, moins testé. Vos livres et réglages ne
-sont pas touchés.
+L'activer ne remet pas les clés pour autant : la vérification se fait en
+arrière-plan toutes les deux heures environ (et une fois peu après le
+démarrage de l'application), et s'il y a plus récent, une bannière apparaît —
+vous cliquez toujours sur **Installer**, et confirmez, avant que quoi que ce
+soit ne se télécharge. Une fois installée, c'est vous qui redémarrez
+l'application (un bouton sur la bannière le fait en un clic) pour commencer à
+l'utiliser. `ebook-audiobook update` et le bouton dans les Réglages
+fonctionnent toujours, quel que soit ce réglage ; lancer l'un ou l'autre *est*
+le consentement pour cette vérification-là.
+
+Mettre à jour — automatiquement ou à la main — relance le même installateur
+qu'un nouvel utilisateur, plutôt qu'un chemin de mise à niveau à part, moins
+testé. Vos livres et réglages ne sont pas touchés.
+
+---
+
+## Apparence
+
+Deux choix indépendants, tous deux dans **Réglages → Apparence** (et proposés
+une fois par l'installateur, sur une installation neuve) :
+
+- **Style** — **Classique**, le thème d'origine, chaleureux et à l'accent
+  ambré, ou **Moderne**, une paire plus froide et neutre à l'accent indigo
+  unique, proche de ce que la plupart des applications de bureau de 2026
+  proposent.
+- **Mode** — **Suivre mon système** (le comportement historique, et toujours
+  celui par défaut — il suit en direct le réglage clair/sombre de
+  Windows/macOS/votre bureau, sans recharger la page), **Clair**, ou
+  **Sombre**.
+
+S'applique partout où l'interface apparaît, y compris dans la barre d'état.
 
 ---
 
@@ -649,13 +685,18 @@ entier :
 | Télécharger l'application | Installation et mise à jour |
 | Le modèle vocal anglais (~3 Go) depuis Hugging Face | Votre première narration |
 | Le modèle multilingue (~3 Go) depuis Hugging Face | Seulement quand vous appuyez sur **Installer** dans Réglages → Langues de narration |
-| Demander à GitHub le numéro de la dernière version | Seulement quand vous lancez `ebook-audiobook update` ou appuyez sur **Rechercher des mises à jour** |
+| Demander à GitHub le numéro de la dernière version | Seulement quand vous lancez `ebook-audiobook update`, appuyez sur **Rechercher des mises à jour**, ou avez activé les mises à jour automatiques dans les Réglages (ou l'installateur) |
 
 La vérification de version est désactivée par défaut et n'a jamais lieu sur
-minuterie ni au démarrage. Activer « vérifier à l'ouverture de cette page »
-dans les Réglages est la seule façon qu'elle ait lieu sans que vous appuyiez
-sur quelque chose, et c'est facultatif. Rien vous concernant ni concernant
-votre bibliothèque n'est envoyé — c'est une demande de numéro de version.
+minuterie ni au démarrage, sauf si vous l'avez explicitement activée. Activer
+« Vérifier automatiquement les mises à jour » dans les Réglages — ou répondre
+oui à cette question dans l'installateur — est la seule façon qu'elle ait
+lieu sans que vous appuyiez sur quelque chose ; elle se fait alors toutes les
+deux heures environ et peu après chaque démarrage. Installer ce qu'elle trouve
+reste une étape séparée et volontaire : une bannière apparaît et vous appuyez
+sur **Installer**, puis confirmez. Rien vous concernant ni concernant votre
+bibliothèque n'est envoyé avec la vérification — c'est une demande de numéro
+de version.
 
 Le journal des échecs est local : il est écrit dans votre dossier de données,
 limité en taille, effacé après deux semaines, et jamais transmis.

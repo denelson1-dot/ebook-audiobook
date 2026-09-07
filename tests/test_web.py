@@ -1,6 +1,7 @@
 """Web-layer integration tests. The heavier ones use Calibre + ffmpeg via the
 fake engine (no GPU), driving the same routes the browser hits."""
 
+import re
 import time
 
 import pytest
@@ -22,7 +23,7 @@ def client():
 
 
 def test_pages_render(client):
-    for url in ["/", "/new", "/voices", "/api/voices", "/api/status"]:
+    for url in ["/", "/new", "/voices", "/api/voices", "/api/status", "/api/updates/status"]:
         assert client.get(url).status_code == 200
 
 
@@ -338,6 +339,138 @@ def test_clearing_the_library_folder_still_works(client, tmp_path):
 def test_an_invented_power_mode_is_rejected_not_stored(client):
     r = client.post("/settings", data={"power_mode": "ludicrous"})
     assert r.get_json()["power_mode"] == "full"
+
+
+# --- appearance ---------------------------------------------------------------
+
+def _html_tag(html: str) -> str:
+    """Just the ``<html ...>`` opening tag — asserting against the whole page
+    is a trap here, since the onboarding modal's own swatch cards carry
+    literal ``data-scheme="classic"``/``data-scheme="modern"`` attributes that
+    can make a naive substring check pass (or fail) for the wrong reason."""
+    return re.search(r"<html[^>]*>", html).group()
+
+
+def _finish_onboarding(client):
+    """Answers the first-run modal with no explicit choices, so a page render
+    reflects whatever is actually saved (the dataclass defaults, absent any
+    other change) rather than the modal's own suggested "modern"/"system" —
+    see app.py's onboarding_needed override."""
+    client.post("/settings", data={"onboarding_complete": "1"})
+
+
+def test_color_scheme_and_mode_default_to_classic_system(client):
+    _finish_onboarding(client)
+    tag = _html_tag(client.get("/settings").data.decode())
+    assert 'data-scheme="classic"' in tag
+    assert 'data-mode-setting="system"' in tag
+
+
+def test_appearance_round_trips(client):
+    _finish_onboarding(client)
+    r = client.post("/settings", data={"color_scheme": "modern", "color_mode": "dark"})
+    body = r.get_json()
+    assert body["color_scheme"] == "modern"
+    assert body["color_mode"] == "dark"
+    tag = _html_tag(client.get("/settings").data.decode())
+    assert 'data-scheme="modern"' in tag
+    assert 'data-mode-setting="dark"' in tag
+
+
+def test_an_invented_color_scheme_is_rejected_not_stored(client):
+    r = client.post("/settings", data={"color_scheme": "psychedelic"})
+    assert r.get_json()["color_scheme"] == "classic"
+
+
+def test_an_invented_color_mode_is_rejected_not_stored(client):
+    r = client.post("/settings", data={"color_mode": "sepia"})
+    assert r.get_json()["color_mode"] == "system"
+
+
+def test_setting_the_scheme_does_not_touch_the_mode(client):
+    """Independent axes: saving one form field must never silently reset the
+    other, the same rule the library-folder/power-mode split already keeps."""
+    client.post("/settings", data={"color_mode": "dark"})
+    r = client.post("/settings", data={"color_scheme": "modern"})
+    assert r.get_json()["color_mode"] == "dark"
+
+
+# --- first-run onboarding -------------------------------------------------
+
+def test_onboarding_modal_shows_on_a_fresh_install(client):
+    assert 'id="onboardOverlay"' in client.get("/").data.decode()
+
+
+def test_onboarding_suggests_classic_system_before_anything_is_chosen(client):
+    """Nothing saved yet, so the modal — and the page underneath it — render
+    the same pre-selected answers the modal itself shows (Classic, Match my
+    system), read from the onboarding_needed branch rather than
+    s.color_scheme/s.color_mode directly, so the two can never disagree."""
+    tag = _html_tag(client.get("/").data.decode())
+    assert 'data-scheme="classic"' in tag
+    assert 'data-mode-setting="system"' in tag
+
+
+def test_completing_onboarding_hides_the_modal_and_saves_the_choice(client):
+    r = client.post("/settings", data={
+        "language": "fr", "color_scheme": "classic", "color_mode": "dark",
+        "check_for_updates": "1", "onboarding_complete": "1",
+    })
+    assert r.get_json()["ok"] is True
+    d = client.get("/").data.decode()
+    assert 'id="onboardOverlay"' not in d
+    tag = _html_tag(d)
+    assert 'data-scheme="classic"' in tag
+    assert 'data-mode-setting="dark"' in tag
+
+
+def test_a_fresh_data_folder_needs_onboarding():
+    """No settings.json at all — the only case that should ever show the
+    modal — versus Settings()'s own dataclass default, which stays True so
+    that filling in a missing key from an *existing* file never re-triggers
+    it (see the other test in this section)."""
+    from ebook_audiobook import settings
+
+    assert settings.Settings().preferences_onboarded is True
+    assert settings.load_settings().preferences_onboarded is False
+
+
+def test_onboarding_does_not_reappear_for_an_existing_install():
+    """The regression that matters: upgrading from a version that predates
+    this modal must never interrupt someone who has been using the app for
+    months. Simulated the same way an old settings.json actually looks — every
+    other field present, this one simply missing."""
+    from ebook_audiobook import settings
+
+    existing = settings.Settings(audiobooks_root="/tmp/somewhere").to_dict()
+    del existing["preferences_onboarded"]
+    settings.save_settings(settings.Settings.from_dict(existing))
+    assert settings.load_settings().preferences_onboarded is True
+
+
+# --- automatic updates ----------------------------------------------------
+
+def test_updates_status_is_off_by_default(client):
+    d = client.get("/api/updates/status").get_json()
+    assert d["enabled"] is False
+    assert d["available"] is False
+    assert d["apply_state"] == "idle"
+
+
+def test_updates_apply_starts_in_the_background(client, monkeypatch):
+    from ebook_audiobook import update
+
+    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600: 0)
+    r = client.post("/updates/apply")
+    assert r.get_json()["ok"] is True
+
+
+def test_updates_dismiss_is_remembered(client):
+    r = client.post("/updates/dismiss", data={"version": "9.9.9"})
+    assert r.get_json()["ok"] is True
+    from ebook_audiobook import settings as app_settings
+
+    assert app_settings.load_settings().updates_dismissed_version == "9.9.9"
 
 
 def test_the_render_mode_is_remembered_on_the_job(client, tmp_path):

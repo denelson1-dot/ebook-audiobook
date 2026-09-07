@@ -291,7 +291,7 @@ ask() { # ask "question" [default y|n] -> 0 for yes
   else
     [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
   fi
-  if [ "$ASSUME_YES" = "1" ]; then say "  $q $hint y (auto)"; [ "$default" = "y" ]; return; fi
+  if [ "$ASSUME_YES" = "1" ]; then say "  $q $hint $default (auto)"; [ "$default" = "y" ]; return; fi
   if [ ! -t 0 ] && [ ! -r /dev/tty ]; then say "  $q $hint $default (no terminal)"; [ "$default" = "y" ]; return; fi
   printf '  %s %s ' "$q" "$hint"
   read -r reply < /dev/tty || reply=""
