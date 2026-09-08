@@ -67,6 +67,10 @@ def test_every_language_renders_every_page(lang, monkeypatch):
     for page in ("/", "/new", "/voices", "/settings", "/storage"):
         body = client.get(page, headers={"Accept-Language": lang}).data.decode()
         assert f'<html lang="{lang}" ' in body, page
+        # A translated page is the point, not a mistake the browser should
+        # offer to correct. Chromium compares <html lang> against its own
+        # locale and pops the translate bar unless told the page is final.
+        assert '<meta name="google" content="notranslate">' in body, page
         stripped = _re.sub(r"<script.*?</script>", "", body, flags=_re.S)
         for marker in ("Library", "Settings", "Voices", "Add a book"):
             assert not _re.search(rf">\s*{marker}\s*<", stripped), (lang, page, marker)
