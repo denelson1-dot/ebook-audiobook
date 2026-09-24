@@ -219,16 +219,18 @@ def test_a_drive_root_lists_the_other_drives(client, monkeypatch, tmp_path):
     couldn't be imported."""
     from ebook_audiobook.web import app as app_mod
 
-    monkeypatch.setattr(app_mod, "_windows_drives", lambda: ["C:\\", "E:\\"])
-    root = Path(tmp_path.anchor)  # "/" here, standing in for C:\
+    # Letters no test machine's temp folder lives on, so neither is the drive
+    # being listed (which is left out; see the next test).
+    monkeypatch.setattr(app_mod, "_windows_drives", lambda: ["Y:\\", "Z:\\"])
+    root = Path(tmp_path.anchor)  # "/" off Windows, the temp folder's drive on it
     data = client.get("/api/fs", query_string={"path": str(root)}).get_json()
     names = [d["name"] for d in data["dirs"]]
-    assert names[:2] == ["C:\\", "E:\\"]
+    assert names[:2] == ["Y:\\", "Z:\\"]
     assert data["parent"] is None
 
     # Anywhere below a root, nothing changes.
     data = client.get("/api/fs", query_string={"path": str(tmp_path)}).get_json()
-    assert "E:\\" not in [d["name"] for d in data["dirs"]]
+    assert "Z:\\" not in [d["name"] for d in data["dirs"]]
 
 
 def test_the_current_drive_is_not_listed_as_another(client, monkeypatch, tmp_path):
