@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.5.2 — 2026-09-24
+
+The app's own "Install update", made safe on Windows and made to work at all
+on macOS and Linux.
+
+Updating *to* 1.5.2 from inside an older app still goes through that app's
+updater. On macOS and Linux that updater is the broken one, so run the
+one-line installer from the README once, as for a first install; the in-app
+button works from 1.5.2 onward. On Windows an older app's button does reach the
+new installer, which recognises it and only updates, but it runs beside the
+app as before, so quitting the app and running the one-liner is the surer way
+this once.
+
+- **"Install" works on macOS and Linux.** It never had: the app piped the
+  installer to `bash -- --yes`, which bash reads as a script file named
+  `--yes`, so every in-app update ended in "the installer exited with code
+  127". `ebook-audiobook update --apply --yes` failed the same way. A download
+  that fails is now reported as a failure, instead of an empty installer that
+  "succeeded".
+- **An update only updates, on every platform.** `install.sh` gains
+  `--update` to match `install.ps1`'s `-Update` (next), and the app passes it
+  instead of `--yes`: no Homebrew cask or `sudo apt-get` for Calibre, no
+  Python install, no launcher, menu entry or `.app` that was removed, and no
+  speech engine on an install set up without one. An engine that is there keeps
+  its build — CPU, CUDA or ROCm — rather than being re-chosen from the hardware.
+- **On Windows, "Install" closes the app, and the installer runs in its own
+  window.** It used to run beside the app, from a console window that popped up
+  out of nowhere and killed the update halfway if closed. And pip can't move a folder
+  holding a DLL the running app has loaded, so a release changing numpy, lxml
+  or PyTorch would have failed with "installer exited with code 1". Now the
+  installer waits for the app to quit, and starts it again when it's done,
+  whether or not the update succeeded. `ebook-audiobook update --apply` hands
+  off the same way, and its `--yes` now means `-Update` on Windows.
+- **On Windows, `-Update` makes the same promise.** The installer's new
+  switch, which the app uses instead of `-Yes`, asks nothing and adds nothing:
+  no Calibre (and its permission prompt), no Desktop shortcut, no PATH entry
+  and no speech engine that wasn't there before, and a CPU build of the engine
+  stays CPU. It updates the copy that is running, even one installed with
+  `-InstallDir`. The older in-app updater, which runs this installer with
+  `-Yes`, is recognised and gets the same treatment.
+
 ## 1.5.1 — 2026-09-24
 
 A Windows hotfix: a read-through of the install and the running app for things
@@ -31,38 +72,6 @@ that only go wrong there, before anyone meets them on a fresh laptop.
 - The installers print the right uninstall command (it named an asset the
   release doesn't have) and the right size for the voice model: about 3 GB, not
   1.
-
-### Updating from inside the app
-
-- **"Install" works on macOS and Linux.** It never had: the app piped the
-  installer to `bash -- --yes`, which bash reads as a script file named
-  `--yes`, so every in-app update ended in "the installer exited with code
-  127". `ebook-audiobook update --apply --yes` failed the same way. A download
-  that fails is now reported as a failure, instead of an empty installer that
-  "succeeded".
-- **An update only updates, on every platform.** `install.sh` gains
-  `--update` to match `install.ps1`'s `-Update` (below), and the app passes it
-  instead of `--yes`: no Homebrew cask or `sudo apt-get` for Calibre, no
-  Python install, no launcher, menu entry or `.app` that was removed, and no
-  speech engine on an install set up without one. An engine that is there keeps
-  its build — CPU, CUDA or ROCm — rather than being re-chosen from the hardware.
-- **On Windows, "Install" closes the app, and the installer runs in its own
-  window.** It
-  used to run beside the app, from a console window that popped up out of
-  nowhere and killed the update halfway if closed. And pip can't move a folder
-  holding a DLL the running app has loaded, so a release changing numpy, lxml
-  or PyTorch would have failed with "installer exited with code 1". Now the
-  installer waits for the app to quit, and starts it again when it's done,
-  whether or not the update succeeded. `ebook-audiobook update --apply` hands
-  off the same way, and its `--yes` now means `-Update` on Windows.
-- **On Windows, `-Update` makes the same promise.** The installer's new
-  switch, which the app uses instead of `-Yes`, asks nothing and adds nothing:
-  no Calibre (and its permission prompt), no Desktop shortcut, no PATH entry
-  and no speech engine that wasn't there before, and a CPU build of the engine
-  stays CPU. It updates the copy that is running, even one installed with
-  `-InstallDir`.
-  The older in-app updater, which runs this installer with `-Yes`, is
-  recognised and gets the same treatment.
 
 ### Running
 

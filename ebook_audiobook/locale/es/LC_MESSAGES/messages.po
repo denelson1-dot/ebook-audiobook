@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.5.1\n"
+"Project-Id-Version: ebook-audiobook 1.5.2\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-07 12:36-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -540,58 +540,58 @@ msgstr "La respuesta de GitHub no era JSON válido."
 msgid "GitHub's reply had no release tag."
 msgstr "La respuesta de GitHub no incluía ninguna etiqueta de versión."
 
-#: ebook_audiobook/update.py:264
+#: ebook_audiobook/update.py:275
 msgid "The update didn't finish. To try again, run this in PowerShell:"
 msgstr "La actualización no terminó. Para volver a intentarlo, ejecuta esto en PowerShell:"
 
-#: ebook_audiobook/update.py:273 ebook_audiobook/update.py:275
+#: ebook_audiobook/update.py:284 ebook_audiobook/update.py:286
 msgid "Updating ebook·audiobook"
 msgstr "Actualizando ebook·audiobook"
 
-#: ebook_audiobook/update.py:276
+#: ebook_audiobook/update.py:287
 msgid "Keep this window open until the update finishes. Closing it stops the update partway."
 msgstr ""
 "Deja esta ventana abierta hasta que termine la actualización. Cerrarla la detiene a "
 "medias."
 
-#: ebook_audiobook/update.py:280
+#: ebook_audiobook/update.py:291
 msgid "Waiting for ebook·audiobook to close…"
 msgstr "Esperando a que ebook·audiobook se cierre…"
 
-#: ebook_audiobook/update.py:307
+#: ebook_audiobook/update.py:318
 msgid "The update is installed."
 msgstr "La actualización está instalada."
 
-#: ebook_audiobook/update.py:317
+#: ebook_audiobook/update.py:328
 msgid "Starting ebook·audiobook…"
 msgstr "Iniciando ebook·audiobook…"
 
-#: ebook_audiobook/update.py:325
+#: ebook_audiobook/update.py:336
 msgid "Press Enter to close this window"
 msgstr "Pulsa Intro para cerrar esta ventana"
 
-#: ebook_audiobook/update.py:411
+#: ebook_audiobook/update.py:422
 msgid "Couldn't find PowerShell to run the installer."
 msgstr "No se encontró PowerShell para ejecutar el instalador."
 
-#: ebook_audiobook/update.py:414
+#: ebook_audiobook/update.py:425
 #, python-format
 msgid "Couldn't start the installer: %(e)s"
 msgstr "No se pudo iniciar el instalador: %(e)s"
 
-#: ebook_audiobook/update.py:426
+#: ebook_audiobook/update.py:437
 #, python-format
 msgid "%(latest)s is available (you have %(current)s)."
 msgstr "%(latest)s está disponible (tienes la %(current)s)."
 
-#: ebook_audiobook/update.py:432
+#: ebook_audiobook/update.py:443
 #, python-format
 msgid "You're on %(current)s, ahead of the latest release (%(latest)s) — an unreleased build."
 msgstr ""
 "Tienes la %(current)s, más reciente que la última versión publicada (%(latest)s) — "
 "una compilación sin publicar."
 
-#: ebook_audiobook/update.py:433
+#: ebook_audiobook/update.py:444
 #, python-format
 msgid "You're on the latest version (%(current)s)."
 msgstr "Tienes la última versión (%(current)s)."
