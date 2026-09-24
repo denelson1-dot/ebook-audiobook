@@ -174,6 +174,13 @@
     </section>
 
     <section class="panel">
+      <div class="panel-head"><h3>{{ _("Speech engine") }}</h3></div>
+      <div class="panel-body">
+        <div id="engineBox">{{ _("Loading…") }}</div>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><h3>{{ _("Narration languages") }}</h3></div>
       <div class="panel-body">
         <p class="meta" style="line-height:1.55">{{ _("Books are narrated in English out of the box. Narrating in another language needs a second speech model, about 3 GB, downloaded from huggingface.co when — and only when — you press Install. Each language has its own narrators; a book's page offers the ones that speak its language.") }}</p>
@@ -325,6 +332,62 @@ document.getElementById("backupBtn").addEventListener("click", () => {
     _("Building the archive… the download starts when it's ready.");
 });
 
+// --- the speech engine -------------------------------------------------------------
+// Installed from here by a Windows setup.exe user (the installer can't carry
+// 2-5 GB of PyTorch), or by anyone who skipped it. Polled while it installs.
+let enginePollTimer = null;
+async function refreshEngine() {
+  const box = document.getElementById("engineBox");
+  let d;
+  try { d = await getJSON("/api/engine"); } catch (e) { box.textContent = _("Couldn't ask about the speech engine."); return; }
+  const s = d.status || {};
+  let html;
+  if (s.state === "running") {
+    const pct = s.total_bytes ? Math.round(100 * s.done_bytes / s.total_bytes) : 0;
+    const what = s.file
+      ? `<span class="meta mono">${escapeHtml(s.file)}</span>${s.total_bytes ? ` <span class="meta mono">${humanBytes(s.done_bytes)} / ${humanBytes(s.total_bytes)}</span>` : ""}`
+      : `<span class="meta">${_("Preparing…")}</span>`;
+    html = `<div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <span class="chip live"><span class="dot pulse"></span>${_("installing, step %(step)s of %(steps)s", { step: s.step, steps: s.steps })}</span>
+          <div style="margin-top:6px">${what}</div>
+          <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>
+        </div>
+        <button type="button" class="btn sm ghost" id="engineCancel">${_("Cancel")}</button>
+      </div>`;
+  } else if (d.installed) {
+    html = `<span class="chip ok">${_("installed")}</span> <span class="meta mono">torch ${escapeHtml(d.torch || "")}</span>`;
+  } else {
+    const plan = d.plan;
+    const intro = `<p class="meta" style="line-height:1.55">${_("Narration needs a speech engine: PyTorch and the Chatterbox voice model's code, downloaded once when you press Install. The voice model itself (about 3 GB) follows with the first narration.")}</p>`;
+    const forHere = plan
+      ? `<p class="meta" style="margin-top:8px">${_("For this computer: %(build)s, %(size)s.", { build: escapeHtml(plan.label), size: escapeHtml(plan.size) })}</p>`
+        + (plan.note ? `<p class="hint">${escapeHtml(plan.note)}</p>` : "")
+      : "";
+    const failed = s.state === "error"
+      ? `<p class="hint" style="margin-top:8px;color:var(--danger);white-space:pre-wrap">${escapeHtml(s.error)}</p>` : "";
+    const label = s.state === "error" || s.state === "cancelled" ? _("Try again") : _("Install the speech engine");
+    html = intro + forHere + failed +
+      `<div class="btn-row" style="margin-top:12px"><button type="button" class="btn primary" id="engineInstall">${label}</button></div>`;
+  }
+  box.innerHTML = html;
+  const install = document.getElementById("engineInstall");
+  if (install) install.addEventListener("click", () => withBusy(install, _("Starting…"), async () => {
+    const r = await fetch("/api/engine/install", { method: "POST" });
+    if (!r.ok) { let msg = _("Couldn't start"); try { msg = (await r.json()).error || msg; } catch {} toast(msg); }
+    refreshEngine();
+  }));
+  const cancel = document.getElementById("engineCancel");
+  if (cancel) cancel.addEventListener("click", async () => {
+    await fetch("/api/engine/cancel", { method: "POST" });
+    refreshEngine();
+  });
+  clearTimeout(enginePollTimer);
+  if (s.state === "running") enginePollTimer = setTimeout(refreshEngine, 1500);
+  else if (d.installed && s.state === "done") refreshLanguages();
+}
+refreshEngine();
+
 // --- narration languages ---------------------------------------------------------
 // Rows built from /api/languages; polled every two seconds while a model is
 // coming down, since the only progress there is is the size of the cache.
@@ -361,7 +424,7 @@ async function refreshLanguages() {
       <div>${actions}</div></div>`;
   });
   let note = "";
-  if (!d.engine_ok) note = `<p class="hint" style="margin-top:8px">${_("Install the speech engine first (re-run the installer); a language model is of no use without it.")}</p>`;
+  if (!d.engine_ok) note = `<p class="hint" style="margin-top:8px">${_("Install the speech engine first, above; a language model is of no use without it.")}</p>`;
   else if (d.last_error && !d.download) note = `<p class="hint" style="margin-top:8px;color:var(--danger)">${escapeHtml(d.last_error.message)}</p>`;
   box.innerHTML = rows.join("") + note;
   clearTimeout(langPollTimer);

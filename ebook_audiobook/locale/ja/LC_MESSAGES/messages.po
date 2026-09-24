@@ -137,56 +137,56 @@ msgstr ""
 "  音声エンジンをインストールできません。本の取り込みと読み込みはこれまでどおり\n"
 "  使えますが、音声の生成には Apple Silicon の Mac、Windows、Linux が必要です。"
 
-#: ebook_audiobook/checks.py:162
+#: ebook_audiobook/checks.py:163
 msgid "tts engine (fake)"
 msgstr "音声エンジン（ダミー）"
 
-#: ebook_audiobook/checks.py:162
+#: ebook_audiobook/checks.py:163
 msgid "no dependencies"
 msgstr "依存関係なし"
 
-#: ebook_audiobook/checks.py:167 ebook_audiobook/checks.py:186
+#: ebook_audiobook/checks.py:168 ebook_audiobook/checks.py:187
 msgid "tts engine (chatterbox)"
 msgstr "音声エンジン（chatterbox）"
 
-#: ebook_audiobook/checks.py:168
+#: ebook_audiobook/checks.py:169
 msgid "not installed — you can import books, but not render audio"
 msgstr "未インストール — 本の取り込みはできますが、音声は生成できません"
 
-#: ebook_audiobook/checks.py:180
+#: ebook_audiobook/checks.py:181
 #, python-format
 msgid "torch %(torch)s, chatterbox=%(cb)s, running on %(device)s"
 msgstr "torch %(torch)s、chatterbox=%(cb)s、%(device)s で実行中"
 
-#: ebook_audiobook/checks.py:180
+#: ebook_audiobook/checks.py:181
 msgid "yes"
 msgstr "はい"
 
-#: ebook_audiobook/checks.py:180
+#: ebook_audiobook/checks.py:181
 msgid "no"
 msgstr "いいえ"
 
-#: ebook_audiobook/checks.py:182
+#: ebook_audiobook/checks.py:183
 msgid ""
 "  — this PyTorch predates 2.9 and has no kernels for the newest GPUs; re-run the "
 "installer to update it"
 msgstr "  — この PyTorch は 2.9 より古く、最新の GPU 用のカーネルがありません。インストーラーを再実行して更新してください"
 
-#: ebook_audiobook/checks.py:203
+#: ebook_audiobook/checks.py:204
 #, python-format
 msgid "installed: %(names)s"
 msgstr "インストール済み: %(names)s"
 
-#: ebook_audiobook/checks.py:205
+#: ebook_audiobook/checks.py:206
 #, python-format
 msgid "not installed: %(names)s (Settings, under Narration languages)"
 msgstr "未インストール: %(names)s（設定の「ナレーションの言語」）"
 
-#: ebook_audiobook/checks.py:207
+#: ebook_audiobook/checks.py:208
 msgid "narration languages"
 msgstr "ナレーションの言語"
 
-#: ebook_audiobook/checks.py:207
+#: ebook_audiobook/checks.py:208
 msgid "none"
 msgstr "なし"
 
@@ -388,7 +388,7 @@ msgstr "%(language)sでナレーションするには追加の言語モデル（
 msgid "%(gb)s GB"
 msgstr "%(gb)s GB"
 
-#: ebook_audiobook/narration_langs.py:318 ebook_audiobook/web/app.py:1511
+#: ebook_audiobook/narration_langs.py:318
 msgid ""
 "The speech engine isn't installed, so there is nothing to add a language to. Install "
 "it first (re-run the installer)."
@@ -691,7 +691,7 @@ msgstr "この本は%(language)sです。%(language)sでナレーションする
 msgid "Open ebook-audiobook"
 msgstr "ebook-audiobook を開く"
 
-#: ebook_audiobook/desktop/tray.py:198 ebook_audiobook/web/server.py:171
+#: ebook_audiobook/desktop/tray.py:198 ebook_audiobook/web/server.py:183
 #: ebook_audiobook/web/templates/base.html:254
 msgid "Quit"
 msgstr "終了"
@@ -758,7 +758,8 @@ msgid "There is no newer release to install."
 msgstr "インストールできる新しいバージョンはありません。"
 
 #: ebook_audiobook/web/app.py:736 ebook_audiobook/web/app.py:1185
-#: ebook_audiobook/web/app.py:1514 ebook_audiobook/web/app.py:1538
+#: ebook_audiobook/web/app.py:1514 ebook_audiobook/web/app.py:1552
+#: ebook_audiobook/web/app.py:1577
 msgid "Something else is running."
 msgstr "別の処理が実行中です。"
 
@@ -848,20 +849,26 @@ msgstr "まずクリップを選んでください。"
 msgid "Couldn't add that voice: %(e)s"
 msgstr "その声を追加できませんでした: %(e)s"
 
-#: ebook_audiobook/web/app.py:1508 ebook_audiobook/web/app.py:1536
+#: ebook_audiobook/web/app.py:1508 ebook_audiobook/web/app.py:1575
 msgid "No such language model."
 msgstr "そのような言語モデルはありません。"
+
+#: ebook_audiobook/web/app.py:1511
+msgid ""
+"The speech engine isn't installed, so there is nothing to add a language to. Install "
+"it first, under Speech engine."
+msgstr "音声エンジンがインストールされていないため、言語を追加する対象がありません。先に「音声エンジン」からインストールしてください。"
 
 #: ebook_audiobook/web/app.py:1520
 #, python-format
 msgid "Not enough free space where the model cache lives: about %(size)s is needed."
 msgstr "モデルのキャッシュを置く場所に空き容量が足りません。約 %(size)s 必要です。"
 
-#: ebook_audiobook/web/app.py:1587
+#: ebook_audiobook/web/app.py:1626
 msgid "Narrating in this language needs its model. Install it in Settings."
 msgstr "この言語でナレーションするにはモデルが必要です。設定からインストールしてください。"
 
-#: ebook_audiobook/web/server.py:171
+#: ebook_audiobook/web/server.py:183
 msgid "Quit — stops the running render"
 msgstr "終了 — 実行中の生成を停止します"
 
@@ -939,40 +946,44 @@ msgstr "音声サンプルを生成中"
 msgid "Downloading a language model"
 msgstr "言語モデルをダウンロード中"
 
-#: ebook_audiobook/web/static/app.js:384
+#: ebook_audiobook/web/static/app.js:381
+msgid "Installing the speech engine"
+msgstr "音声エンジンをインストール中"
+
+#: ebook_audiobook/web/static/app.js:386
 msgid "Working"
 msgstr "処理中"
 
-#: ebook_audiobook/web/static/app.js:394 ebook_audiobook/web/templates/library.html:233
+#: ebook_audiobook/web/static/app.js:396 ebook_audiobook/web/templates/library.html:233
 msgid "a short excerpt"
 msgstr "短い抜粋"
 
-#: ebook_audiobook/web/static/app.js:395 ebook_audiobook/web/static/app.js:397
+#: ebook_audiobook/web/static/app.js:397 ebook_audiobook/web/static/app.js:399
 #: ebook_audiobook/web/templates/library.html:234
 #: ebook_audiobook/web/templates/library.html:236
 #, python-format
 msgid "section %(done)s of %(total)s"
 msgstr "%(total)s 個中 %(done)s 個目のセクション"
 
-#: ebook_audiobook/web/static/app.js:404 ebook_audiobook/web/templates/library.html:241
+#: ebook_audiobook/web/static/app.js:406 ebook_audiobook/web/templates/library.html:241
 msgid "estimating…"
 msgstr "見積もり中…"
 
-#: ebook_audiobook/web/static/app.js:410
+#: ebook_audiobook/web/static/app.js:412
 #, python-format
 msgid "%(time)s left"
 msgstr "残り %(time)s"
 
-#: ebook_audiobook/web/static/app.js:410
+#: ebook_audiobook/web/static/app.js:412
 msgid "almost done"
 msgstr "もうすぐ完了"
 
-#: ebook_audiobook/web/static/app.js:427
+#: ebook_audiobook/web/static/app.js:429
 #, python-format
 msgid "%(size)s of working files"
 msgstr "作業ファイル %(size)s"
 
-#: ebook_audiobook/web/static/app.js:437
+#: ebook_audiobook/web/static/app.js:439
 #, python-format
 msgid ""
 "Left behind by %(n)s book that is finished, or only ever previewed. Deleting them "
@@ -982,12 +993,12 @@ msgid_plural ""
 "changes nothing you can hear."
 msgstr[0] "完成した本、またはプレビューだけを作った本 %(n)s 冊が残していったものです。削除しても、聴こえるものは何も変わりません。"
 
-#: ebook_audiobook/web/static/app.js:455 ebook_audiobook/web/templates/job.html:708
+#: ebook_audiobook/web/static/app.js:457 ebook_audiobook/web/templates/job.html:708
 #: ebook_audiobook/web/templates/library.html:247
 msgid "Stopping…"
 msgstr "停止中…"
 
-#: ebook_audiobook/web/static/app.js:457 ebook_audiobook/web/templates/library.html:249
+#: ebook_audiobook/web/static/app.js:459 ebook_audiobook/web/templates/library.html:249
 msgid "Couldn't reach the app to stop it"
 msgstr "停止するためにアプリに接続できませんでした"
 
@@ -996,7 +1007,8 @@ msgid "Confirm"
 msgstr "確認"
 
 #: ebook_audiobook/web/static/app.js:260 ebook_audiobook/web/static/app.js:294
-#: ebook_audiobook/web/templates/settings.html:348
+#: ebook_audiobook/web/templates/settings.html:356
+#: ebook_audiobook/web/templates/settings.html:411
 msgid "Cancel"
 msgstr "キャンセル"
 
@@ -1078,7 +1090,7 @@ msgid "Dark"
 msgstr "ダーク"
 
 #: ebook_audiobook/web/templates/base.html:95
-#: ebook_audiobook/web/templates/settings.html:197
+#: ebook_audiobook/web/templates/settings.html:204
 msgid "Automatically check for updates"
 msgstr "更新を自動的に確認する"
 
@@ -1226,113 +1238,125 @@ msgstr "言語モデルをまだダウンロード中です"
 msgid "Quitting stops it. The download picks up where it left off next time."
 msgstr "終了すると停止します。次回は続きから再開します。"
 
-#: ebook_audiobook/web/templates/base.html:335
+#: ebook_audiobook/web/templates/base.html:324
+msgid "The speech engine is still installing"
+msgstr "音声エンジンはまだインストール中です"
+
+#: ebook_audiobook/web/templates/base.html:324
+msgid ""
+"Quitting stops it. Downloads that finished are kept, so installing again picks up "
+"from there."
+msgstr "終了すると停止します。完了したダウンロードは保持されるため、もう一度インストールするとそこから再開します。"
+
+#: ebook_audiobook/web/templates/base.html:336
 msgid "Something is still running"
 msgstr "まだ実行中の処理があります"
 
-#: ebook_audiobook/web/templates/base.html:335
+#: ebook_audiobook/web/templates/base.html:336
 msgid "Quitting stops it."
 msgstr "終了すると停止します。"
 
-#: ebook_audiobook/web/templates/base.html:338
+#: ebook_audiobook/web/templates/base.html:339
 msgid "Restart anyway"
 msgstr "それでも再起動"
 
-#: ebook_audiobook/web/templates/base.html:338
+#: ebook_audiobook/web/templates/base.html:339
 msgid "Quit anyway"
 msgstr "それでも終了"
 
-#: ebook_audiobook/web/templates/base.html:344
+#: ebook_audiobook/web/templates/base.html:345
 msgid "Couldn't quit — see the terminal or the logs."
 msgstr "終了できませんでした — ターミナルかログをご覧ください。"
 
-#: ebook_audiobook/web/templates/base.html:352
+#: ebook_audiobook/web/templates/base.html:353
 msgid "Restarting…"
 msgstr "再起動中…"
 
-#: ebook_audiobook/web/templates/base.html:353
+#: ebook_audiobook/web/templates/base.html:354
 msgid ""
 "ebook·audiobook is coming back up. Reopen it from where you normally launch it if "
 "this window doesn't reconnect on its own."
 msgstr "ebook·audiobook を起動し直しています。このウィンドウが自動で再接続しない場合は、いつも起動している場所から開き直してください。"
 
-#: ebook_audiobook/web/templates/base.html:354
+#: ebook_audiobook/web/templates/base.html:355
 msgid "ebook·audiobook has stopped"
 msgstr "ebook·audiobook を停止しました"
 
-#: ebook_audiobook/web/templates/base.html:355
+#: ebook_audiobook/web/templates/base.html:356
 msgid "You can close this window."
 msgstr "このウィンドウは閉じてかまいません。"
 
-#: ebook_audiobook/web/templates/base.html:388
+#: ebook_audiobook/web/templates/base.html:389
 msgid "Installing update…"
 msgstr "更新をインストール中…"
 
-#: ebook_audiobook/web/templates/base.html:389
+#: ebook_audiobook/web/templates/base.html:390
 msgid "A few minutes, usually. Keep working — nothing else waits on it."
 msgstr "たいてい数分です。そのまま作業を続けてください — ほかの処理が待たされることはありません。"
 
-#: ebook_audiobook/web/templates/base.html:396
+#: ebook_audiobook/web/templates/base.html:397
 msgid "Update didn't install"
 msgstr "更新をインストールできませんでした"
 
-#: ebook_audiobook/web/templates/base.html:400 ebook_audiobook/web/templates/base.html:438
+#: ebook_audiobook/web/templates/base.html:401 ebook_audiobook/web/templates/base.html:439
 #: ebook_audiobook/web/templates/job.html:440
+#: ebook_audiobook/web/templates/settings.html:375
 msgid "Starting…"
 msgstr "開始中…"
 
-#: ebook_audiobook/web/templates/base.html:408
+#: ebook_audiobook/web/templates/base.html:409
 msgid "Update ready"
 msgstr "更新の準備ができました"
 
-#: ebook_audiobook/web/templates/base.html:409
+#: ebook_audiobook/web/templates/base.html:410
 #, python-format
 msgid "Restart for %(version)s."
 msgstr "%(version)s にするには再起動してください。"
 
-#: ebook_audiobook/web/templates/base.html:415
+#: ebook_audiobook/web/templates/base.html:416
 msgid "Restart ebook-audiobook yourself to finish."
 msgstr "仕上げに ebook-audiobook を手動で再起動してください。"
 
-#: ebook_audiobook/web/templates/base.html:422
+#: ebook_audiobook/web/templates/base.html:423
 #, python-format
 msgid "%(version)s available"
 msgstr "%(version)s が利用できます"
 
-#: ebook_audiobook/web/templates/base.html:423
+#: ebook_audiobook/web/templates/base.html:424
 #, python-format
 msgid "You're on %(current)s."
 msgstr "現在は %(current)s です。"
 
-#: ebook_audiobook/web/templates/base.html:431
+#: ebook_audiobook/web/templates/base.html:432
 msgid "Install this update?"
 msgstr "この更新をインストールしますか？"
 
-#: ebook_audiobook/web/templates/base.html:425 ebook_audiobook/web/templates/base.html:432
+#: ebook_audiobook/web/templates/base.html:426 ebook_audiobook/web/templates/base.html:433
 msgid "Install"
 msgstr "インストール"
 
-#: ebook_audiobook/web/templates/base.html:449
+#: ebook_audiobook/web/templates/base.html:450
 msgid "Couldn't start the update."
 msgstr "更新を開始できませんでした。"
 
-#: ebook_audiobook/web/templates/base.html:398
+#: ebook_audiobook/web/templates/base.html:399
+#: ebook_audiobook/web/templates/settings.html:369
 msgid "Try again"
 msgstr "再試行"
 
-#: ebook_audiobook/web/templates/base.html:411
+#: ebook_audiobook/web/templates/base.html:412
 msgid "Restart now"
 msgstr "今すぐ再起動"
 
-#: ebook_audiobook/web/templates/base.html:412
+#: ebook_audiobook/web/templates/base.html:413
 msgid "Later"
 msgstr "あとで"
 
-#: ebook_audiobook/web/templates/base.html:426
+#: ebook_audiobook/web/templates/base.html:427
 msgid "Not now"
 msgstr "今はしない"
 
-#: ebook_audiobook/web/templates/base.html:434
+#: ebook_audiobook/web/templates/base.html:435
 msgid ""
 "ebook·audiobook closes, and the installer — the same one you used to set this up — "
 "runs in a window of its own. It can take a few minutes and needs a working "
@@ -1341,7 +1365,7 @@ msgstr ""
 "ebook·audiobook "
 "を終了し、インストーラー（最初に使ったものと同じです）を専用のウィンドウで実行します。数分かかることがあり、接続が必要です。完了するとアプリがもう一度開きます。"
 
-#: ebook_audiobook/web/templates/base.html:435
+#: ebook_audiobook/web/templates/base.html:436
 msgid ""
 "Re-runs the installer in the background — the same one you used to set this up. It "
 "can take a few minutes and needs a working connection. You can keep working while it "
@@ -1350,17 +1374,17 @@ msgstr ""
 "バックグラウンドでインストーラーを実行し直します — "
 "最初に使ったものと同じです。数分かかることがあり、接続が必要です。実行中も作業は続けられますが、完了後にアプリの再起動が必要です。"
 
-#: ebook_audiobook/web/templates/base.html:445
+#: ebook_audiobook/web/templates/base.html:446
 msgid "Installing the update…"
 msgstr "更新をインストールしています…"
 
-#: ebook_audiobook/web/templates/base.html:446
+#: ebook_audiobook/web/templates/base.html:447
 msgid ""
 "ebook·audiobook has closed so the installer can replace it. Its window shows the "
 "progress, and the app opens again when it's done."
 msgstr "インストーラーが置き換えられるよう、ebook·audiobook を終了しました。進み具合はインストーラーのウィンドウに表示され、完了するとアプリがもう一度開きます。"
 
-#: ebook_audiobook/web/templates/base.html:469
+#: ebook_audiobook/web/templates/base.html:470
 #: ebook_audiobook/web/templates/library.html:214
 msgid "Couldn't use that folder"
 msgstr "そのフォルダーは使えませんでした"
@@ -1739,7 +1763,7 @@ msgid "Couldn't save the settings"
 msgstr "設定を保存できませんでした"
 
 #: ebook_audiobook/web/templates/job.html:422
-#: ebook_audiobook/web/templates/settings.html:239
+#: ebook_audiobook/web/templates/settings.html:246
 msgid "Saving…"
 msgstr "保存中…"
 
@@ -1780,6 +1804,7 @@ msgid "Start"
 msgstr "開始"
 
 #: ebook_audiobook/web/templates/job.html:627
+#: ebook_audiobook/web/templates/settings.html:377
 msgid "Couldn't start"
 msgstr "開始できませんでした"
 
@@ -1789,7 +1814,7 @@ msgstr "ナレーション中…"
 
 #: ebook_audiobook/web/templates/job.html:641
 #: ebook_audiobook/web/templates/settings.html:167
-#: ebook_audiobook/web/templates/settings.html:301
+#: ebook_audiobook/web/templates/settings.html:308
 msgid "Measuring…"
 msgstr "測定中…"
 
@@ -1840,8 +1865,9 @@ msgid "Couldn't save that choice"
 msgstr "その選択を保存できませんでした"
 
 #: ebook_audiobook/web/templates/job.html:802
-#: ebook_audiobook/web/templates/settings.html:180
-#: ebook_audiobook/web/templates/settings.html:214
+#: ebook_audiobook/web/templates/settings.html:179
+#: ebook_audiobook/web/templates/settings.html:187
+#: ebook_audiobook/web/templates/settings.html:221
 msgid "Loading…"
 msgstr "読み込み中…"
 
@@ -2359,10 +2385,14 @@ msgid "Restore with <code>ebook-audiobook restore &lt;file&gt;.zip</code>."
 msgstr "<code>ebook-audiobook restore &lt;ファイル&gt;.zip</code> で復元します。"
 
 #: ebook_audiobook/web/templates/settings.html:177
+msgid "Speech engine"
+msgstr "音声エンジン"
+
+#: ebook_audiobook/web/templates/settings.html:184
 msgid "Narration languages"
 msgstr "ナレーションの言語"
 
-#: ebook_audiobook/web/templates/settings.html:179
+#: ebook_audiobook/web/templates/settings.html:186
 msgid ""
 "Books are narrated in English out of the box. Narrating in another language needs a "
 "second speech model, about 3 GB, downloaded from huggingface.co when — and only when "
@@ -2372,11 +2402,11 @@ msgstr ""
 "初期状態では英語でナレーションします。ほかの言語で読み上げるには約 3 GB の二つ目の音声モデルが必要で、これは「インストール」を押したときにだけ "
 "huggingface.co からダウンロードされます。言語ごとに専用の語り手があり、本のページにはその言語を話す語り手が表示されます。"
 
-#: ebook_audiobook/web/templates/settings.html:185
+#: ebook_audiobook/web/templates/settings.html:192
 msgid "Updates"
 msgstr "更新"
 
-#: ebook_audiobook/web/templates/settings.html:187
+#: ebook_audiobook/web/templates/settings.html:194
 msgid ""
 "Nothing here contacts the internet on its own. Asking whether there is a newer "
 "version means sending a request to GitHub, which carries your IP address — so it "
@@ -2385,124 +2415,132 @@ msgstr ""
 "ここから勝手に外部へ接続することはありません。新しいバージョンがあるか尋ねるには GitHub にリクエストを送ることになり、そこには IP "
 "アドレスが含まれます。ですからボタンを押したときにだけ実行し、それ以前には行いません。"
 
-#: ebook_audiobook/web/templates/settings.html:189
+#: ebook_audiobook/web/templates/settings.html:196
 msgid "Check for updates"
 msgstr "更新を確認"
 
-#: ebook_audiobook/web/templates/settings.html:190
+#: ebook_audiobook/web/templates/settings.html:197
 #, python-format
 msgid "Running <strong>%(version)s</strong>"
 msgstr "<strong>%(version)s</strong> を実行中"
 
-#: ebook_audiobook/web/templates/settings.html:198
+#: ebook_audiobook/web/templates/settings.html:205
 msgid ""
 "Off. Turning it on checks here, on this page, and every few hours in the background —"
 " a banner appears if there's something newer. Nothing installs on its own: you still "
 "choose when, from that banner or from here."
 msgstr "オフです。オンにすると、このページを開いたときと、数時間ごとにバックグラウンドで確認し、新しいものがあれば案内が表示されます。勝手にインストールされることはありません。実行のタイミングは、その案内かこの画面から自分で選びます。"
 
-#: ebook_audiobook/web/templates/settings.html:205
+#: ebook_audiobook/web/templates/settings.html:212
 msgid "When something goes wrong"
 msgstr "うまくいかないとき"
 
-#: ebook_audiobook/web/templates/settings.html:210
+#: ebook_audiobook/web/templates/settings.html:217
 msgid "Keep a detailed performance log"
 msgstr "詳細なパフォーマンスログを記録する"
 
-#: ebook_audiobook/web/templates/settings.html:211
+#: ebook_audiobook/web/templates/settings.html:218
 msgid ""
 "Records which graphics card and mode each narration uses, and how long every passage "
 "takes, so slow narration can be explained. It stays on this computer and goes into "
 "the report. Leave it off unless you are looking into a problem."
 msgstr "各ナレーションが使うグラフィックカードとモード、各パッセージにかかった時間を記録し、ナレーションが遅い理由を説明できるようにします。記録はこのパソコンに残り、レポートに含まれます。問題を調べているとき以外はオフのままにしてください。"
 
-#: ebook_audiobook/web/templates/settings.html:215
+#: ebook_audiobook/web/templates/settings.html:222
 msgid ""
 "A report has your home folder replaced with <code>~</code> and book titles removed, "
 "so filing one does not publish your reading history."
 msgstr "レポートではホームフォルダーが <code>~</code> に置き換えられ、本のタイトルは取り除かれます。提出しても読書履歴が公開されることはありません。"
 
-#: ebook_audiobook/web/templates/settings.html:217
+#: ebook_audiobook/web/templates/settings.html:224
 msgid "Download report"
 msgstr "レポートをダウンロード"
 
-#: ebook_audiobook/web/templates/settings.html:218
+#: ebook_audiobook/web/templates/settings.html:225
 msgid "Clear the log"
 msgstr "ログを消去"
 
-#: ebook_audiobook/web/templates/settings.html:242
+#: ebook_audiobook/web/templates/settings.html:249
 msgid "Couldn't save"
 msgstr "保存できませんでした"
 
-#: ebook_audiobook/web/templates/settings.html:247
-#: ebook_audiobook/web/templates/settings.html:293
-#: ebook_audiobook/web/templates/settings.html:418
+#: ebook_audiobook/web/templates/settings.html:254
+#: ebook_audiobook/web/templates/settings.html:300
+#: ebook_audiobook/web/templates/settings.html:481
 msgid "Saved"
 msgstr "保存しました"
 
-#: ebook_audiobook/web/templates/settings.html:252
-#: ebook_audiobook/web/templates/settings.html:447
+#: ebook_audiobook/web/templates/settings.html:259
+#: ebook_audiobook/web/templates/settings.html:510
 msgid "Cleared"
 msgstr "消去しました"
 
-#: ebook_audiobook/web/templates/settings.html:291
+#: ebook_audiobook/web/templates/settings.html:298
 msgid "Saved as the default for new conversions."
 msgstr "新しい変換の既定値として保存しました。"
 
-#: ebook_audiobook/web/templates/settings.html:292
+#: ebook_audiobook/web/templates/settings.html:299
 msgid "Couldn't save that setting."
 msgstr "その設定を保存できませんでした。"
 
-#: ebook_audiobook/web/templates/settings.html:305
+#: ebook_audiobook/web/templates/settings.html:312
 msgid "Couldn't measure"
 msgstr "測定できませんでした"
 
-#: ebook_audiobook/web/templates/settings.html:308
+#: ebook_audiobook/web/templates/settings.html:315
 #, python-format
 msgid "backup size: %(size)s in %(files)s files"
 msgstr "バックアップの容量: %(files)s 個のファイルで %(size)s"
 
-#: ebook_audiobook/web/templates/settings.html:309
+#: ebook_audiobook/web/templates/settings.html:316
 #, python-format
 msgid "left out:    %(size)s"
 msgstr "除外:    %(size)s"
 
-#: ebook_audiobook/web/templates/settings.html:311
+#: ebook_audiobook/web/templates/settings.html:318
 msgid "Couldn't measure the data folder."
 msgstr "データフォルダーを測定できませんでした。"
 
-#: ebook_audiobook/web/templates/settings.html:325
+#: ebook_audiobook/web/templates/settings.html:332
 msgid "Building the archive… the download starts when it's ready."
 msgstr "アーカイブを作成中… 準備ができ次第ダウンロードが始まります。"
 
-#: ebook_audiobook/web/templates/settings.html:335
+#: ebook_audiobook/web/templates/settings.html:342
+msgid "Couldn't ask about the speech engine."
+msgstr "音声エンジンの状態を確認できませんでした。"
+
+#: ebook_audiobook/web/templates/settings.html:369
+msgid "Install the speech engine"
+msgstr "音声エンジンをインストール"
+
+#: ebook_audiobook/web/templates/settings.html:398
 msgid "Couldn't read the model cache."
 msgstr "モデルのキャッシュを読み込めませんでした。"
 
-#: ebook_audiobook/web/templates/settings.html:376
+#: ebook_audiobook/web/templates/settings.html:439
 msgid "Remove this language model?"
 msgstr "この言語モデルを削除しますか？"
 
-#: ebook_audiobook/web/templates/settings.html:342
-#: ebook_audiobook/web/templates/settings.html:377
+#: ebook_audiobook/web/templates/settings.html:405
+#: ebook_audiobook/web/templates/settings.html:440
 msgid "Remove"
 msgstr "削除"
 
-#: ebook_audiobook/web/templates/settings.html:382
+#: ebook_audiobook/web/templates/settings.html:445
 msgid "Couldn't do that"
 msgstr "実行できませんでした"
 
-#: ebook_audiobook/web/templates/settings.html:383
+#: ebook_audiobook/web/templates/settings.html:446
 msgid "Downloading — this takes a while"
 msgstr "ダウンロード中 — 少し時間がかかります"
 
-#: ebook_audiobook/web/templates/settings.html:391
-#: ebook_audiobook/web/templates/settings.html:411
+#: ebook_audiobook/web/templates/settings.html:454
+#: ebook_audiobook/web/templates/settings.html:474
 msgid "Checking…"
 msgstr "確認中…"
 
-#: ebook_audiobook/web/templates/settings.html:403
-#: ebook_audiobook/web/templates/settings.html:404
+#: ebook_audiobook/web/templates/settings.html:466
+#: ebook_audiobook/web/templates/settings.html:467
 #, python-format
 msgid ""
 "Upgrade by running <code>ebook-audiobook update --apply</code>, or: "
@@ -2511,104 +2549,126 @@ msgstr ""
 "<code>ebook-audiobook update --apply</code> を実行して更新するか、次を実行してください: "
 "<code>%(command)s</code>"
 
-#: ebook_audiobook/web/templates/settings.html:406
+#: ebook_audiobook/web/templates/settings.html:469
 msgid "Couldn't check right now."
 msgstr "今は確認できませんでした。"
 
-#: ebook_audiobook/web/templates/settings.html:432
+#: ebook_audiobook/web/templates/settings.html:495
 #, python-format
 msgid "Performance log: %(kb)s KB."
 msgstr "パフォーマンスログ: %(kb)s KB。"
 
-#: ebook_audiobook/web/templates/settings.html:435
-#: ebook_audiobook/web/templates/settings.html:436
+#: ebook_audiobook/web/templates/settings.html:498
+#: ebook_audiobook/web/templates/settings.html:499
 #, python-format
 msgid "No errors logged. (Log capped at %(kb)s KB, kept %(days)s days.)"
 msgstr "記録されたエラーはありません。（ログは %(kb)s KB まで、%(days)s 日間保持されます。）"
 
-#: ebook_audiobook/web/templates/settings.html:440
+#: ebook_audiobook/web/templates/settings.html:503
 #, python-format
 msgid "<strong>%(n)s recent error(s)</strong>, log is %(kb)s KB:"
 msgstr "<strong>最近のエラー %(n)s 件</strong>、ログは %(kb)s KB です:"
 
-#: ebook_audiobook/web/templates/settings.html:443
+#: ebook_audiobook/web/templates/settings.html:506
 msgid "Couldn't read the log."
 msgstr "ログを読み込めませんでした。"
 
-#: ebook_audiobook/web/templates/settings.html:466
+#: ebook_audiobook/web/templates/settings.html:529
 #: ebook_audiobook/web/templates/storage.html:168
 msgid "Finished books will clean up after themselves."
 msgstr "完成した本は自分で後片付けをします。"
 
-#: ebook_audiobook/web/templates/settings.html:467
+#: ebook_audiobook/web/templates/settings.html:530
 msgid "Working files will be kept until you say otherwise."
 msgstr "作業ファイルは、指示があるまで保持されます。"
 
-#: ebook_audiobook/web/templates/settings.html:473
+#: ebook_audiobook/web/templates/settings.html:536
 msgid "Narration will be logged in detail until you turn this off."
 msgstr "オフにするまで、ナレーションを詳しく記録します。"
 
-#: ebook_audiobook/web/templates/settings.html:474
+#: ebook_audiobook/web/templates/settings.html:537
 msgid "Detailed logging is off."
 msgstr "詳細な記録はオフです。"
 
-#: ebook_audiobook/web/templates/settings.html:480
+#: ebook_audiobook/web/templates/settings.html:543
 msgid "Previews will play themselves."
 msgstr "プレビューは自動で再生されます。"
 
-#: ebook_audiobook/web/templates/settings.html:480
+#: ebook_audiobook/web/templates/settings.html:543
 msgid "Previews will wait for you."
 msgstr "プレビューは再生を待ちます。"
 
-#: ebook_audiobook/web/templates/settings.html:307
+#: ebook_audiobook/web/templates/settings.html:314
 msgid "files"
 msgstr "ファイル"
 
-#: ebook_audiobook/web/templates/settings.html:307
+#: ebook_audiobook/web/templates/settings.html:314
 msgid "(left out)"
 msgstr "（除外）"
 
-#: ebook_audiobook/web/templates/settings.html:340
+#: ebook_audiobook/web/templates/settings.html:349
+msgid "Preparing…"
+msgstr "準備中…"
+
+#: ebook_audiobook/web/templates/settings.html:352
+#, python-format
+msgid "installing, step %(step)s of %(steps)s"
+msgstr "インストール中（%(steps)s 段階中 %(step)s）"
+
+#: ebook_audiobook/web/templates/settings.html:359
+#: ebook_audiobook/web/templates/settings.html:403
 msgid "installed"
 msgstr "インストール済み"
 
-#: ebook_audiobook/web/templates/settings.html:345
+#: ebook_audiobook/web/templates/settings.html:362
+msgid ""
+"Narration needs a speech engine: PyTorch and the Chatterbox voice model's code, "
+"downloaded once when you press Install. The voice model itself (about 3 GB) follows "
+"with the first narration."
+msgstr ""
+"ナレーションには音声エンジン（PyTorch と Chatterbox "
+"音声モデルのコード）が必要です。「インストール」を押したときに一度だけダウンロードします。音声モデル本体（約 3 GB）は最初のナレーションのときにダウンロードされます。"
+
+#: ebook_audiobook/web/templates/settings.html:364
+#, python-format
+msgid "For this computer: %(build)s, %(size)s."
+msgstr "このパソコン向け: %(build)s、%(size)s。"
+
+#: ebook_audiobook/web/templates/settings.html:408
 msgid "downloading"
 msgstr "ダウンロード中"
 
-#: ebook_audiobook/web/templates/settings.html:351
+#: ebook_audiobook/web/templates/settings.html:414
 msgid "downloads with the first narration"
 msgstr "最初のナレーション時にダウンロードされます"
 
-#: ebook_audiobook/web/templates/settings.html:352
+#: ebook_audiobook/web/templates/settings.html:415
 msgid "not installed"
 msgstr "未インストール"
 
-#: ebook_audiobook/web/templates/settings.html:354
+#: ebook_audiobook/web/templates/settings.html:417
 #, python-format
 msgid "Install (%(size)s)"
 msgstr "インストール（%(size)s）"
 
-#: ebook_audiobook/web/templates/settings.html:364
-msgid ""
-"Install the speech engine first (re-run the installer); a language model is of no use"
-" without it."
-msgstr "先に音声エンジンをインストールしてください（インストーラーを再実行します）。それがないと言語モデルは役に立ちません。"
+#: ebook_audiobook/web/templates/settings.html:427
+msgid "Install the speech engine first, above; a language model is of no use without it."
+msgstr "先に上の音声エンジンをインストールしてください。音声エンジンがなければ言語モデルは使えません。"
 
-#: ebook_audiobook/web/templates/settings.html:378
+#: ebook_audiobook/web/templates/settings.html:441
 msgid "Books in its languages can't be narrated until it is downloaded again."
 msgstr "その言語の本は、もう一度ダウンロードするまでナレーションできません。"
 
-#: ebook_audiobook/web/templates/settings.html:401
+#: ebook_audiobook/web/templates/settings.html:464
 msgid "Release notes"
 msgstr "リリースノート"
 
-#: ebook_audiobook/web/templates/settings.html:458
+#: ebook_audiobook/web/templates/settings.html:521
 #, python-format
 msgid "%(size)s can be freed"
 msgstr "%(size)s を解放できます"
 
-#: ebook_audiobook/web/templates/settings.html:459
+#: ebook_audiobook/web/templates/settings.html:522
 msgid "nothing to reclaim"
 msgstr "解放できるものはありません"
 

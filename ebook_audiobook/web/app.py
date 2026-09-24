@@ -1509,7 +1509,7 @@ def create_app() -> Flask:
         if not _engine_present():
             return {"ok": False, "error": _(
                 "The speech engine isn't installed, so there is nothing to add a "
-                "language to. Install it first (re-run the installer).")}, 409
+                "language to. Install it first, under Speech engine.")}, 409
         if runner.is_busy():
             return {"ok": False, "error": _("Something else is running.")}, 409
         if nl.is_installed(pack.id):
@@ -1520,6 +1520,45 @@ def create_app() -> Flask:
                 "Not enough free space where the model cache lives: about %(size)s is needed.",
                 size=human_bytes(needed))}, 400
         runner.submit(f"langpack-{pack.id}", "model_download", pack=pack.id)
+        return {"ok": True}
+
+    # ----- the speech engine -------------------------------------------------
+
+    @app.get("/api/engine")
+    def api_engine():
+        """Whether the engine is here, which build this machine would get, and
+        how an install in progress is going. Polled while one runs."""
+        from .. import engine_setup
+
+        present = _engine_present()
+        out = {"ok": True, "installed": present, "torch": engine_setup.installed_torch(),
+               "status": engine_setup.status(), "plan": None}
+        if not present:
+            try:
+                build = engine_setup.plan()
+                out["plan"] = {"id": build.id, "label": build.label, "size": build.size,
+                               "note": build.note}
+            except Exception:  # noqa: BLE001 - the button still works without a preview
+                pass
+        return out
+
+    @app.post("/api/engine/install")
+    def api_engine_install():
+        """The one download of PyTorch this app starts itself, and only from
+        the button that says Install."""
+        if _engine_present():
+            return {"ok": True, "installed": True}
+        if runner.is_busy():
+            return {"ok": False, "error": _("Something else is running.")}, 409
+        from .. import engine_setup
+
+        engine_setup.mark_queued()
+        runner.submit("engine", "engine_install")
+        return {"ok": True}
+
+    @app.post("/api/engine/cancel")
+    def api_engine_cancel():
+        runner.cancel("engine")
         return {"ok": True}
 
     @app.post("/api/languages/cancel")
@@ -1624,6 +1663,9 @@ def create_app() -> Flask:
             # A language model coming down: the sidebar says so, and how far.
             "download": _languages_report()["download"]
             if runner.current_kind() == "model_download" else None,
+            # Likewise the speech engine.
+            "engine_install": _engine_status()
+            if runner.current_kind() == "engine_install" else None,
         }
         # Enough about the running job for the sidebar dock to show it on every
         # page. A render lasts hours; making the user navigate back to the job
@@ -1690,6 +1732,11 @@ def create_app() -> Flask:
     _prereq_cache: dict = {}
     _PREREQ_TTL = 60.0
 
+    def _engine_status() -> dict:
+        from .. import engine_setup
+
+        return engine_setup.status()
+
     @app.get("/api/prereqs")
     def api_prereqs():
         """What's installed and what isn't.
@@ -1699,9 +1746,14 @@ def create_app() -> Flask:
         """
         import time
 
+        from .. import engine_setup
+
         now = time.monotonic()
-        entry = _prereq_cache.setdefault(g.lang, {"at": 0.0, "value": None})
-        if entry["value"] is None or now - entry["at"] > _PREREQ_TTL:
+        entry = _prereq_cache.setdefault(g.lang, {"at": 0.0, "value": None, "gen": 0})
+        # A finished engine install makes "the engine is missing" wrong at once,
+        # not a minute later.
+        if (entry["value"] is None or now - entry["at"] > _PREREQ_TTL
+                or entry.get("gen") != engine_setup.generation):
             tools.reset_cache()  # notice a tool installed since the last look
             results = checks.run_all()
             blocking = checks.blocking_problems(results)
@@ -1711,6 +1763,7 @@ def create_app() -> Flask:
                 "ok": not blocking,
             }
             entry["at"] = now
+            entry["gen"] = engine_setup.generation
         return entry["value"]
 
     return app
