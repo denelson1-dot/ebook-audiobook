@@ -68,6 +68,14 @@ def _browser_host(host: str) -> str:
     return "127.0.0.1" if host in ("0.0.0.0", "", "::") else host
 
 
+def show_window(url: str) -> None:
+    """Show the app to someone who asked for it: the window that is already
+    open if there is one, a new one if not."""
+    if launcher.focus_existing_window():
+        return
+    open_window(url)
+
+
 def open_window(url: str) -> None:
     """Show the UI: an application window if we can, an ordinary tab if not."""
     if launcher.open_app_window(url):
@@ -299,7 +307,7 @@ def serve(host: str | None = None, port: int | None = None,
         if has_tray:
             # on_terminate is macOS-only (see tray.run): AppKit exits the
             # process straight after it, so the drain has to happen inside it.
-            tray.run(url, lambda: open_window(url), request_stop, _quit_label,
+            tray.run(url, lambda: show_window(url), request_stop, _quit_label,
                      on_terminate=lambda: (request_stop(), drain()))
         # Every pystray backend catches its own main-loop failures and returns
         # normally, so tray.run() returning tells us nothing about whether a

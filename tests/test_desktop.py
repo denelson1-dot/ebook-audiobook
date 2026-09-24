@@ -711,6 +711,48 @@ def test_relaunch_with_no_browser_still_declines_to_start_a_second_server(monkey
     assert opened == []
 
 
+def test_relaunch_brings_the_open_window_forward_instead_of_opening_another(monkeypatch):
+    """On Windows each relaunch stacked another identical --app window."""
+    from ebook_audiobook.desktop import launcher
+
+    monkeypatch.setattr(cli_runtime, "probe", lambda: "http://127.0.0.1:5005")
+    monkeypatch.setattr(launcher, "focus_existing_window", lambda: True)
+    opened, served = [], []
+    monkeypatch.setattr("ebook_audiobook.web.server.open_window", opened.append)
+    monkeypatch.setattr("ebook_audiobook.web.server.serve",
+                        lambda **kw: served.append(kw))
+
+    assert cli.cmd_web(_web_args(no_browser=False)) == 0
+    assert opened == [] and served == []
+
+
+@pytest.mark.parametrize("title, ours", [
+    ("Settings · ebook·audiobook", True),
+    ("The Count of Monte Cristo · ebook·audiobook", True),
+    ("ebook · audiobook", True),
+    ("denelson1-dot/ebook-audiobook: Turn ebooks you own into audiobooks", False),
+    ("Inbox - Outlook", False),
+])
+def test_the_app_window_is_recognised_by_its_title(title, ours):
+    from ebook_audiobook.desktop import launcher
+
+    assert launcher._is_app_title(title) is ours
+
+
+def test_focusing_an_existing_window_is_a_windows_only_idea(monkeypatch):
+    from ebook_audiobook.desktop import launcher
+
+    monkeypatch.setattr(launcher, "IS_WINDOWS", False)
+    assert launcher.focus_existing_window() is False
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Win32 window APIs")
+def test_looking_for_a_window_on_windows_never_raises():
+    from ebook_audiobook.desktop import launcher
+
+    assert launcher.focus_existing_window() in (True, False)
+
+
 def test_first_launch_starts_the_server(monkeypatch):
     monkeypatch.setattr(cli_runtime, "probe", lambda: None)
     served = []

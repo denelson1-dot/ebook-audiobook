@@ -19,6 +19,10 @@ while an RTX 3070 Ti takes 0.5. Task Manager showed the card idle.
   minute, or eight times its length in speech) is stopped. Narration carries
   on a step down, in compact mode or on the processor. The mode that stalled
   isn't tried again until the app restarts, and the book page says so.
+- **Opening the app while it's running brings its window forward** instead
+  of opening another one. On Windows, every click on the shortcut or the tray
+  icon stacked up another identical window. It now restores the one already
+  open, if it was minimised, and brings it to the front.
 - **The performance log shows more.** After loading and after every passage
   it records the card's free memory as the graphics driver reports it, and
   how often the engine hit its memory limit. It also reads the render
