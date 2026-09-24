@@ -203,9 +203,46 @@ jobs:
                     "$HOME/.local/bin/ebook-audiobook")
           "$VENV_PY" ci/assert_prereqs.py
 
+  # The Windows setup.exe, built from the same wheel this release publishes,
+  # and put through install, upgrade over the running app, and uninstall
+  # before it can ship. See packaging/windows and ci/windows_installer_check.py.
+  windows-setup:
+    name: Windows setup.exe
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: artifacts
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup did not install" }
+      - name: Build it
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem artifacts\dist\*.whl | Select-Object -First 1).FullName
+          python packaging\windows\build.py --wheel $wheel --out setup
+      - name: Install, upgrade over the running app, uninstall
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem setup\ebook-audiobook-setup-*.exe | Select-Object -First 1).FullName
+          python ci\windows_installer_check.py $setup
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup
+          path: setup/ebook-audiobook-setup-*.exe
+
   publish:
     name: Publish the release
-    needs: [build, verify-installers, verify-apple-silicon]
+    needs: [build, verify-installers, verify-apple-silicon, windows-setup]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -213,12 +250,22 @@ jobs:
         with:
           name: release-files
           path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-setup
+          path: setup
 
       - name: Assemble the assets
         run: |
           mkdir -p upload
           cp artifacts/dist/* upload/
           cp artifacts/out/install-macos-linux.sh artifacts/out/install-windows.ps1 upload/
+          # Twice: with its version, for people downloading by hand, and under a
+          # name that never changes, which releases/latest/download/ always finds
+          # (the in-app updater and the README link use that one).
+          cp setup/ebook-audiobook-setup-*.exe upload/
+          cp setup/ebook-audiobook-setup-*.exe upload/ebook-audiobook-setup.exe
+          (cd upload && sha256sum ebook-audiobook-setup*.exe >> SHA256SUMS.txt)
           ls -la upload/
 
       - name: Release notes
@@ -246,7 +293,7 @@ jobs:
 
           | Your computer | File |
           |---|---|
-          | **Windows** 10 / 11 (64-bit) | \`install-windows.ps1\` |
+          | **Windows** 10 / 11 (64-bit) | \`ebook-audiobook-setup-$VERSION.exe\`, or \`install-windows.ps1\` |
           | **macOS** — Apple Silicon (M1 and later) | \`install-macos-linux.sh\` |
           | **macOS** — Intel | \`install-macos-linux.sh\` — see the note below |
           | **Linux** — x86-64 or ARM64 | \`install-macos-linux.sh\` |
@@ -266,7 +313,14 @@ jobs:
           curl -fsSL https://github.com/$REPO/releases/download/v$VERSION/install-macos-linux.sh | bash
           \`\`\`
 
-          **Windows** (PowerShell)
+          **Windows**: download and run
+          [\`ebook-audiobook-setup-$VERSION.exe\`](https://github.com/$REPO/releases/download/v$VERSION/ebook-audiobook-setup-$VERSION.exe).
+          It installs like any Windows program (Add/Remove Programs, Start menu), with
+          its own Python, and no administrator rights. It isn't code-signed yet, so
+          Windows may say *Windows protected your PC*: choose **More info**, then
+          **Run anyway**. Once it's open, install the speech engine from Settings.
+
+          Or, from PowerShell:
           \`\`\`powershell
           irm https://github.com/$REPO/releases/download/v$VERSION/install-windows.ps1 | iex
           \`\`\`

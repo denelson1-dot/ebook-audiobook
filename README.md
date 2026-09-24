@@ -93,7 +93,19 @@ Nothing is installed system-wide and you don't need administrator rights.
 curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-macos-linux.sh | bash
 ```
 
-**Windows** — open PowerShell and run:
+**Windows** — download and run the installer:
+[**ebook-audiobook-setup.exe**](https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/ebook-audiobook-setup.exe)
+
+It installs like any Windows program: a wizard, a Start Menu entry, and an
+entry in *Settings → Apps* to uninstall it. It brings its own Python and needs
+no administrator rights. When it first opens, install the speech engine from
+**Settings → Speech engine** (about 2.5 GB for an NVIDIA card; it picks the
+right build for yours).
+
+The installer isn't code-signed yet, so Windows may say *Windows protected
+your PC*. Choose **More info**, then **Run anyway**.
+
+Prefer a terminal? This does the same from PowerShell, speech engine included:
 
 ```powershell
 irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1 | iex
@@ -172,6 +184,9 @@ Run with `--no-tray` to skip the tray deliberately.
 ```bash
 ebook-audiobook-uninstall            # macOS/Linux
 ```
+On Windows, if you used the installer: *Settings → Apps → ebook-audiobook →
+Uninstall*. It asks whether to delete your books and settings too; the answer
+it suggests is no. If you installed from PowerShell:
 ```powershell
 iex "& { $(irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1) } -Uninstall"
 ```

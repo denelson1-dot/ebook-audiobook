@@ -510,21 +510,21 @@ msgstr ""
 "Calibre n'est pas installé — c'est sa commande « ebook-convert » qui lit votre livre."
 " Installez Calibre, puis réessayez :"
 
-#: ebook_audiobook/update.py:120
+#: ebook_audiobook/update.py:124
 msgid "No published releases yet."
 msgstr "Aucune version publiée pour l'instant."
 
-#: ebook_audiobook/update.py:122
+#: ebook_audiobook/update.py:126
 #, python-format
 msgid "GitHub rate-limited the version check. Try again later, or see %(url)s"
 msgstr "GitHub a limité la vérification de version. Réessayez plus tard, ou consultez %(url)s"
 
-#: ebook_audiobook/update.py:123
+#: ebook_audiobook/update.py:127
 #, python-format
 msgid "GitHub returned HTTP %(code)s for the version check."
 msgstr "GitHub a répondu HTTP %(code)s à la vérification de version."
 
-#: ebook_audiobook/update.py:125
+#: ebook_audiobook/update.py:129
 #, python-format
 msgid ""
 "Couldn't reach GitHub to check for updates (%(e)s). You're offline, or a firewall is "
@@ -533,66 +533,70 @@ msgstr ""
 "Impossible de joindre GitHub pour vérifier les mises à jour (%(e)s). Vous êtes hors "
 "ligne, ou un pare-feu bloque."
 
-#: ebook_audiobook/update.py:128
+#: ebook_audiobook/update.py:132
 msgid "GitHub's reply wasn't valid JSON."
 msgstr "La réponse de GitHub n'était pas du JSON valide."
 
-#: ebook_audiobook/update.py:132
+#: ebook_audiobook/update.py:136
 msgid "GitHub's reply had no release tag."
 msgstr "La réponse de GitHub ne contenait pas de tag de version."
 
-#: ebook_audiobook/update.py:275
+#: ebook_audiobook/update.py:297
 msgid "The update didn't finish. To try again, run this in PowerShell:"
 msgstr "La mise à jour n'a pas abouti. Pour réessayer, lancez ceci dans PowerShell :"
 
-#: ebook_audiobook/update.py:284 ebook_audiobook/update.py:286
+#: ebook_audiobook/update.py:306 ebook_audiobook/update.py:308
 msgid "Updating ebook·audiobook"
 msgstr "Mise à jour d'ebook·audiobook"
 
-#: ebook_audiobook/update.py:287
+#: ebook_audiobook/update.py:309
 msgid "Keep this window open until the update finishes. Closing it stops the update partway."
 msgstr ""
 "Laissez cette fenêtre ouverte jusqu'à la fin de la mise à jour. La fermer "
 "l'interrompt en cours de route."
 
-#: ebook_audiobook/update.py:291
+#: ebook_audiobook/update.py:313
 msgid "Waiting for ebook·audiobook to close…"
 msgstr "En attente de la fermeture d'ebook·audiobook…"
 
-#: ebook_audiobook/update.py:318
+#: ebook_audiobook/update.py:334
+msgid "Downloading the update…"
+msgstr "Téléchargement de la mise à jour…"
+
+#: ebook_audiobook/update.py:367
 msgid "The update is installed."
 msgstr "La mise à jour est installée."
 
-#: ebook_audiobook/update.py:328
+#: ebook_audiobook/update.py:378
 msgid "Starting ebook·audiobook…"
 msgstr "Démarrage d'ebook·audiobook…"
 
-#: ebook_audiobook/update.py:336
+#: ebook_audiobook/update.py:386
 msgid "Press Enter to close this window"
 msgstr "Appuyez sur Entrée pour fermer cette fenêtre"
 
-#: ebook_audiobook/update.py:422
+#: ebook_audiobook/update.py:482
 msgid "Couldn't find PowerShell to run the installer."
 msgstr "Impossible de trouver PowerShell pour lancer l'installateur."
 
-#: ebook_audiobook/update.py:425
+#: ebook_audiobook/update.py:485
 #, python-format
 msgid "Couldn't start the installer: %(e)s"
 msgstr "Impossible de lancer l'installateur : %(e)s"
 
-#: ebook_audiobook/update.py:437
+#: ebook_audiobook/update.py:497
 #, python-format
 msgid "%(latest)s is available (you have %(current)s)."
 msgstr "La version %(latest)s est disponible (vous avez la %(current)s)."
 
-#: ebook_audiobook/update.py:443
+#: ebook_audiobook/update.py:503
 #, python-format
 msgid "You're on %(current)s, ahead of the latest release (%(latest)s) — an unreleased build."
 msgstr ""
 "Vous avez la %(current)s, plus récente que la dernière version publiée (%(latest)s) —"
 " une version de développement."
 
-#: ebook_audiobook/update.py:444
+#: ebook_audiobook/update.py:504
 #, python-format
 msgid "You're on the latest version (%(current)s)."
 msgstr "Vous avez la dernière version (%(current)s)."

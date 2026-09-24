@@ -97,7 +97,22 @@ des droits d'administrateur.
 curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-macos-linux.sh | bash
 ```
 
-**Windows** — ouvrez PowerShell et lancez :
+**Windows** — téléchargez et lancez l'installateur :
+[**ebook-audiobook-setup.exe**](https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/ebook-audiobook-setup.exe)
+
+Il s'installe comme n'importe quel programme Windows : un assistant, une entrée
+dans le menu Démarrer, et une autre dans *Paramètres → Applications* pour le
+désinstaller. Il apporte son propre Python et ne demande pas de droits
+d'administrateur. À la première ouverture, installez le moteur vocal depuis
+**Réglages → Moteur vocal** (environ 2,5 Go pour une carte NVIDIA ; il choisit
+la bonne version pour la vôtre).
+
+L'installateur n'est pas encore signé, donc Windows peut afficher
+*Windows a protégé votre ordinateur*. Choisissez **Informations complémentaires**,
+puis **Exécuter quand même**.
+
+Vous préférez un terminal ? Ceci fait la même chose depuis PowerShell, moteur
+vocal compris :
 
 ```powershell
 irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1 | iex
@@ -184,6 +199,10 @@ délibérément.
 ```bash
 ebook-audiobook-uninstall            # macOS/Linux
 ```
+Sous Windows, si vous avez utilisé l'installateur : *Paramètres →
+Applications → ebook-audiobook → Désinstaller*. Il demande s'il faut aussi
+supprimer vos livres et réglages ; la réponse proposée est non. Si vous l'avez
+installé depuis PowerShell :
 ```powershell
 iex "& { $(irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1) } -Uninstall"
 ```

@@ -51,6 +51,10 @@ LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 INSTALL_SH = f"https://github.com/{REPO}/releases/latest/download/install-macos-linux.sh"
 INSTALL_PS1 = f"https://github.com/{REPO}/releases/latest/download/install-windows.ps1"
+# The Windows setup.exe, under a name that doesn't change from release to
+# release, so "latest" always finds it (each release also carries a copy with
+# its version in the name, for people downloading it by hand).
+SETUP_EXE = f"https://github.com/{REPO}/releases/latest/download/ebook-audiobook-setup.exe"
 
 TIMEOUT_SECONDS = 10
 
@@ -134,8 +138,20 @@ def check(timeout: float = TIMEOUT_SECONDS) -> Release:
                    url=str(payload.get("html_url") or RELEASES_PAGE))
 
 
+def installed_by_setup() -> bool:
+    """Whether this copy came from the Windows setup.exe rather than the
+    PowerShell one-liner: its Python is ``<app>\\python``, with Inno Setup's
+    uninstaller beside that folder."""
+    prefix = Path(sys.prefix)
+    return (sys.platform.startswith("win") and prefix.name.lower() == "python"
+            and (prefix.parent / "unins000.exe").is_file())
+
+
 def install_command() -> str:
     """The command that upgrades this machine, for showing to the user."""
+    if installed_by_setup():
+        return (f"$f = \"$env:TEMP\\ebook-audiobook-setup.exe\"; "
+                f"Invoke-WebRequest -UseBasicParsing {SETUP_EXE} -OutFile $f; & $f")
     if sys.platform.startswith("win"):
         return f'irm {INSTALL_PS1} | iex'
     return f"curl -fsSL {INSTALL_SH} | bash"
@@ -250,7 +266,8 @@ def _ps_literal(text: str) -> str:
 
 def windows_update_script(*, wait_for: int | None, installer: str = INSTALL_PS1,
                           installer_args: Sequence[str] = (), relaunch: str = "",
-                          workdir: str = "") -> str:
+                          workdir: str = "", setup: str = "",
+                          relaunch_args: Sequence[str] = ()) -> str:
     """The PowerShell that finishes an update from outside the app.
 
     Waits for process *wait_for* to exit (closing it after
@@ -259,6 +276,11 @@ def windows_update_script(*, wait_for: int | None, installer: str = INSTALL_PS1,
     the installer succeeded, since an upgrade pip rolled back leaves the old
     copy working. *installer* is the URL of install-windows.ps1, or a local
     path to one (CI uses that to run this against the checkout's copy).
+
+    With *setup*, the URL of the Windows setup.exe, that is what runs instead:
+    downloaded with curl.exe (a progress bar, and retries on a flaky network)
+    and started with ``/SILENT``, which shows Inno Setup's own progress window
+    and no wizard pages. *relaunch_args* go with *relaunch*.
 
     The messages are translated here, in whatever language the caller is in,
     and travel inside the script: nothing on the command line to mangle.
@@ -304,15 +326,42 @@ def windows_update_script(*, wait_for: int | None, installer: str = INSTALL_PS1,
             # it go a moment later; the installer closes any that linger.
             "Start-Sleep -Seconds 1",
         ]
+    if setup:
+        lines += [
+            "$ok = $false",
+            "try {",
+            "    $setup = Join-Path $env:TEMP 'ebook-audiobook-setup.exe'",
+            f"    Write-Host {q(_('Downloading the update…'))}",
+            "    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {",
+            # curl draws its progress bar on stderr, which Windows PowerShell
+            # 5.1 would turn into an error under 'Stop'.
+            "        $ErrorActionPreference = 'Continue'",
+            f"        & curl.exe -fL --retry 5 --retry-delay 3 -o $setup {q(setup)}",
+            "        $code = $LASTEXITCODE",
+            "        $ErrorActionPreference = 'Stop'",
+            "        if ($code -ne 0) { throw \"curl exited $code\" }",
+            "    } else {",
+            f"        Invoke-WebRequest -UseBasicParsing -Uri {q(setup)} -OutFile $setup",
+            "    }",
+            "    $p = Start-Process -FilePath $setup -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru",
+            "    if ($p.ExitCode -ne 0) { throw \"setup exited $($p.ExitCode)\" }",
+            "    $ok = $true",
+            "} catch {",
+            '    Write-Host "error: $_" -ForegroundColor Red',
+            "}",
+        ]
+    else:
+        lines += [
+            "$ok = $false",
+            "try {",
+            f"    $text = {source}",
+            f"    & ([scriptblock]::Create($text)) {args}".rstrip(),
+            "    $ok = $true",
+            "} catch {",
+            f'    if ("$_" -ne {q(_INSTALL_STOPPED)}) {{ Write-Host "error: $_" -ForegroundColor Red }}',
+            "}",
+        ]
     lines += [
-        "$ok = $false",
-        "try {",
-        f"    $text = {source}",
-        f"    & ([scriptblock]::Create($text)) {args}".rstrip(),
-        "    $ok = $true",
-        "} catch {",
-        f'    if ("$_" -ne {q(_INSTALL_STOPPED)}) {{ Write-Host "error: $_" -ForegroundColor Red }}',
-        "}",
         "Write-Host ''",
         "if ($ok) {",
         f"    Write-Host {q(_('The update is installed.'))} -ForegroundColor Green",
@@ -322,11 +371,12 @@ def windows_update_script(*, wait_for: int | None, installer: str = INSTALL_PS1,
         "}",
     ]
     if relaunch:
+        arg_list = (" -ArgumentList " + ",".join(q(a) for a in relaunch_args)) if relaunch_args else ""
         lines += [
             f"$exe = {q(relaunch)}",
             "if (Test-Path -LiteralPath $exe) {",
             f"    Write-Host {q(_('Starting ebook·audiobook…'))}",
-            f"    try {{ Start-Process -FilePath $exe -WorkingDirectory {q(workdir or _install_folder(relaunch))} }} "
+            f"    try {{ Start-Process -FilePath $exe{arg_list} -WorkingDirectory {q(workdir or _install_folder(relaunch))} }} "
             'catch { Write-Host "  $_" -ForegroundColor Yellow }',
             "}",
         ]
@@ -397,16 +447,26 @@ def _powershell() -> str:
 
 
 def _start_windows_update(installer_args, relaunch, lang, installer) -> None:
-    install_dir, gui_exe = installed_layout()
-    workdir = install_dir or _install_folder(gui_exe)
-    args = list(installer_args)
-    if install_dir:
-        args += ["-InstallDir", install_dir]
-    if lang:
-        args += ["-Lang", lang]
-    script = windows_update_script(
-        wait_for=os.getpid(), installer=installer, installer_args=args,
-        relaunch=gui_exe if relaunch else "", workdir=workdir)
+    if installed_by_setup():
+        # A setup.exe install is updated by the next setup.exe, which knows
+        # this copy by its AppId and installs over it in place.
+        app = Path(sys.prefix).parent
+        workdir = str(app)
+        script = windows_update_script(
+            wait_for=os.getpid(), setup=SETUP_EXE,
+            relaunch=str(app / "python" / "pythonw.exe") if relaunch else "",
+            relaunch_args=["-m", "ebook_audiobook", "--gui"], workdir=workdir)
+    else:
+        install_dir, gui_exe = installed_layout()
+        workdir = install_dir or _install_folder(gui_exe)
+        args = list(installer_args)
+        if install_dir:
+            args += ["-InstallDir", install_dir]
+        if lang:
+            args += ["-Lang", lang]
+        script = windows_update_script(
+            wait_for=os.getpid(), installer=installer, installer_args=args,
+            relaunch=gui_exe if relaunch else "", workdir=workdir)
     cmd = [_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
            "-EncodedCommand", encode_command(script)]
     # Out of any job object this process is in, where the job allows it: the
