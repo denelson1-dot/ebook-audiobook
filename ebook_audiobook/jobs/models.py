@@ -192,6 +192,15 @@ class JobState:
     # few of a chapter's many segments, so the segment ratio would barely
     # move; this fills the bar honestly for the preview's own scope.
     preview_progress: float = 0.0
+    # The engine tier this book's audio is made with, "full" or "compact" (see
+    # ebook_audiobook.tiers). Set by its first narration of any kind and then
+    # kept, so a resumed render finds its cached audio even on a day the
+    # machine would choose differently. None until something has been narrated.
+    engine_tier: str | None = None
+    # Where the latest narration ran, for the job page: device, card name,
+    # tier, card size, and why it is below the card's best rung if it is. The
+    # shape is ChatterboxAdapter.runtime; None for an engine without one.
+    engine: dict | None = None
     messages: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:

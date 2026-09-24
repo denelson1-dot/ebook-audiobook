@@ -10,7 +10,9 @@ from .adapter import AudioClip, TTSAdapter, VoiceConfig
 from .fake import FakeAdapter
 
 
-def get_adapter(voice: VoiceSettings, sample_rate: int) -> TTSAdapter:
+def get_adapter(voice: VoiceSettings, sample_rate: int, tier: str | None = None) -> TTSAdapter:
+    """The engine for ``voice``. ``tier`` is the book's pinned tier, when it
+    has one (see ebook_audiobook.tiers); engines without tiers ignore it."""
     cfg = VoiceConfig(
         reference_clip=voice.reference_clip,
         exaggeration=voice.exaggeration,
@@ -29,7 +31,7 @@ def get_adapter(voice: VoiceSettings, sample_rate: int) -> TTSAdapter:
         # Imported lazily so torch is only required when actually rendering.
         from .chatterbox import ChatterboxAdapter
 
-        return ChatterboxAdapter(cfg)
+        return ChatterboxAdapter(cfg, tier=tier)
     raise ValueError(f"unknown TTS engine: {voice.engine!r}")
 
 

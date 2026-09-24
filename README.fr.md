@@ -540,6 +540,8 @@ est déjà narré reste en cache dans les deux cas.
 |---|---|
 | `EBAB_LANG` | Forcer la langue de l'interface (`en`, `fr`), avant le réglage et le navigateur |
 | `EBAB_DEVICE` | Forcer `cuda`, `mps` ou `cpu` au lieu du choix automatique |
+| `EBAB_VRAM_BUDGET_GB` | Limiter la mémoire graphique utilisée par le moteur, pour en laisser à autre chose (un budget plus petit choisit le mode compact, ou le processeur) |
+| `EBAB_DEBUG=1` | Tenir le journal de performances détaillé pendant cette exécution, comme l'option des Réglages |
 | `EBAB_DATA_ROOT` | Stocker toutes les données ailleurs que dans le dossier par défaut |
 | `EBAB_VERBOSE=1` | Afficher les barres de progression et avertissements du moteur |
 | `EBAB_PORT` / `EBAB_HOST` | Servir l'interface ailleurs que sur `127.0.0.1:5005` |

@@ -323,6 +323,13 @@ class JobStore:
     def segment_audio_path(self, segment_id: str) -> Path:
         return self.segments_dir / f"{segment_id}.wav"
 
+    def has_segment_audio(self) -> bool:
+        """Whether any narrated audio is cached for this book."""
+        try:
+            return any(self.segments_dir.glob("*.wav"))
+        except OSError:
+            return False
+
     def chapter_audio_path(self, chapter_id: str) -> Path:
         return self.chapters_audio_dir / f"{chapter_id}.wav"
 

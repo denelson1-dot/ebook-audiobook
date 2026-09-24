@@ -13,10 +13,10 @@ The three devices that matter, in preference order:
     CUDA API, so ``torch.cuda.is_available()`` is True on a Radeon and the only
     honest way to tell them apart is ``torch.version.hip``. Getting that wrong
     means telling an AMD user they have an NVIDIA card. Roughly 10x a CPU.
-    Chatterbox wants about 4 GB of VRAM; less than that still loads and then
-    dies partway through a long render, so the shortfall is reported up front
-    and :mod:`ebook_audiobook.tts.chatterbox` recovers by falling back to CPU
-    rather than losing the render.
+    Chatterbox at full precision wants about 4 GB of VRAM; less than that
+    still loads and then overflows partway through a passage. So the shortfall
+    is reported up front, and :mod:`ebook_audiobook.tiers` picks how to run
+    from the memory actually free: a compact half-precision model, or the CPU.
 
 ``mps``
     Apple Silicon (M1 and later) via Metal. Much faster than the CPU on the same
@@ -167,8 +167,8 @@ def _gpu_device(torch) -> Device | None:
     try:
         vram = torch.cuda.get_device_properties(0).total_memory
         if vram < MIN_VRAM_BYTES:
-            notes.append(_("only %(gb)s GB of VRAM; if it runs out mid-render the job "
-                           "continues on the CPU", gb=f"{vram / 1024**3:.1f}"))
+            notes.append(_("only %(gb)s GB of VRAM, so narration runs in a compact mode, "
+                           "or on the CPU if even that won't fit", gb=f"{vram / 1024**3:.1f}"))
     except Exception:  # noqa: BLE001 - VRAM is a nicety, not a requirement
         pass
     if is_rocm:
@@ -229,10 +229,14 @@ def _mps_device(torch) -> Device | None:
     return Device("mps", name, note, backend="Metal")
 
 
-def _cpu_device() -> Device:
+def cpu_name() -> str:
     import platform
 
-    name = platform.processor() or platform.machine() or "CPU"
+    return platform.processor() or platform.machine() or "CPU"
+
+
+def _cpu_device() -> Device:
+    name = cpu_name()
     return Device("cpu", name, _("much slower than a GPU — expect a long render"),
                   backend="cpu")
 

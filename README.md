@@ -503,6 +503,8 @@ stays cached either way.
 | Variable | Effect |
 |---|---|
 | `EBAB_DEVICE` | Force `cuda`, `mps`, or `cpu` instead of the automatic choice |
+| `EBAB_VRAM_BUDGET_GB` | Let the engine use at most this much graphics memory, to leave the rest free for something else (a smaller budget picks the compact mode, or the CPU) |
+| `EBAB_DEBUG=1` | Keep the detailed performance log for this run, as the switch in Settings does |
 | `EBAB_DATA_ROOT` | Put all stored data somewhere other than the default |
 | `EBAB_VERBOSE=1` | Show the engine's own progress bars and warnings |
 | `EBAB_PORT` / `EBAB_HOST` | Bind the web UI somewhere other than `127.0.0.1:5005` |

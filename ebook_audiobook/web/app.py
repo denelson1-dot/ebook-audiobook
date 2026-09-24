@@ -437,6 +437,7 @@ def create_app() -> Flask:
             "check_for_updates": s.check_for_updates,
             "auto_free_working_files": s.auto_free_working_files,
             "autoplay_preview": s.autoplay_preview,
+            "debug_log": s.debug_log,
             "color_scheme": color_scheme,
             "color_mode": color_mode,
             "app_version": _app_version(),
@@ -633,6 +634,8 @@ def create_app() -> Flask:
             s.autoplay_preview = request.form.get("autoplay_preview") == "1"
         if "auto_free_working_files" in request.form:
             s.auto_free_working_files = request.form.get("auto_free_working_files") == "1"
+        if "debug_log" in request.form:
+            s.debug_log = request.form.get("debug_log") == "1"
         if "language" in request.form:
             s.language = i18n.normalize(request.form.get("language"))
         if "color_scheme" in request.form:
@@ -658,6 +661,7 @@ def create_app() -> Flask:
                 "check_for_updates": s.check_for_updates,
                 "auto_free_working_files": s.auto_free_working_files,
                 "autoplay_preview": s.autoplay_preview,
+                "debug_log": s.debug_log,
                 "language": s.language,
                 "color_scheme": s.color_scheme,
                 "color_mode": s.color_mode}
@@ -877,14 +881,16 @@ def create_app() -> Flask:
 
     @app.get("/diagnostics")
     def diagnostics():
-        from .. import errorlog
+        from .. import debuglog, errorlog
 
         errorlog.prune()
+        debuglog.prune()
         found = errorlog.entries(limit=20)
         return {
             "ok": True,
             "log_path": str(errorlog.log_path()),
             "bytes": errorlog.total_bytes(),
+            "debug_bytes": debuglog.total_bytes(),
             "max_bytes": errorlog.MAX_BYTES * (errorlog.BACKUP_COUNT + 1),
             "max_age_days": errorlog.MAX_AGE_DAYS,
             "errors": [
@@ -907,9 +913,9 @@ def create_app() -> Flask:
 
     @app.post("/diagnostics/clear")
     def diagnostics_clear():
-        from .. import errorlog
+        from .. import debuglog, errorlog
 
-        return {"ok": True, "removed": errorlog.clear()}
+        return {"ok": True, "removed": errorlog.clear() + debuglog.clear()}
 
     @app.post("/settings/dismiss-setup")
     def settings_dismiss():

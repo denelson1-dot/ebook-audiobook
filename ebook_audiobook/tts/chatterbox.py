@@ -1,19 +1,27 @@
 """Chatterbox engine (Resemble AI). Primary narrator for real renders.
 
 All heavy imports are deferred to ``load()`` so importing this module (and thus
-the whole app) never requires torch. The model is loaded once and kept resident
-on the GPU for the life of the worker; segments are rendered one at a time.
+the whole app) never requires torch. The model is loaded once per task and kept
+resident on its device; segments are rendered one at a time.
+
+How it runs is chosen at load from what the machine has room for (see
+:mod:`ebook_audiobook.tiers`): full precision, a compact half-precision model,
+or the CPU. When the card runs out of memory it steps down a rung rather than
+losing the render.
 """
 
 from __future__ import annotations
 
 import contextlib
+import gc
 import logging
 import os
+import sys
+import time
 
 import numpy as np
 
-from .. import device, narration_langs, quiet
+from .. import debuglog, device, narration_langs, quiet, tiers
 from .adapter import AudioClip, TTSAdapter, VoiceConfig
 
 # Imported for its side effect: the engine's import-time noise is filtered out
@@ -43,65 +51,287 @@ def _quiet_io():
         yield
 
 
+# --- placing the model -------------------------------------------------------
+#
+# These reach into chatterbox-tts 0.1.7's internals (t3, s3gen, s3gen.flow,
+# s3gen.tokenizer, ve, conds). torchbuild pins that version exactly and CI loads
+# it for real, so a release that moved them would be caught there.
+
+_LEAN_CLASSES: dict = {}
+
+
+def _lean_class(cls: type) -> type:
+    """A subclass of S3Gen whose ``device`` follows its flow network.
+
+    Upstream reads S3Gen's device off its speech tokenizer, and every tensor of
+    a narration is put on that device. With the tokenizer moved to the CPU, that
+    would drag the whole decoder there too.
+    """
+    if getattr(cls, "_ebab_lean", False):
+        return cls
+    if cls not in _LEAN_CLASSES:
+        _LEAN_CLASSES[cls] = type(cls.__name__, (cls,), {
+            "_ebab_lean": True,
+            "device": property(lambda self: next(self.flow.parameters()).device),
+        })
+    return _LEAN_CLASSES[cls]
+
+
+def _offload_speech_tokenizer(model) -> None:
+    """Move the speech tokenizer (0.46 GB) off the card.
+
+    It turns the reference clip into speech tokens once, in
+    prepare_conditionals, and is never used while narrating, so moving it
+    afterwards changes nothing that is heard: the audio is bit-for-bit the
+    same, and 0.46 GB is often the difference between fitting and not.
+    """
+    s3gen = getattr(model, "s3gen", None)
+    if s3gen is None or not hasattr(s3gen, "tokenizer") or not hasattr(s3gen, "flow"):
+        return
+    s3gen.__class__ = _lean_class(type(s3gen))
+    s3gen.tokenizer.to("cpu")
+
+
+def _compact(model) -> None:
+    """Put the main model (T3) in bfloat16, about a gigabyte smaller.
+
+    Cast while it is still on the CPU, so the card never holds the
+    full-precision copy: loading straight onto a 3 GB card and casting there
+    runs out of memory before the cast. Autocast is scoped to T3 alone. Around
+    the whole of generate() it also casts S3Gen, whose cached bf16 weights then
+    cost back most of the saving, and S3Gen's flow in bf16 fails outright.
+    """
+    import torch
+
+    model.t3.to(dtype=torch.bfloat16)
+    run = model.t3.inference
+
+    def inference(*args, **kwargs):
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            return run(*args, **kwargs)
+
+    model.t3.inference = inference
+
+
+def _move(model, device_kind: str) -> None:
+    model.t3.to(device_kind)
+    model.s3gen.to(device_kind)
+    model.ve.to(device_kind)
+    if getattr(model, "conds", None) is not None:
+        model.conds = model.conds.to(device_kind)
+    model.device = device_kind
+
+
+def _say(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
 class ChatterboxAdapter(TTSAdapter):
-    def __init__(self, voice: VoiceConfig):
+    def __init__(self, voice: VoiceConfig, tier: str | None = None):
         super().__init__(voice)
         self._model = None
         self._model_sr: int | None = None
-        # Device the model is running on *now*. Can change mid-render if the GPU
-        # runs out of memory (see _fall_back_to_cpu).
-        self._device: str | None = None
-        # Device the model was originally loaded on. This — not _device — is what
-        # engine_version reports, so an out-of-memory fallback partway through a
+        # The book's pinned tier: what its cached audio is. None for a book
+        # that has never been narrated, which then takes whatever loads.
+        self._pin = tier if tier in tiers.TIERS else None
+        self._gpu: device.Device | None = None
+        self._probe: tiers.Probe | None = None
+        # Every way to run on this machine, best first (see tiers.ladder).
+        self._ladder: list[tiers.Rung] = []
+        # The rung running *now*. Moves down the ladder mid-render when the
+        # card runs out of memory (see _step_down).
+        self._rung: tiers.Rung | None = None
+        # Device and tier the model was first loaded with. These, not _rung,
+        # are what engine_version reports, so falling back partway through a
         # render doesn't change every segment's content hash and silently
         # invalidate hours of already-rendered audio.
         self._load_device: str | None = None
+        self._identity: str | None = None
         self._version: str | None = None
+        # Why this is running below a GPU machine's best rung, if it is:
+        # "no_room" (nothing fitted in the card's free memory) or "ran_out"
+        # (it ran out of memory, loading or narrating).
+        self.reason: str | None = None
+        # PyTorch's peak on the card during the last passage, for the debug log.
+        self.last_peak: int | None = None
 
     @property
     def engine_version(self) -> str:
-        # engine + model + device. Voice params are content-addressed separately
-        # via hashing.voice_key, so they don't need to be repeated here.
+        # engine + model + device + precision. Voice params are
+        # content-addressed separately via hashing.voice_key.
         return self._version or "chatterbox"
 
-    def _load_on(self, device_kind: str) -> None:
-        """Load (or reload) the model onto one specific device."""
-        with _quiet_io():
-            # Two models, one interface: the English weights the app has always
-            # used, and the multilingual ones for everything else. Chosen by the
-            # voice's language, so an English book never pays for the switch.
-            if self.voice.language == "en":
-                from chatterbox.tts import ChatterboxTTS as Model
-            else:
-                from chatterbox.mtl_tts import ChatterboxMultilingualTTS as Model
+    @property
+    def identity_tier(self) -> str | None:
+        """The tier this book's audio belongs to, for the job to pin."""
+        return self._identity
 
-            self._model = Model.from_pretrained(device=device_kind)
+    @property
+    def active_device(self) -> str | None:
+        """Device currently in use. May differ from the one in engine_version
+        after an out-of-memory fallback."""
+        return self._rung.device if self._rung else None
+
+    @property
+    def runtime(self) -> dict | None:
+        """Where narration is happening, for the job page."""
+        if self._rung is None:
+            return None
+        on_gpu = self._rung.device != "cpu" and self._gpu is not None
+        total = self._probe.total if self._probe else None
+        budget = self._probe.budget if self._probe else None
+        return {
+            "device": self._rung.device,
+            "name": self._gpu.name if on_gpu else device.cpu_name(),
+            "backend": self._gpu.backend if on_gpu else "cpu",
+            "tier": self._rung.tier,
+            "vram_gb": round(total / tiers.GiB, 1) if total else None,
+            # What the choice was made from: the card's free memory, less
+            # headroom, less any EBAB_VRAM_BUDGET_GB. Not the card's size: a
+            # big card that another program is using is short of room too.
+            "budget_gb": round(budget / tiers.GiB, 1) if budget else None,
+            "reason": self.reason,
+        }
+
+    # --- loading --------------------------------------------------------------
+
+    def _model_class(self):
+        # Two models, one interface: the English weights the app has always
+        # used, and the multilingual ones for everything else. Chosen by the
+        # voice's language, so an English book never pays for the switch.
+        if self.voice.language == "en":
+            from chatterbox.tts import ChatterboxTTS as Model
+        else:
+            from chatterbox.mtl_tts import ChatterboxMultilingualTTS as Model
+        return Model
+
+    def _checkpoint(self):
+        """The local copy of the weights, when it is complete.
+
+        Loaded from there directly, because from_pretrained asks Hugging Face
+        about every file on every load, even when all of it is on disk. On a
+        slow or captive network that alone could hold a render at "loading"
+        for minutes, in an app that promises to work offline.
+        """
+        pack = narration_langs.pack_for(self.voice.language)
+        if narration_langs.is_installed(pack.id):
+            return narration_langs.snapshot_dir()
+        return None
+
+    def _build(self, device_kind: str):
+        Model = self._model_class()
+        source = self._checkpoint()
+        if source is not None and hasattr(Model, "from_local"):
+            return Model.from_local(source, device_kind)
+        return Model.from_pretrained(device=device_kind)
+
+    def _cap_memory(self) -> None:
+        """Hold PyTorch to the budget the ladder was built from.
+
+        Without a cap, Windows' NVIDIA driver meets an overflow by borrowing
+        system RAM, and narration carries on at a crawl with no error for the
+        fallback to catch. With one, PyTorch refuses first, with an
+        out-of-memory error _generate knows what to do with.
+        """
+        fraction = tiers.fraction_for(self._probe) if self._probe else None
+        if fraction is None:
+            return
+        try:
+            import torch
+
+            torch.cuda.set_per_process_memory_fraction(fraction)
+        except Exception:  # noqa: BLE001 - without a cap, the old behaviour
+            pass
+
+    def _load_rung(self, rung: tiers.Rung) -> None:
+        """Load (or reload) the model onto one rung of the ladder."""
+        t0 = time.monotonic()
+        if rung.device == "cuda":
+            import torch
+
+            torch.cuda.reset_peak_memory_stats()
+        with _quiet_io():
+            if rung.tier == tiers.COMPACT:
+                model = self._build("cpu")
+                _compact(model)
+                _move(model, rung.device)
+            else:
+                model = self._build(rung.device)
+            # Held before the voice is prepared, so an out-of-memory there
+            # still lets _release free what is on the card.
+            self._model = model
             # Embed the reference voice ONCE here (not per chunk). Subsequent
             # generate() calls reuse self._model.conds, which is both faster and
             # more consistent than re-embedding the clip every segment. With no
             # reference clip, the model's built-in default voice is used.
             if self.voice.reference_clip:
-                self._model.prepare_conditionals(
+                model.prepare_conditionals(
                     self.voice.reference_clip, exaggeration=self.voice.exaggeration
                 )
-        self._device = device_kind
-        self._model_sr = int(getattr(self._model, "sr", 24_000))
+            if rung.device == "cuda":
+                _offload_speech_tokenizer(model)
+        if rung.device == "cuda":
+            device.empty_cache("cuda")
+        self._rung = rung
+        self._model_sr = int(getattr(model, "sr", 24_000))
+        fields = {"device": rung.device, "tier": rung.tier, "language": self.voice.language,
+                  "load_seconds": round(time.monotonic() - t0, 1)}
+        if rung.device == "cuda":
+            try:
+                import torch
+
+                fields["reserved_gb"] = round(torch.cuda.memory_reserved() / tiers.GiB, 2)
+                fields["load_peak_gb"] = round(torch.cuda.max_memory_reserved() / tiers.GiB, 2)
+            except Exception:  # noqa: BLE001
+                pass
+        debuglog.event("engine_loaded", **fields)
+
+    def _release(self) -> None:
+        """Drop the model and hand its memory back.
+
+        gc.collect() is not optional here: the compact wrapper closes over T3's
+        own method, a reference cycle that would otherwise hold a gigabyte on
+        the card until the collector happened to run.
+        """
+        self._model = None
+        gc.collect()
+        for kind in {self._rung.device if self._rung else None,
+                     self._probe.kind if self._probe else None} - {None}:
+            device.empty_cache(kind)
 
     def load(self) -> None:
         if self._model is not None:
             return
-        import sys
-
         _hush_loggers()
         dev = device.select_device()
+        self._gpu = dev
+        self._probe = tiers.probe(dev.kind)
+        self._ladder = tiers.ladder(self._probe, self._pin,
+                                    model=tiers.model_for(self.voice.language))
+        first = self._ladder[0]
+        if dev.kind == "cuda" and first.device == "cpu":
+            self.reason = "no_room"
+        debuglog.event(
+            "engine_plan", gpu=dev.describe(), pinned=self._pin,
+            free_gb=tiers.gb(self._probe.free), total_gb=tiers.gb(self._probe.total),
+            budget_gb=tiers.gb(self._probe.budget), bf16=self._probe.bf16,
+            capped_by_env=self._probe.capped_by_env,
+            ladder=[tiers.label(r) for r in self._ladder])
+
         # Progress bars are disabled, so give a heads-up: load is ~10s, and the
         # very first run also downloads the model from Hugging Face.
+        where = dev.describe() if first.device == dev.kind else f"{device.cpu_name()} (cpu)"
+        if first.tier == tiers.COMPACT:
+            where += (f", compact ({tiers.gb(self._probe.total)} GB card, "
+                      f"{tiers.gb(self._probe.free)} GB free)")
+        elif self.reason == "no_room":
+            where += f" (the {tiers.gb(self._probe.total)} GB card hasn't room for the model)"
         pack = narration_langs.pack_for(self.voice.language)
         if narration_langs.is_installed(pack.id):
-            print(f"loading TTS model on {dev.describe()}...", file=sys.stderr, flush=True)
+            _say(f"loading TTS model on {where}...")
         else:
-            print(f"loading TTS model on {dev.describe()} (first run downloads about "
-                  f"{pack.size_bytes / 1e9:.1f} GB)...", file=sys.stderr, flush=True)
+            _say(f"loading TTS model on {where} (first run downloads about "
+                 f"{pack.size_bytes / 1e9:.1f} GB)...")
         try:
             import chatterbox as _cb
 
@@ -109,21 +339,26 @@ class ChatterboxAdapter(TTSAdapter):
         except Exception:
             pkg_ver = "unknown"
 
-        try:
-            self._load_on(dev.kind)
-        except Exception as e:  # noqa: BLE001 - a GPU that can't hold the model
-            if dev.kind == "cpu" or not device.is_out_of_memory(e):
-                raise
-            # The card was detected but hasn't the memory to load the model at
-            # all. The CPU always can, so say what happened and use it rather
-            # than refusing to render.
-            print(f"  {dev.kind} ran out of memory loading the model — "
-                  f"continuing on the CPU (slower)", file=sys.stderr, flush=True)
-            self._model = None
-            device.empty_cache(dev.kind)
-            self._load_on("cpu")
+        self._cap_memory()
+        for i, rung in enumerate(self._ladder):
+            try:
+                self._load_rung(rung)
+                break
+            except Exception as e:  # noqa: BLE001 - a card that can't hold the model
+                below = self._ladder[i + 1] if i + 1 < len(self._ladder) else None
+                if below is None or not device.is_out_of_memory(e):
+                    raise
+                # Detected, but hasn't the memory to load this way. The rung
+                # below always has more room, and the CPU always can.
+                _say(f"  {tiers.label(rung)} ran out of memory loading the model — "
+                     f"trying {tiers.label(below)}")
+                debuglog.event("step_down", during="load", came_from=tiers.label(rung),
+                               to=tiers.label(below), error=str(e)[:300])
+                self.reason = "ran_out"
+                self._release()
 
-        self._load_device = self._device
+        self._load_device = self._rung.device
+        self._identity = tiers.identity(self._pin, self._rung)
         # The torch version belongs in here. engine_version is folded into every
         # segment's content hash, so without it a book half-rendered on one torch
         # would resume on another and splice two model stacks into a single
@@ -136,76 +371,76 @@ class ChatterboxAdapter(TTSAdapter):
         except Exception:  # noqa: BLE001
             torch_tag = "torch?"
         # The multilingual model is a different model, so its segments are
-        # different segments. The language itself is in the voice key.
+        # different segments. The language itself is in the voice key. Full
+        # precision adds nothing, so audio cached before tiers is still found.
         model = "chatterbox" if self.voice.language == "en" else "chatterbox-mtl"
-        self._version = f"{model}-{pkg_ver}-{torch_tag}-{self._load_device}"
+        self._version = (f"{model}-{pkg_ver}-{torch_tag}-{self._load_device}"
+                         f"{tiers.version_suffix(self._identity)}")
 
-    def _fall_back_to_cpu(self) -> bool:
-        """Move the model to the CPU after the GPU ran out of memory.
+    # --- running out of memory --------------------------------------------------
+
+    def _step_down(self, error: BaseException) -> bool:
+        """Carry on one rung down after the card ran out of memory.
 
         A long render is hours of work; losing all of it because one unusually
-        long segment wouldn't fit is a bad trade when the CPU can finish the job.
-        Returns False if we're already on the CPU (nothing left to fall back to).
+        long segment wouldn't fit is a bad trade when a smaller tier, or the
+        CPU, can finish the job. Returns False when there is nowhere lower.
         """
-        import sys
-
-        if self._device == "cpu":
+        if self._rung is None or self._rung not in self._ladder:
             return False
-        print(f"  {self._device} out of memory — moving the model to the CPU for "
-              f"the rest of this render (slower, same audio)",
-              file=sys.stderr, flush=True)
-        failed = self._device
-        self._model = None
-        device.empty_cache(failed)
-        self._load_on("cpu")
-        return True
-
-    @property
-    def active_device(self) -> str | None:
-        """Device currently in use — may differ from the one in engine_version
-        if an out-of-memory fallback happened."""
-        return self._device
+        below = self._ladder[self._ladder.index(self._rung) + 1:]
+        failed = self._rung
+        for rung in below:
+            _say(f"  {tiers.label(failed)} ran out of memory — continuing on "
+                 f"{tiers.label(rung)} for the rest of this render (same voice)")
+            debuglog.event("step_down", during="narrating", came_from=tiers.label(failed),
+                           to=tiers.label(rung), error=str(error)[:300])
+            self._release()
+            try:
+                self._load_rung(rung)
+            except Exception as e:  # noqa: BLE001
+                if rung.device == "cpu" or not device.is_out_of_memory(e):
+                    raise
+                failed, error = rung, e
+                continue
+            self.reason = "ran_out"
+            return True
+        return False
 
     def unload(self) -> None:
         if self._model is None:
             return
-        released = self._device
-        try:
-            del self._model
-        except Exception:  # noqa: BLE001
-            pass
-        self._model = None
-        if released:
-            device.empty_cache(released)
+        self._release()
 
     def _generate(self, text: str, gen_kwargs: dict):
-        """One generation, surviving a GPU that runs out of memory.
+        """One generation, surviving a card that runs out of memory.
 
         VRAM pressure is not constant across a book: a long paragraph, or a
         stretch the model decides to sample for longer, can exhaust a card that
-        rendered the previous thousand segments fine. Dropping three hours of
-        work at that point is the wrong answer, so an out-of-memory is retried
-        once with the cache flushed (which is usually enough — fragmentation
-        rather than a genuine shortfall), and only then does the model move to
-        the CPU for the rest of the render.
+        rendered the previous thousand segments fine. So an out-of-memory is
+        retried once with the cache flushed (usually enough: fragmentation
+        rather than a genuine shortfall), and only then does narration move a
+        rung down, which gets the same single retry.
         """
-        try:
-            with _quiet_io():
-                return self._model.generate(text, **gen_kwargs)
-        except Exception as e:  # noqa: BLE001 - only OOM is handled; rest re-raise
-            if not device.is_out_of_memory(e):
-                raise
-            device.empty_cache(self._device)
-
-        try:
-            with _quiet_io():
-                return self._model.generate(text, **gen_kwargs)
-        except Exception as e:  # noqa: BLE001
-            if not device.is_out_of_memory(e) or not self._fall_back_to_cpu():
-                raise
-
-        with _quiet_io():
-            return self._model.generate(text, **gen_kwargs)
+        retried = False
+        while True:
+            try:
+                with _quiet_io():
+                    return self._model.generate(text, **gen_kwargs)
+            except Exception as e:  # noqa: BLE001 - only OOM is handled; rest re-raise
+                if not device.is_out_of_memory(e):
+                    raise
+                # Without its traceback. The traceback's frames hold the failed
+                # passage's tensors, and while they live, emptying the cache
+                # frees nothing and the next tier loads into a full card.
+                failure = e.with_traceback(None)
+            if not retried:
+                retried = True
+                device.empty_cache(self._rung.device)
+                continue
+            if not self._step_down(failure):
+                raise failure
+            retried = False
 
     def synthesize(self, text: str) -> AudioClip:
         if self._model is None:
@@ -227,7 +462,12 @@ class ChatterboxAdapter(TTSAdapter):
         }
         if self.voice.language != "en":
             gen_kwargs["language_id"] = self.voice.language
+        if self.active_device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
         wav = self._generate(text, gen_kwargs)
+        # Read after, so a step-down to the CPU mid-passage reports nothing.
+        self.last_peak = (torch.cuda.max_memory_reserved()
+                          if self.active_device == "cuda" else None)
 
         # Normalize to mono float32 numpy.
         if hasattr(wav, "detach"):
