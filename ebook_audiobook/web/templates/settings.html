@@ -204,6 +204,13 @@
     <section class="panel">
       <div class="panel-head"><h3>{{ _("When something goes wrong") }}</h3></div>
       <div class="panel-body">
+        <label class="switch" style="margin-bottom:14px">
+          <input type="checkbox" id="debugLogCheck" {% if debug_log %}checked{% endif %}>
+          <span style="flex:1">
+            <b>{{ _("Keep a detailed performance log") }}</b>
+            <span>{{ _("Records which graphics card and mode each narration uses, and how long every passage takes, so slow narration can be explained. It stays on this computer and goes into the report. Leave it off unless you are looking into a problem.") }}</span>
+          </span>
+        </label>
         <div id="diagText" class="meta">{{ _("Loading…") }}</div>
         <p class="hint">{{ _("A report has your home folder replaced with <code>~</code> and book titles removed, so filing one does not publish your reading history.") }}</p>
         <div class="btn-row" style="margin-top:12px">
@@ -421,13 +428,16 @@ async function refreshDiagnostics() {
     const r = await fetch("/diagnostics");
     const d = await r.json();
     const kb = Math.round(d.bytes / 1024);
+    const perf = d.debug_bytes
+      ? " " + _("Performance log: %(kb)s KB.", { kb: Math.max(1, Math.round(d.debug_bytes / 1024)) })
+      : "";
     if (!d.errors.length) {
       el.textContent = _("No errors logged. (Log capped at %(kb)s KB, kept %(days)s days.)",
-                         { kb: Math.round(d.max_bytes / 1024), days: d.max_age_days });
+                         { kb: Math.round(d.max_bytes / 1024), days: d.max_age_days }) + perf;
       return;
     }
     // Error text quotes file names and parser output from the ebook itself.
-    el.innerHTML = _("<strong>%(n)s recent error(s)</strong>, log is %(kb)s KB:", { n: d.errors.length, kb }) + "<br>" +
+    el.innerHTML = _("<strong>%(n)s recent error(s)</strong>, log is %(kb)s KB:", { n: d.errors.length, kb }) + escapeHtml(perf) + "<br>" +
       d.errors.slice(0, 5).map((e) =>
         `<span class="mono">${escapeHtml(e.ts)} · ${escapeHtml(e.op)} · ${escapeHtml(e.error)}</span>`).join("<br>");
   } catch { el.textContent = _("Couldn't read the log."); }
@@ -455,6 +465,14 @@ document.getElementById("autoFreeCheck").addEventListener("change", async (e) =>
   toast(e.target.checked
     ? _("Finished books will clean up after themselves.")
     : _("Working files will be kept until you say otherwise."));
+});
+
+document.getElementById("debugLogCheck").addEventListener("change", async (e) => {
+  await postForm("/settings", { debug_log: e.target.checked ? "1" : "0" });
+  toast(e.target.checked
+    ? _("Narration will be logged in detail until you turn this off.")
+    : _("Detailed logging is off."));
+  refreshDiagnostics();
 });
 
 document.getElementById("autoplayCheck").addEventListener("change", async (e) => {

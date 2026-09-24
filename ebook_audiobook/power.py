@@ -261,6 +261,58 @@ def pace(profile: Profile, work_seconds: float) -> float:
     return nap
 
 
+def power_source() -> dict:
+    """Whether the machine is on mains power, and on Windows whether battery
+    saver is on; None where unknown. For the debug log: a laptop on battery can
+    render at a fraction of its plugged-in speed, and nothing on screen says so.
+    """
+    out: dict = {"on_mains": None, "battery_saver": None}
+    try:
+        if sys.platform == "win32":
+            class _Status(ctypes.Structure):
+                _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                            ("BatteryLifePercent", ctypes.c_ubyte),
+                            ("SystemStatusFlag", ctypes.c_ubyte),
+                            ("BatteryLifeTime", ctypes.c_ulong),
+                            ("BatteryFullLifeTime", ctypes.c_ulong)]
+
+            status = _Status()
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):  # type: ignore[attr-defined]
+                out["on_mains"] = {0: False, 1: True}.get(status.ACLineStatus)
+                out["battery_saver"] = bool(status.SystemStatusFlag & 1)
+        elif sys.platform.startswith("linux"):
+            from pathlib import Path
+
+            for supply in Path("/sys/class/power_supply").glob("*"):
+                if (supply / "type").read_text().strip() == "Mains":
+                    out["on_mains"] = (supply / "online").read_text().strip() == "1"
+                    break
+        elif sys.platform == "darwin":
+            import subprocess
+
+            text = subprocess.run(["pmset", "-g", "batt"], capture_output=True,
+                                  text=True, timeout=5).stdout
+            if "AC Power" in text:
+                out["on_mains"] = True
+            elif "Battery Power" in text:
+                out["on_mains"] = False
+    except Exception:  # noqa: BLE001 - a diagnostic nicety, never a failure
+        pass
+    return out
+
+
+def thread_priority() -> int | None:
+    """The calling thread's scheduling priority as the OS reports it: Windows'
+    thread priority (0 normal, -1 below normal), or the POSIX niceness."""
+    try:
+        if sys.platform == "win32":
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            return int(kernel32.GetThreadPriority(kernel32.GetCurrentThread()))
+        return os.getpriority(os.PRIO_PROCESS, 0)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def describe(mode: str | None) -> str:
     m = normalize_mode(mode)
     return f"{_(MODE_LABELS[m])} — {_(MODE_DESCRIPTIONS[m])}"

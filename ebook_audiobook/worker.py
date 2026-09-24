@@ -26,7 +26,7 @@ from typing import Callable
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-from . import config, power, settings, winfs
+from . import config, debuglog, power, settings, tiers, winfs
 from .audio.wav import is_valid_audio, read_wav, write_wav
 from .config import VoiceSettings, paths
 from .hashing import file_hash, segment_id, text_hash, voice_key
@@ -667,6 +667,61 @@ def _pick_preview_chapter(chapters: list[Chapter], preview_chapter_id: str | Non
     return chapters[0]
 
 
+def _engine_pin(store: JobStore) -> str | None:
+    """The tier to hold this book to (see :mod:`ebook_audiobook.tiers`).
+
+    Its own record when it has one. A book with cached audio and no record was
+    narrated before tiers existed, which means at full precision, so it is held
+    there and none of that audio has to be made again.
+    """
+    tier = store.load_state().engine_tier
+    if tier in tiers.TIERS:
+        return tier
+    return tiers.FULL if store.has_segment_audio() else None
+
+
+def _record_engine(store: JobStore, adapter) -> None:
+    """Pin a book to the tier it first loaded as, and note where it runs."""
+    st = store.load_state()
+    identity = getattr(adapter, "identity_tier", None)
+    if st.engine_tier is None and identity in tiers.TIERS:
+        st.engine_tier = identity
+    st.engine = getattr(adapter, "runtime", None)
+    store.save_state(st)
+
+
+def _log_start(job_id: str, kind: str, mode: str, applied: list[str]) -> None:
+    """The machine and the power mode, when the debug log is on. Never raises:
+    a diagnostic must not be the thing that stops a render."""
+    try:
+        if not debuglog.enabled():
+            return
+        fields = {**debuglog.environment(), "job": job_id, "what": kind,
+                  "power_mode": mode, "applied": applied,
+                  "thread_priority": power.thread_priority()}
+        debuglog.event("render_start", **fields)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _log_segment(job_id: str, kind: str, adapter, text: str, seconds: float,
+                 path: Path) -> None:
+    """One line per freshly narrated passage, when the debug log is on."""
+    try:
+        if not debuglog.enabled():
+            return
+        audio = _safe_duration(path)
+        runtime = getattr(adapter, "runtime", None) or {}
+        peak = getattr(adapter, "last_peak", None)
+        debuglog.event(
+            "segment", job=job_id, what=kind, chars=len(text), seconds=round(seconds, 2),
+            audio=round(audio, 2), work_per_audio=round(seconds / audio, 2) if audio else None,
+            device=runtime.get("device"), tier=runtime.get("tier"),
+            peak_gb=round(peak / tiers.GiB, 2) if peak else None)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def render_job(
     job_id: str,
     preview_max_seconds: float | None = None,
@@ -739,6 +794,7 @@ def render_job(
                     "loading voice model")
     st = store.load_state()
     st.error = None
+    st.engine = None  # until this run's model has loaded; see _record_engine
     if is_preview:
         # Reset progress up front, not after the model load — otherwise a
         # back-to-back preview shows the PREVIEWING stage with the *previous*
@@ -759,16 +815,20 @@ def render_job(
     if mode is None:
         mode = store.load_state().power_mode or settings.default_power_mode()
     pace_profile = power.profile_for(mode)
-    for note in power.apply(pace_profile):
+    applied = power.apply(pace_profile)
+    for note in applied:
         store.set_stage(Stage.PREVIEWING if is_preview else Stage.PREPARING, note)
+    kind = "preview" if is_preview else "render"
+    _log_start(job_id, kind, mode, applied)
 
-    adapter = get_adapter(voice, config.SAMPLE_RATE)
+    adapter = get_adapter(voice, config.SAMPLE_RATE, tier=_engine_pin(store))
     try:
         # Model load and segment building run INSIDE the try so any failure here
         # is recorded as an ERROR on the job. The web runner swallows exceptions,
         # so without this a failed load would leave the UI stuck forever on
         # "Preparing — loading voice model" with no reason shown.
         adapter.load()
+        _record_engine(store, adapter)
         vkey = voice_key(voice, config.SAMPLE_RATE)
         # User pronunciation fixes (e.g. "LOG" -> "log") are folded into segment
         # text here, so changing them re-renders only the affected segments.
@@ -831,6 +891,10 @@ def render_job(
                 work_seconds += seg_elapsed
                 seg.status = "done"
                 chars_done += len(seg.text)
+                # Current after every passage, so a step down to a smaller tier
+                # or the CPU partway through shows on the job page.
+                state.engine = getattr(adapter, "runtime", None)
+                _log_segment(job_id, kind, adapter, seg.text, seg_elapsed, path)
                 # Rest between segments so a long render leaves the machine
                 # usable and cool. No-op at full speed.
                 power.pace(pace_profile, seg_elapsed)
@@ -962,15 +1026,17 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
     st = store.load_state()
     st.preview_progress = 0.0
     st.error = None
+    st.engine = None  # until this run's model has loaded; see _record_engine
     store.save_state(st)
 
     mode = power_mode or store.load_state().power_mode or settings.default_power_mode()
     pace_profile = power.profile_for(mode)
-    power.apply(pace_profile)
+    _log_start(job_id, "measure", mode, power.apply(pace_profile))
 
-    adapter = get_adapter(voice, config.SAMPLE_RATE)
+    adapter = get_adapter(voice, config.SAMPLE_RATE, tier=_engine_pin(store))
     try:
         adapter.load()  # deliberately outside every timing below
+        _record_engine(store, adapter)
         vkey = voice_key(voice, config.SAMPLE_RATE)
         overrides = voice.extra.get("pron") or {}
         # The book's own language, not the voice's: chunking follows the script
@@ -1014,6 +1080,8 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
             if fresh:
                 _render_one(adapter, seg.text, path)
             elapsed = time.monotonic() - t0
+            if fresh:
+                _log_segment(job_id, "measure", adapter, seg.text, elapsed, path)
 
             if fresh and warmup_pending:
                 # The warm-up generation. Rendered and kept, but not counted.
@@ -1037,6 +1105,7 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
 
             st = store.load_state()
             st.preview_progress = min(1.0, audio_seconds / config.MEASURE_TARGET_AUDIO_SECONDS)
+            st.engine = getattr(adapter, "runtime", None)
             store.save_state(st)
             if progress:
                 progress(st)

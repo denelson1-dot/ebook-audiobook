@@ -9,6 +9,7 @@ that takes thirty hours instead of three.
 from __future__ import annotations
 
 import types
+from pathlib import Path
 
 import pytest
 
@@ -286,6 +287,33 @@ def test_the_dependency_command_repeats_the_pins():
     deps_cmd = tb.install_commands(tb.BUILDS["cu128"])[-1]
     assert f"torch=={tb.TORCH_PIN}" in deps_cmd
     assert "librosa==0.11.0" in deps_cmd
+
+
+def test_the_resolving_commands_keep_pips_conflict_list_off_screen():
+    """pip reports Chatterbox's deliberately unmet torch==2.6.0, gradio and
+    spacy-pkuseg after every install, in red and headed "ERROR:" (exit status
+    0). On Windows that read as a failed install."""
+    for cmd in tb.install_commands(tb.BUILDS["cu128"]):
+        if "--no-deps" not in cmd:
+            assert "--no-warn-conflicts" in cmd, cmd
+
+
+@pytest.mark.parametrize("script, pinned", [
+    ("install.ps1", "@pins"),
+    ("install.sh", '"torch==$TORCH_PIN"'),
+])
+def test_the_installers_keep_it_off_screen_too(script, pinned):
+    """They run their own copies of those commands, not install_commands()."""
+    root = Path(__file__).resolve().parents[1]
+    lines = [ln for ln in (root / script).read_text(encoding="utf-8").splitlines()
+             if "pip install" in ln and pinned in ln]
+    assert len(lines) == 2, lines
+    for ln in lines:
+        assert "--no-warn-conflicts" in ln, ln
+
+
+def test_everything_we_drop_is_expected_to_stay_unmet():
+    assert set(tb.FORBIDDEN_PACKAGES) <= set(tb.UNMET_ON_PURPOSE)
 
 
 def test_einops_is_in_the_curated_list():

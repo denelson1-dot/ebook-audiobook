@@ -831,6 +831,11 @@ if ($Update -and -not $HadEngine) {
         #    build back down.
         # 3. Chatterbox's dependencies, curated by us (see torchbuild.py), with
         #    the torch pins repeated so nothing there can replace the build.
+        #
+        # 1 and 3 pass --no-warn-conflicts. Chatterbox's own torch==2.6.0,
+        # gradio and spacy-pkuseg are unmet on purpose, and pip's check lists
+        # them after every install in red, headed "ERROR:", though it exits 0 -
+        # which reads as a failed install. CI checks that list instead.
         $cbPin  = Invoke-Native { & $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)" 2>$null }
         $cbDeps = Invoke-Native { & $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(' '.join(CHATTERBOX_DEPS))" 2>$null }
         if (-not $cbPin) { $cbPin = "chatterbox-tts" }
@@ -842,13 +847,13 @@ if ($Update -and -not $HadEngine) {
         # re-running after a failure doesn't fetch it again.
         $netArgs = @("--timeout", "60", "--retries", "10")
 
-        & $VenvPy -m pip install --quiet @netArgs @idxArgs @pins
+        & $VenvPy -m pip install --quiet --no-warn-conflicts @netArgs @idxArgs @pins
         if ($LASTEXITCODE -eq 0) {
             & $VenvPy -m pip install --quiet @netArgs --no-deps $cbPin
         }
         if ($LASTEXITCODE -eq 0) {
             $depList = @("$cbDeps" -split ' ' | Where-Object { $_ })
-            & $VenvPy -m pip install --quiet @netArgs @idxArgs @pins @depList
+            & $VenvPy -m pip install --quiet --no-warn-conflicts @netArgs @idxArgs @pins @depList
         }
         if ($LASTEXITCODE -ne 0) {
             Fail ("the speech engine failed to install. Re-run with -Cpu, or by hand:`n" +

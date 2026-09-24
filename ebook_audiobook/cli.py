@@ -85,6 +85,9 @@ def cmd_check(args) -> int:
     from . import settings as app_settings
 
     print(f"\nrender intensity: {power.describe(app_settings.default_power_mode())}")
+    plan = _engine_plan_lines()
+    if plan:
+        print("\n" + "\n".join(plan))
     problems = checks.blocking_problems(results)
     if problems:
         print(f"\n{len(problems)} problem(s) must be fixed before converting a book.")
@@ -148,11 +151,100 @@ def cmd_paths(args) -> int:
     return 0
 
 
+def _engine_plan_lines() -> list[str]:
+    """How the engine would run here: the card's memory and the rungs chosen
+    from it (see ebook_audiobook.tiers). Empty without torch."""
+    try:
+        import torch  # noqa: F401
+    except Exception:  # noqa: BLE001
+        return []
+    from . import device, tiers
+
+    dev = device.select_device()
+    probe = tiers.probe(dev.kind)
+    lines = []
+    if probe.kind == "cuda":
+        capped = f", capped by {tiers.BUDGET_ENV}" if probe.capped_by_env else ""
+        lines.append(f"card memory: {tiers.gb(probe.total)} GB, {tiers.gb(probe.free)} GB free; "
+                     f"the engine may use {tiers.gb(probe.budget)} GB{capped}; "
+                     f"bfloat16: {'yes' if probe.bf16 else 'no'}")
+    for model, name in ((tiers.ENGLISH, "English"), (tiers.MULTILINGUAL, "other languages")):
+        lines.append(f"narrating {name}: {tiers.describe_ladder(tiers.ladder(probe, model=model))}")
+    return lines
+
+
+_BENCH_TEXT = ("The harbour was already busy when the ship came round the point, and the "
+               "people on the quay pressed forward to see her colours, for the whole town "
+               "seemed to know that something had happened aboard during the voyage.")
+
+
+def cmd_diagnose(args) -> int:
+    """What the engine does on this machine, and with --bench, how fast."""
+    from . import debuglog, tiers
+
+    env = debuglog.environment()
+    print(f"ebook-audiobook {env['version']} · Python {env['python']} · {env['platform']} "
+          f"({env['machine']}, {env['cpus']} logical CPUs)")
+    torch_line = env.get("torch") or "not installed"
+    if env.get("cuda"):
+        torch_line += f" (CUDA {env['cuda']})"
+    elif env.get("hip"):
+        torch_line += f" (ROCm {env['hip']})"
+    print(f"torch: {torch_line}")
+    print(f"device: {env.get('device')}")
+    for line in _engine_plan_lines():
+        print(line)
+    mains = {True: "yes", False: "NO, on battery", None: "unknown"}[env.get("on_mains")]
+    saver = {True: "ON", False: "off", None: "unknown"}[env.get("battery_saver")]
+    print(f"plugged in: {mains} · battery saver: {saver}")
+    print(f"render intensity: {power.describe(env.get('default_power_mode'))}")
+    state = "on" if debuglog.enabled() else "off"
+    print(f"performance log: {state} ({debuglog.log_path()})")
+    if not args.bench:
+        print("\nTime a passage with: ebook-audiobook diagnose --bench "
+              "(quit the app first if its card is small)")
+        return 0
+
+    from . import settings as app_settings
+    from .tts.adapter import VoiceConfig
+    from .tts.chatterbox import ChatterboxAdapter
+
+    print("\nloading the English model as a render would...")
+    adapter = ChatterboxAdapter(VoiceConfig(language="en"))
+    t0 = time.monotonic()
+    adapter.load()
+    rt = adapter.runtime or {}
+    where = f"{rt.get('name')} ({rt.get('device')}, {rt.get('tier')})"
+    if rt.get("reason"):
+        where += f" because {'nothing fitted on the card' if rt['reason'] == 'no_room' else 'the card ran out of memory'}"
+    print(f"loaded on {where} in {time.monotonic() - t0:.0f} s")
+
+    def timed(label: str) -> float:
+        t = time.monotonic()
+        clip = adapter.synthesize(_BENCH_TEXT)
+        took = time.monotonic() - t
+        audio = len(clip.samples) / clip.sample_rate
+        peak = f", card peak {adapter.last_peak / tiers.GiB:.2f} GB" if adapter.last_peak else ""
+        print(f"  {label:40s} {took:5.1f} s of work for {audio:4.1f} s of audio = {took / audio:.2f}{peak}")
+        return took / audio
+
+    print("seconds of work per second of audio (lower is faster):")
+    timed("warm-up, not counted")
+    base = timed("full speed")
+    mode = power.normalize_mode(app_settings.default_power_mode())
+    if mode != power.MODE_FULL:
+        notes = power.apply(power.profile_for(mode))
+        slow = timed(f"as {mode} ({'; '.join(notes) or 'nothing applied'})")
+        print(f"  -> {mode} costs {slow / base:.1f}x on this machine")
+    adapter.unload()
+    return 0
+
+
 def cmd_logs(args) -> int:
-    from . import errorlog
+    from . import debuglog, errorlog
 
     if args.clear:
-        n = errorlog.clear()
+        n = errorlog.clear() + debuglog.clear()
         print(f"cleared {n} log file{'s' if n != 1 else ''}")
         return 0
     if args.path:
@@ -594,6 +686,11 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--path", action="store_true", help="print the log file path only")
     c.add_argument("--clear", action="store_true", help="delete the logs")
     c.set_defaults(func=cmd_logs)
+
+    c = sub.add_parser("diagnose", help="how the speech engine runs on this machine")
+    c.add_argument("--bench", action="store_true",
+                   help="also load the engine and time a passage (about a minute)")
+    c.set_defaults(func=cmd_diagnose)
 
     c = sub.add_parser("report", help="a Markdown bug report for the recent errors")
     c.add_argument("--limit", type=int, default=3, help="how many errors to include")

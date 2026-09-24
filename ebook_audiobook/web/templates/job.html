@@ -41,6 +41,7 @@
   </div>
   <div class="progress tall" style="margin-top:14px"><span id="bar"></span></div>
   <div class="meta" id="remainingText" style="display:none;margin-top:10px"></div>
+  <div class="meta" id="engineText" style="display:none;margin-top:6px"></div>
   <div class="meta" id="finishedText" style="margin-top:8px">{% if state.finished_at %}{{ _("Finished %(when)s · %(size)s", when=state.finished_at|dt, size=state.output_bytes|humanbytes) }}{% endif %}</div>
   <div id="errorText" class="meta" style="color:var(--danger);margin-top:8px">{% if state.error %}{{ state.error }}{% endif %}</div>
   <div id="resultLinks" style="margin-top:14px"></div>
@@ -940,6 +941,34 @@ function updateRemaining(s) {
   el.textContent = etaText; el.style.display = "";
 }
 
+// Where narration is running, while it runs. Most of all it says when that is
+// not the graphics card, or not all of it, and why: a render on the processor
+// takes ten times as long, and nothing else on screen would explain that.
+function engineLine(e) {
+  if (!e) return "";
+  if (e.device === "cpu") {
+    if (e.reason === "ran_out") return _("Narrating on the processor: the graphics card ran out of memory.");
+    if (e.reason === "no_room") return _("Narrating on the processor: the graphics card hasn't enough free memory for the voice model.");
+    return _("Narrating on the processor.");
+  }
+  if (e.tier === "compact") {
+    if (e.reason === "ran_out") return _("Narrating on %(gpu)s in compact mode, after it ran out of memory at full precision.", { gpu: e.name });
+    // The memory the choice was made from, not the card's size: a big card
+    // that another program is using is short of room too.
+    const gb = e.budget_gb
+      ? Number(e.budget_gb).toLocaleString(window.EBAB_LANG || undefined, { maximumFractionDigits: 1 })
+      : "?";
+    return _("Narrating on %(gpu)s in compact mode, to fit the %(gb)s GB of memory available to it.", { gpu: e.name, gb });
+  }
+  return _("Narrating on %(gpu)s.", { gpu: e.name });
+}
+function updateEngine(s, working) {
+  const el = document.getElementById("engineText");
+  const text = working ? engineLine(s.engine) : "";
+  el.textContent = text;
+  el.style.display = text ? "" : "none";
+}
+
 // Whatever happens inside one poll, the next one is scheduled: a single
 // exception in the DOM work below must not leave the page frozen with a
 // progress bar that never moves and buttons that never come back.
@@ -998,6 +1027,7 @@ async function pollOnce() {
   bar.style.width = determinate ? (100 * frac) + "%" : indeterminate ? "100%" : "0%";
   document.getElementById("errorText").textContent = s.error || "";
   updateRemaining(s);
+  updateEngine(s, working);
 
   document.getElementById("previewStop").style.display = (s.stage === "previewing") ? "" : "none";
   document.getElementById("renderStop").style.display = RENDER_STOPPABLE.has(s.stage) ? "" : "none";

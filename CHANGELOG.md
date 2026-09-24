@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.6.0 — 2026-09-24
+
+Narration that fits the graphics card it's on. On a laptop with a 4 GB card,
+the voice model loaded, overflowed partway through the first passage, and
+Windows quietly borrowed system RAM for the rest: a preview could run for ten
+minutes without finishing, with the graphics card sitting idle and nothing
+saying why.
+
+- **The engine picks how to run from the card's free memory.** Full
+  precision when there is room; otherwise a **compact** mode with the main
+  model at half precision, about a gigabyte smaller and roughly 15% slower,
+  in the same voice; otherwise the processor. The engine is held to that
+  budget, so running out is now an error it handles: it steps down (full,
+  then compact, then the processor) and carries on, instead of crawling.
+- **A 0.46 GB saving that changes nothing you hear.** The part of the model
+  that reads the voice clip leaves the card once it has done so.
+- **A book keeps the mode it started with.** Resuming on a day the card is
+  busier reuses everything already narrated. Books narrated before 1.6.0
+  carry on at full precision, so none of their audio is made again.
+- **Loading no longer asks the internet.** An installed model was checked
+  against Hugging Face on every load, which on a slow or captive network could
+  hold a preview at "loading" by itself.
+- **The book page says where narration is running**, and why when that is
+  not the whole graphics card: compact mode, or the processor after the card
+  ran out of memory.
+- **An optional performance log** (Settings, under "When something goes
+  wrong", or `EBAB_DEBUG=1`) records the card, the mode chosen and why, how
+  long each passage took, the power mode and whether the machine is plugged
+  in. It stays on the computer and goes into the downloadable report. Off by
+  default.
+- **`ebook-audiobook diagnose`** shows the plan for this machine;
+  `--bench` times a passage at full speed and under the saved power mode.
+- **`EBAB_VRAM_BUDGET_GB`** limits how much of the card the engine may use.
+- **The installer's speech-engine step stops printing `ERROR` in red.** pip
+  listed the requirements the installer sets aside on purpose (Chatterbox's
+  own torch 2.6.0, gradio, spacy-pkuseg) after every successful install. CI
+  now checks that list instead.
+
 ## 1.5.2 — 2026-09-24
 
 The app's own "Install update", made safe on Windows and made to work at all

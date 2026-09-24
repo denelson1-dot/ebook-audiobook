@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.5.2\n"
+"Project-Id-Version: ebook-audiobook 1.6.0\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-07 12:36-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -200,10 +200,12 @@ msgstr "%(device)s — %(note)s"
 
 #: ebook_audiobook/device.py:170
 #, python-format
-msgid "only %(gb)s GB of VRAM; if it runs out mid-render the job continues on the CPU"
+msgid ""
+"only %(gb)s GB of VRAM, so narration runs in a compact mode, or on the CPU if even "
+"that won't fit"
 msgstr ""
-"solo %(gb)s GB de VRAM; si se agota durante la generación, el trabajo continúa en la "
-"CPU"
+"solo %(gb)s GB de VRAM, así que la narración usa un modo compacto, o la CPU si ni así"
+" cabe"
 
 #: ebook_audiobook/device.py:179
 #, python-format
@@ -232,15 +234,15 @@ msgstr ""
 "El respaldo de CPU de Metal está desactivado, así que una operación no admitida "
 "podría detener la generación; define PYTORCH_ENABLE_MPS_FALLBACK=1"
 
-#: ebook_audiobook/device.py:236
+#: ebook_audiobook/device.py:240
 msgid "much slower than a GPU — expect a long render"
 msgstr "mucho más lento que una GPU — la generación tardará bastante"
 
-#: ebook_audiobook/device.py:250
+#: ebook_audiobook/device.py:254
 msgid "PyTorch isn't installed, so nothing can render yet"
 msgstr "PyTorch no está instalado, así que todavía no se puede generar nada"
 
-#: ebook_audiobook/device.py:262
+#: ebook_audiobook/device.py:266
 #, python-format
 msgid ""
 "%(env)s=%(forced)s was requested but no usable %(forced)s device was found, so this "
@@ -249,7 +251,7 @@ msgstr ""
 "Se pidió %(env)s=%(forced)s pero no se encontró ningún dispositivo %(forced)s "
 "utilizable, así que esto se ejecuta en la CPU"
 
-#: ebook_audiobook/device.py:271
+#: ebook_audiobook/device.py:275
 #, python-format
 msgid "%(env)s=%(forced)s isn't one of %(valid)s — ignored"
 msgstr "%(env)s=%(forced)s no es uno de %(valid)s — se ignora"
@@ -397,7 +399,7 @@ msgstr ""
 msgid "%(gb)s GB"
 msgstr "%(gb)s GB"
 
-#: ebook_audiobook/narration_langs.py:318 ebook_audiobook/web/app.py:1505
+#: ebook_audiobook/narration_langs.py:318 ebook_audiobook/web/app.py:1511
 msgid ""
 "The speech engine isn't installed, so there is nothing to add a language to. Install "
 "it first (re-run the installer)."
@@ -747,7 +749,7 @@ msgstr "Importado"
 msgid "Reading the book"
 msgstr "Leyendo el libro"
 
-#: ebook_audiobook/jobs/models.py:46 ebook_audiobook/web/templates/job.html:613
+#: ebook_audiobook/jobs/models.py:46 ebook_audiobook/web/templates/job.html:614
 msgid "Ready to narrate"
 msgstr "Listo para narrar"
 
@@ -783,33 +785,33 @@ msgstr "Detenido por un problema"
 msgid "Stopped by you"
 msgstr "Detenido por ti"
 
-#: ebook_audiobook/web/app.py:724
+#: ebook_audiobook/web/app.py:728
 msgid "That request didn't come from this app."
 msgstr "Esa petición no viene de esta aplicación."
 
-#: ebook_audiobook/web/app.py:727
+#: ebook_audiobook/web/app.py:731
 msgid "Update checks are turned off."
 msgstr "La búsqueda de actualizaciones está desactivada."
 
-#: ebook_audiobook/web/app.py:729
+#: ebook_audiobook/web/app.py:733
 msgid "There is no newer release to install."
 msgstr "No hay ninguna versión más reciente que instalar."
 
-#: ebook_audiobook/web/app.py:732 ebook_audiobook/web/app.py:1179
-#: ebook_audiobook/web/app.py:1508 ebook_audiobook/web/app.py:1532
+#: ebook_audiobook/web/app.py:736 ebook_audiobook/web/app.py:1185
+#: ebook_audiobook/web/app.py:1514 ebook_audiobook/web/app.py:1538
 msgid "Something else is running."
 msgstr "Hay otra cosa en marcha."
 
-#: ebook_audiobook/web/app.py:750
+#: ebook_audiobook/web/app.py:754
 #, python-format
 msgid "Quit ebook·audiobook, then run this in PowerShell: %(command)s"
 msgstr "Cierra ebook·audiobook y luego ejecuta esto en PowerShell: %(command)s"
 
-#: ebook_audiobook/web/app.py:754
+#: ebook_audiobook/web/app.py:758
 msgid "The update has already started."
 msgstr "La actualización ya ha empezado."
 
-#: ebook_audiobook/web/app.py:1056
+#: ebook_audiobook/web/app.py:1062
 #, python-format
 msgid ""
 "Couldn't save the uploaded file — is the disk full?\n"
@@ -820,11 +822,11 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:1062
+#: ebook_audiobook/web/app.py:1068
 msgid "Choose an ebook file first."
 msgstr "Elige primero un archivo de libro."
 
-#: ebook_audiobook/web/app.py:1066
+#: ebook_audiobook/web/app.py:1072
 #, python-format
 msgid ""
 "That file no longer exists:\n"
@@ -833,7 +835,7 @@ msgstr ""
 "Ese archivo ya no existe:\n"
 "%(path)s"
 
-#: ebook_audiobook/web/app.py:1072
+#: ebook_audiobook/web/app.py:1078
 #, python-format
 msgid ""
 "Couldn't import that book:\n"
@@ -844,60 +846,60 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:1129 ebook_audiobook/web/app.py:1149
-#: ebook_audiobook/web/app.py:1194 ebook_audiobook/web/app.py:1290
+#: ebook_audiobook/web/app.py:1135 ebook_audiobook/web/app.py:1155
+#: ebook_audiobook/web/app.py:1200 ebook_audiobook/web/app.py:1296
 msgid "Already working on this book — stop it first."
 msgstr "Ya se está trabajando en este libro — detenlo primero."
 
-#: ebook_audiobook/web/app.py:1132
+#: ebook_audiobook/web/app.py:1138
 msgid "That isn't a language this can narrate."
 msgstr "Ese no es un idioma que se pueda narrar."
 
-#: ebook_audiobook/web/app.py:1177
+#: ebook_audiobook/web/app.py:1183
 msgid "The book hasn't been read yet."
 msgstr "El libro todavía no se ha leído."
 
-#: ebook_audiobook/web/app.py:1196
+#: ebook_audiobook/web/app.py:1202
 msgid "Select at least one section to render."
 msgstr "Selecciona al menos una sección para generar."
 
-#: ebook_audiobook/web/app.py:1364
+#: ebook_audiobook/web/app.py:1370
 msgid "That folder doesn't exist yet."
 msgstr "Esa carpeta todavía no existe."
 
-#: ebook_audiobook/web/app.py:1366
+#: ebook_audiobook/web/app.py:1372
 msgid "Couldn't open a file manager on this system."
 msgstr "No se pudo abrir un gestor de archivos en este sistema."
 
-#: ebook_audiobook/web/app.py:1466
+#: ebook_audiobook/web/app.py:1472
 msgid "Give the voice a name."
 msgstr "Ponle un nombre a la voz."
 
-#: ebook_audiobook/web/app.py:1472
+#: ebook_audiobook/web/app.py:1478
 msgid "That isn't an audio format this can read."
 msgstr "Ese no es un formato de audio que se pueda leer."
 
-#: ebook_audiobook/web/app.py:1479
+#: ebook_audiobook/web/app.py:1485
 msgid "Choose a clip first."
 msgstr "Elige primero un clip."
 
-#: ebook_audiobook/web/app.py:1483
+#: ebook_audiobook/web/app.py:1489
 #, python-format
 msgid "Couldn't add that voice: %(e)s"
 msgstr "No se pudo añadir esa voz: %(e)s"
 
-#: ebook_audiobook/web/app.py:1502 ebook_audiobook/web/app.py:1530
+#: ebook_audiobook/web/app.py:1508 ebook_audiobook/web/app.py:1536
 msgid "No such language model."
 msgstr "No existe ese modelo de idioma."
 
-#: ebook_audiobook/web/app.py:1514
+#: ebook_audiobook/web/app.py:1520
 #, python-format
 msgid "Not enough free space where the model cache lives: about %(size)s is needed."
 msgstr ""
 "No hay espacio suficiente donde se guarda la caché de modelos: hacen falta unos "
 "%(size)s."
 
-#: ebook_audiobook/web/app.py:1581
+#: ebook_audiobook/web/app.py:1587
 msgid "Narrating in this language needs its model. Install it in Settings."
 msgstr "Narrar en este idioma requiere su modelo. Instálalo en Ajustes."
 
@@ -909,7 +911,7 @@ msgstr "Salir — detiene la generación en curso"
 msgid "Couldn't reach the app"
 msgstr "No se pudo contactar con la aplicación"
 
-#: ebook_audiobook/web/static/app.js:116 ebook_audiobook/web/templates/job.html:275
+#: ebook_audiobook/web/static/app.js:116 ebook_audiobook/web/templates/job.html:276
 msgid "Delete"
 msgstr "Eliminar"
 
@@ -944,8 +946,8 @@ msgstr "%(h)s h %(m)s min"
 msgid "%(h)sh"
 msgstr "%(h)s h"
 
-#: ebook_audiobook/web/static/app.js:182 ebook_audiobook/web/templates/job.html:78
-#: ebook_audiobook/web/templates/job.html:540 ebook_audiobook/web/templates/job.html:757
+#: ebook_audiobook/web/static/app.js:182 ebook_audiobook/web/templates/job.html:79
+#: ebook_audiobook/web/templates/job.html:541 ebook_audiobook/web/templates/job.html:758
 #, python-format
 msgid "%(n)s min"
 msgstr "%(n)s min"
@@ -1027,7 +1029,7 @@ msgstr[1] ""
 "Restos de %(n)s libros ya terminados, o de los que solo se hizo una vista previa. "
 "Borrarlos no cambia nada de lo que puedes oír."
 
-#: ebook_audiobook/web/static/app.js:455 ebook_audiobook/web/templates/job.html:707
+#: ebook_audiobook/web/static/app.js:455 ebook_audiobook/web/templates/job.html:708
 #: ebook_audiobook/web/templates/library.html:247
 msgid "Stopping…"
 msgstr "Deteniendo…"
@@ -1041,7 +1043,7 @@ msgid "Confirm"
 msgstr "Confirmar"
 
 #: ebook_audiobook/web/static/app.js:260 ebook_audiobook/web/static/app.js:294
-#: ebook_audiobook/web/templates/settings.html:341
+#: ebook_audiobook/web/templates/settings.html:348
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -1177,7 +1179,7 @@ msgstr "se pueden borrar"
 msgid "Left behind by books you have already finished."
 msgstr "Restos de libros que ya has terminado."
 
-#: ebook_audiobook/web/templates/base.html:240 ebook_audiobook/web/templates/job.html:328
+#: ebook_audiobook/web/templates/base.html:240 ebook_audiobook/web/templates/job.html:329
 #: ebook_audiobook/web/templates/library.html:136
 msgid "Stop"
 msgstr "Detener"
@@ -1329,7 +1331,7 @@ msgid "Update didn't install"
 msgstr "La actualización no se instaló"
 
 #: ebook_audiobook/web/templates/base.html:400 ebook_audiobook/web/templates/base.html:438
-#: ebook_audiobook/web/templates/job.html:439
+#: ebook_audiobook/web/templates/job.html:440
 msgid "Starting…"
 msgstr "Iniciando…"
 
@@ -1444,20 +1446,20 @@ msgstr "Unir los capítulos"
 msgid "Package"
 msgstr "Empaquetar"
 
-#: ebook_audiobook/web/templates/job.html:44
+#: ebook_audiobook/web/templates/job.html:45
 #, python-format
 msgid "Finished %(when)s · %(size)s"
 msgstr "Terminado %(when)s · %(size)s"
 
-#: ebook_audiobook/web/templates/job.html:54
+#: ebook_audiobook/web/templates/job.html:55
 msgid "What gets narrated"
 msgstr "Qué se narra"
 
-#: ebook_audiobook/web/templates/job.html:57
+#: ebook_audiobook/web/templates/job.html:58
 msgid "All"
 msgstr "Todo"
 
-#: ebook_audiobook/web/templates/job.html:64
+#: ebook_audiobook/web/templates/job.html:65
 msgid ""
 "Copyright pages, contents and acknowledgements are switched off to begin with — "
 "nobody wants four minutes of ISBN read aloud. Click a title to read its first lines "
@@ -1467,36 +1469,36 @@ msgstr ""
 "quiere cuatro minutos de ISBN leídos en voz alta. Pulsa un título para leer sus "
 "primeras líneas y decidir por ti mismo."
 
-#: ebook_audiobook/web/templates/job.html:75 ebook_audiobook/web/templates/job.html:756
+#: ebook_audiobook/web/templates/job.html:76 ebook_audiobook/web/templates/job.html:757
 msgid "added by the app"
 msgstr "añadido por la aplicación"
 
-#: ebook_audiobook/web/templates/job.html:78 ebook_audiobook/web/templates/job.html:540
-#: ebook_audiobook/web/templates/job.html:757
+#: ebook_audiobook/web/templates/job.html:79 ebook_audiobook/web/templates/job.html:541
+#: ebook_audiobook/web/templates/job.html:758
 msgid "<1 min"
 msgstr "<1 min"
 
-#: ebook_audiobook/web/templates/job.html:83 ebook_audiobook/web/templates/job.html:870
+#: ebook_audiobook/web/templates/job.html:84 ebook_audiobook/web/templates/job.html:871
 msgid "Reading the book…"
 msgstr "Leyendo el libro…"
 
-#: ebook_audiobook/web/templates/job.html:90
+#: ebook_audiobook/web/templates/job.html:91
 msgid "Narrator"
 msgstr "Narrador"
 
-#: ebook_audiobook/web/templates/job.html:100
+#: ebook_audiobook/web/templates/job.html:101
 msgid "Language of the narration"
 msgstr "Idioma de la narración"
 
-#: ebook_audiobook/web/templates/job.html:103 ebook_audiobook/web/templates/job.html:107
+#: ebook_audiobook/web/templates/job.html:104 ebook_audiobook/web/templates/job.html:108
 msgid "— not installed"
 msgstr "— no instalado"
 
-#: ebook_audiobook/web/templates/job.html:105
+#: ebook_audiobook/web/templates/job.html:106
 msgid "Experimental — numbers and abbreviations are read as written"
 msgstr "Experimental — los números y las abreviaturas se leen tal cual"
 
-#: ebook_audiobook/web/templates/job.html:114
+#: ebook_audiobook/web/templates/job.html:115
 msgid ""
 "Switches to that language's narrator and prepares the text for it. The book itself "
 "isn't read again."
@@ -1504,35 +1506,35 @@ msgstr ""
 "Pasa al narrador de ese idioma y prepara el texto para él. El libro en sí no se "
 "vuelve a leer."
 
-#: ebook_audiobook/web/templates/job.html:119
+#: ebook_audiobook/web/templates/job.html:120
 msgid "Voice"
 msgstr "Voz"
 
-#: ebook_audiobook/web/templates/job.html:125
+#: ebook_audiobook/web/templates/job.html:126
 msgid " — engine default"
 msgstr " — predeterminado del motor"
 
-#: ebook_audiobook/web/templates/job.html:136
+#: ebook_audiobook/web/templates/job.html:137
 msgid "Expressiveness"
 msgstr "Expresividad"
 
-#: ebook_audiobook/web/templates/job.html:136
+#: ebook_audiobook/web/templates/job.html:137
 msgid "— flat to theatrical"
 msgstr "— de plana a teatral"
 
-#: ebook_audiobook/web/templates/job.html:141
+#: ebook_audiobook/web/templates/job.html:142
 msgid "How much colour the narrator puts into it."
 msgstr "Cuánto color pone el narrador."
 
-#: ebook_audiobook/web/templates/job.html:144
+#: ebook_audiobook/web/templates/job.html:145
 msgid "Pacing"
 msgstr "Ritmo"
 
-#: ebook_audiobook/web/templates/job.html:144
+#: ebook_audiobook/web/templates/job.html:145
 msgid "— measured to hurried"
 msgstr "— de pausado a apresurado"
 
-#: ebook_audiobook/web/templates/job.html:149
+#: ebook_audiobook/web/templates/job.html:150
 msgid ""
 "How closely it sticks to the reference clip's rhythm. Lower reads faster and looser; "
 "higher is more deliberate."
@@ -1540,15 +1542,15 @@ msgstr ""
 "Con cuánta fidelidad sigue el ritmo del clip de referencia. Más bajo lee más rápido y"
 " más suelto; más alto resulta más pausado."
 
-#: ebook_audiobook/web/templates/job.html:153
+#: ebook_audiobook/web/templates/job.html:154
 msgid "Engine settings"
 msgstr "Ajustes del motor"
 
-#: ebook_audiobook/web/templates/job.html:153
+#: ebook_audiobook/web/templates/job.html:154
 msgid "— temperature, seed, bitrate…"
 msgstr "— temperatura, semilla, tasa de bits…"
 
-#: ebook_audiobook/web/templates/job.html:158
+#: ebook_audiobook/web/templates/job.html:159
 msgid ""
 "The defaults are what the engine ships with, and most books never need them touched. "
 "Generate a preview after changing one — the difference is usually easier to hear than"
@@ -1558,11 +1560,11 @@ msgstr ""
 "nunca necesitan tocarlos. Genera una vista previa después de cambiar alguno — la "
 "diferencia suele oírse mejor de lo que se predice."
 
-#: ebook_audiobook/web/templates/job.html:161
+#: ebook_audiobook/web/templates/job.html:162
 msgid "Temperature"
 msgstr "Temperatura"
 
-#: ebook_audiobook/web/templates/job.html:163
+#: ebook_audiobook/web/templates/job.html:164
 msgid ""
 "How much the delivery varies. Lower is steadier and flatter; higher is livelier but "
 "likelier to mispronounce something or wander."
@@ -1570,11 +1572,11 @@ msgstr ""
 "Cuánto varía la interpretación. Más bajo es más constante y más plano; más alto es "
 "más animado, pero con más riesgo de pronunciar mal o divagar."
 
-#: ebook_audiobook/web/templates/job.html:166
+#: ebook_audiobook/web/templates/job.html:167
 msgid "Repetition penalty"
 msgstr "Penalización por repetición"
 
-#: ebook_audiobook/web/templates/job.html:168
+#: ebook_audiobook/web/templates/job.html:169
 msgid ""
 "Stops the voice getting stuck. Raise it if you hear a stutter or a syllable looping; "
 "too high and it can clip words the book genuinely repeats."
@@ -1582,11 +1584,11 @@ msgstr ""
 "Evita que la voz se atasque. Súbela si oyes un tartamudeo o una sílaba en bucle; "
 "demasiado alta puede recortar palabras que el libro sí repite."
 
-#: ebook_audiobook/web/templates/job.html:171
+#: ebook_audiobook/web/templates/job.html:172
 msgid "— least likely sounds"
 msgstr "— sonidos menos probables"
 
-#: ebook_audiobook/web/templates/job.html:173
+#: ebook_audiobook/web/templates/job.html:174
 msgid ""
 "Discards the least plausible sounds before choosing. Higher keeps delivery safe and "
 "even; lower lets it take more risks."
@@ -1594,11 +1596,11 @@ msgstr ""
 "Descarta los sonidos menos plausibles antes de elegir. Más alto mantiene una lectura "
 "segura y uniforme; más bajo le deja arriesgar más."
 
-#: ebook_audiobook/web/templates/job.html:176
+#: ebook_audiobook/web/templates/job.html:177
 msgid "— how wide a choice"
 msgstr "— amplitud de la elección"
 
-#: ebook_audiobook/web/templates/job.html:178
+#: ebook_audiobook/web/templates/job.html:179
 msgid ""
 "Narrows each choice to the likeliest options. 1.00 leaves it open; lower is steadier "
 "and duller."
@@ -1606,11 +1608,11 @@ msgstr ""
 "Reduce cada elección a las opciones más probables. 1,00 la deja abierta; más bajo es "
 "más constante y más soso."
 
-#: ebook_audiobook/web/templates/job.html:181
+#: ebook_audiobook/web/templates/job.html:182
 msgid "Seed"
 msgstr "Semilla"
 
-#: ebook_audiobook/web/templates/job.html:183
+#: ebook_audiobook/web/templates/job.html:184
 msgid ""
 "Fixes the randomness so the same text narrates identically every time. <strong>0 "
 "means don't fix it</strong> — each render then sounds slightly different."
@@ -1618,11 +1620,11 @@ msgstr ""
 "Fija la aleatoriedad para que el mismo texto se narre igual siempre. <strong>0 "
 "significa no fijarla</strong> — cada generación suena entonces algo distinta."
 
-#: ebook_audiobook/web/templates/job.html:186
+#: ebook_audiobook/web/templates/job.html:187
 msgid "Output bitrate (kbps)"
 msgstr "Tasa de bits de salida (kbps)"
 
-#: ebook_audiobook/web/templates/job.html:188
+#: ebook_audiobook/web/templates/job.html:189
 msgid ""
 "Quality of the finished file, not of the narration. 64 is ample for speech; higher "
 "only makes the <code>.m4b</code> bigger."
@@ -1630,7 +1632,7 @@ msgstr ""
 "Calidad del archivo final, no de la narración. 64 sobra para voz; más alto solo hace "
 "más grande el <code>.m4b</code>."
 
-#: ebook_audiobook/web/templates/job.html:191
+#: ebook_audiobook/web/templates/job.html:192
 msgid ""
 "Changing any of these re-narrates only the sections it affects. Bitrate changes "
 "nothing — it is applied when the file is packaged."
@@ -1638,15 +1640,15 @@ msgstr ""
 "Cambiar cualquiera de estos vuelve a narrar solo las secciones afectadas. La tasa de "
 "bits no cambia nada — se aplica al empaquetar el archivo."
 
-#: ebook_audiobook/web/templates/job.html:198 ebook_audiobook/web/templates/job.html:204
+#: ebook_audiobook/web/templates/job.html:199 ebook_audiobook/web/templates/job.html:205
 msgid "Pronunciation fixes"
 msgstr "Correcciones de pronunciación"
 
-#: ebook_audiobook/web/templates/job.html:198
+#: ebook_audiobook/web/templates/job.html:199
 msgid "— words the narrator says wrong"
 msgstr "— palabras que el narrador dice mal"
 
-#: ebook_audiobook/web/templates/job.html:199
+#: ebook_audiobook/web/templates/job.html:200
 msgid ""
 "Narrators mispronounce names and invented words, and often read an acronym as "
 "separate letters — “en ay ess ay” instead of “nassa”. Write the word as the book "
@@ -1656,7 +1658,7 @@ msgstr ""
 "una sigla letra por letra — «ene a ese a» en lugar de «nasa». Escribe la palabra tal "
 "como aparece en el libro y luego cómo debe sonar, una por línea:"
 
-#: ebook_audiobook/web/templates/job.html:208
+#: ebook_audiobook/web/templates/job.html:209
 msgid ""
 "Spell the right-hand side <strong>how it sounds</strong>, not how it is spelled. "
 "Hyphens between syllables help; the narrator reads it as ordinary words."
@@ -1664,11 +1666,11 @@ msgstr ""
 "Escribe la parte derecha <strong>como suena</strong>, no como se escribe. Los guiones"
 " entre sílabas ayudan; el narrador lo lee como palabras corrientes."
 
-#: ebook_audiobook/web/templates/job.html:209
+#: ebook_audiobook/web/templates/job.html:210
 msgid "Whole words only — <code>Grace</code> never changes <code>Graceful</code>."
 msgstr "Solo palabras completas — <code>Grace</code> nunca cambia <code>Graceful</code>."
 
-#: ebook_audiobook/web/templates/job.html:210
+#: ebook_audiobook/web/templates/job.html:211
 msgid ""
 "<strong>Typed exactly, capitals and all.</strong> A fix written <code>NASA</code> "
 "changes <code>NASA</code> and leaves <code>nasa</code> alone — so fixing an acronym "
@@ -1678,7 +1680,7 @@ msgstr ""
 "escrita <code>NASA</code> cambia <code>NASA</code> y deja <code>nasa</code> en paz — "
 "así, corregir una sigla nunca toca una palabra corriente que se escriba igual."
 
-#: ebook_audiobook/web/templates/job.html:211
+#: ebook_audiobook/web/templates/job.html:212
 msgid ""
 "Only the sections containing that word are narrated again, so a fix costs minutes, "
 "not hours."
@@ -1686,81 +1688,81 @@ msgstr ""
 "Solo se vuelven a narrar las secciones que contienen esa palabra, así que una "
 "corrección cuesta minutos, no horas."
 
-#: ebook_audiobook/web/templates/job.html:212
+#: ebook_audiobook/web/templates/job.html:213
 msgid "Generate a preview of a section that uses the word to hear whether it worked."
 msgstr "Genera una vista previa de una sección que use la palabra para oír si ha funcionado."
 
-#: ebook_audiobook/web/templates/job.html:218
+#: ebook_audiobook/web/templates/job.html:219
 msgid "Estimates are out of date."
 msgstr "Las estimaciones están desactualizadas."
 
-#: ebook_audiobook/web/templates/job.html:219
+#: ebook_audiobook/web/templates/job.html:220
 msgid "Update them"
 msgstr "Actualizarlas"
 
-#: ebook_audiobook/web/templates/job.html:223
+#: ebook_audiobook/web/templates/job.html:224
 msgid "Save settings"
 msgstr "Guardar ajustes"
 
-#: ebook_audiobook/web/templates/job.html:224
+#: ebook_audiobook/web/templates/job.html:225
 msgid "Reset to defaults"
 msgstr "Restablecer valores predeterminados"
 
-#: ebook_audiobook/web/templates/job.html:232
+#: ebook_audiobook/web/templates/job.html:233
 msgid "Hear it first"
 msgstr "Escúchalo primero"
 
-#: ebook_audiobook/web/templates/job.html:233
+#: ebook_audiobook/web/templates/job.html:234
 msgid "same engine as the full render"
 msgstr "el mismo motor que la generación completa"
 
-#: ebook_audiobook/web/templates/job.html:238
+#: ebook_audiobook/web/templates/job.html:239
 msgid "Section"
 msgstr "Sección"
 
-#: ebook_audiobook/web/templates/job.html:246
+#: ebook_audiobook/web/templates/job.html:247
 msgid "Length (seconds)"
 msgstr "Duración (segundos)"
 
-#: ebook_audiobook/web/templates/job.html:251
+#: ebook_audiobook/web/templates/job.html:252
 msgid "Generate a preview"
 msgstr "Generar una vista previa"
 
-#: ebook_audiobook/web/templates/job.html:252
+#: ebook_audiobook/web/templates/job.html:253
 msgid "Stop preview"
 msgstr "Detener la vista previa"
 
-#: ebook_audiobook/web/templates/job.html:259
+#: ebook_audiobook/web/templates/job.html:260
 msgid "This book on disk"
 msgstr "Este libro en el disco"
 
-#: ebook_audiobook/web/templates/job.html:261
+#: ebook_audiobook/web/templates/job.html:262
 msgid "Using"
 msgstr "Ocupa"
 
-#: ebook_audiobook/web/templates/job.html:263
+#: ebook_audiobook/web/templates/job.html:264
 msgid "of that is raw narration audio you can reclaim once the book sounds right"
 msgstr "de eso es audio de narración en bruto que puedes recuperar cuando el libro suene bien"
 
-#: ebook_audiobook/web/templates/job.html:266
+#: ebook_audiobook/web/templates/job.html:267
 #: ebook_audiobook/web/templates/storage.html:202
 msgid "Free up space"
 msgstr "Liberar espacio"
 
-#: ebook_audiobook/web/templates/job.html:269
+#: ebook_audiobook/web/templates/job.html:270
 msgid "Show in folder"
 msgstr "Mostrar en la carpeta"
 
-#: ebook_audiobook/web/templates/job.html:271
+#: ebook_audiobook/web/templates/job.html:272
 msgid "All books…"
 msgstr "Todos los libros…"
 
-#: ebook_audiobook/web/templates/job.html:273
+#: ebook_audiobook/web/templates/job.html:274
 #, python-format
 msgid "Delete “%(title)s”?"
 msgstr "¿Eliminar «%(title)s»?"
 
-#: ebook_audiobook/web/templates/job.html:274
+#: ebook_audiobook/web/templates/job.html:275
 msgid ""
 "Everything belonging to it goes: the imported ebook, the working files, and the "
 "finished audiobook if there is one."
@@ -1768,278 +1770,313 @@ msgstr ""
 "Se borra todo lo suyo: el libro importado, los archivos de trabajo y el audiolibro "
 "terminado, si lo hay."
 
-#: ebook_audiobook/web/templates/job.html:288
+#: ebook_audiobook/web/templates/job.html:289
 msgid "Narrate a few seconds to measure this voice, then update these figures"
 msgstr "Narrar unos segundos para medir esta voz y actualizar estas cifras"
 
-#: ebook_audiobook/web/templates/job.html:292
+#: ebook_audiobook/web/templates/job.html:293
 msgid "of audio"
 msgstr "de audio"
 
-#: ebook_audiobook/web/templates/job.html:293
+#: ebook_audiobook/web/templates/job.html:294
 msgid "to narrate"
 msgstr "para narrar"
 
-#: ebook_audiobook/web/templates/job.html:294
+#: ebook_audiobook/web/templates/job.html:295
 msgid "final .m4b"
 msgstr ".m4b final"
 
-#: ebook_audiobook/web/templates/job.html:295
+#: ebook_audiobook/web/templates/job.html:296
 msgid "working files, freed later"
 msgstr "archivos de trabajo, se liberan después"
 
-#: ebook_audiobook/web/templates/job.html:302
+#: ebook_audiobook/web/templates/job.html:303
 msgid "Plex library"
 msgstr "Biblioteca de Plex"
 
-#: ebook_audiobook/web/templates/job.html:303
+#: ebook_audiobook/web/templates/job.html:304
 msgid "A folder"
 msgstr "Una carpeta"
 
-#: ebook_audiobook/web/templates/job.html:308 ebook_audiobook/web/templates/job.html:320
+#: ebook_audiobook/web/templates/job.html:309 ebook_audiobook/web/templates/job.html:321
 #: ebook_audiobook/web/templates/settings.html:24
 msgid "Open this folder"
 msgstr "Abrir esta carpeta"
 
-#: ebook_audiobook/web/templates/job.html:313
+#: ebook_audiobook/web/templates/job.html:314
 msgid "Choose a library folder"
 msgstr "Elegir una carpeta de biblioteca"
 
-#: ebook_audiobook/web/templates/job.html:313
+#: ebook_audiobook/web/templates/job.html:314
 msgid "— or save to a folder instead"
 msgstr "— o guardar en una carpeta"
 
-#: ebook_audiobook/web/templates/job.html:318
+#: ebook_audiobook/web/templates/job.html:319
 msgid "Choose…"
 msgstr "Elegir…"
 
-#: ebook_audiobook/web/templates/job.html:327
+#: ebook_audiobook/web/templates/job.html:328
 msgid "Narrate the book"
 msgstr "Narrar el libro"
 
-#: ebook_audiobook/web/templates/job.html:410
+#: ebook_audiobook/web/templates/job.html:411
 msgid "Couldn't reach the app to save the settings"
 msgstr "No se pudo contactar con la aplicación para guardar los ajustes"
 
-#: ebook_audiobook/web/templates/job.html:414
+#: ebook_audiobook/web/templates/job.html:415
 msgid "Couldn't save the settings"
 msgstr "No se pudieron guardar los ajustes"
 
-#: ebook_audiobook/web/templates/job.html:421
-#: ebook_audiobook/web/templates/settings.html:232
+#: ebook_audiobook/web/templates/job.html:422
+#: ebook_audiobook/web/templates/settings.html:239
 msgid "Saving…"
 msgstr "Guardando…"
 
-#: ebook_audiobook/web/templates/job.html:423
+#: ebook_audiobook/web/templates/job.html:424
 msgid "Settings saved"
 msgstr "Ajustes guardados"
 
-#: ebook_audiobook/web/templates/job.html:429
+#: ebook_audiobook/web/templates/job.html:430
 msgid "Reset to defaults (remember to Save)"
 msgstr "Restablecer valores predeterminados (recuerda guardar)"
 
-#: ebook_audiobook/web/templates/job.html:447
+#: ebook_audiobook/web/templates/job.html:448
 msgid "Warming up the voice — the first preview takes a moment"
 msgstr "Calentando la voz — la primera vista previa tarda un momento"
 
-#: ebook_audiobook/web/templates/job.html:510
+#: ebook_audiobook/web/templates/job.html:511
 msgid "after a preview"
 msgstr "tras una vista previa"
 
-#: ebook_audiobook/web/templates/job.html:528
+#: ebook_audiobook/web/templates/job.html:529
 msgid "Measured from this voice at these settings."
 msgstr "Medido con esta voz y estos ajustes."
 
-#: ebook_audiobook/web/templates/job.html:574
+#: ebook_audiobook/web/templates/job.html:575
 msgid "Estimated time to narrate"
 msgstr "Tiempo estimado de narración"
 
-#: ebook_audiobook/web/templates/job.html:607
+#: ebook_audiobook/web/templates/job.html:608
 msgid "Choose at least one section to narrate."
 msgstr "Elige al menos una sección para narrar."
 
-#: ebook_audiobook/web/templates/job.html:615
+#: ebook_audiobook/web/templates/job.html:616
 msgid "Narrate anyway"
 msgstr "Narrar de todos modos"
 
-#: ebook_audiobook/web/templates/job.html:615
+#: ebook_audiobook/web/templates/job.html:616
 msgid "Start"
 msgstr "Empezar"
 
-#: ebook_audiobook/web/templates/job.html:626
+#: ebook_audiobook/web/templates/job.html:627
 msgid "Couldn't start"
 msgstr "No se pudo empezar"
 
-#: ebook_audiobook/web/templates/job.html:631
+#: ebook_audiobook/web/templates/job.html:632
 msgid "Narrating…"
 msgstr "Narrando…"
 
-#: ebook_audiobook/web/templates/job.html:640
+#: ebook_audiobook/web/templates/job.html:641
 #: ebook_audiobook/web/templates/settings.html:167
-#: ebook_audiobook/web/templates/settings.html:294
+#: ebook_audiobook/web/templates/settings.html:301
 msgid "Measuring…"
 msgstr "Midiendo…"
 
-#: ebook_audiobook/web/templates/job.html:644
+#: ebook_audiobook/web/templates/job.html:645
 msgid "Couldn't measure just now"
 msgstr "No se pudo medir ahora mismo"
 
-#: ebook_audiobook/web/templates/job.html:649
+#: ebook_audiobook/web/templates/job.html:650
 msgid "Narrating a few seconds to measure this voice…"
 msgstr "Narrando unos segundos para medir esta voz…"
 
-#: ebook_audiobook/web/templates/job.html:677
+#: ebook_audiobook/web/templates/job.html:678
 msgid "Preparing the text for that language…"
 msgstr "Preparando el texto para ese idioma…"
 
-#: ebook_audiobook/web/templates/job.html:679
+#: ebook_audiobook/web/templates/job.html:680
 msgid "Couldn't change the language"
 msgstr "No se pudo cambiar el idioma"
 
-#: ebook_audiobook/web/templates/job.html:717
+#: ebook_audiobook/web/templates/job.html:718
 msgid "Can't reclaim those while it's working"
 msgstr "No se pueden recuperar mientras está trabajando"
 
-#: ebook_audiobook/web/templates/job.html:719
+#: ebook_audiobook/web/templates/job.html:720
 #: ebook_audiobook/web/templates/storage.html:226
 #, python-format
 msgid "Freed %(size)s"
 msgstr "Se liberaron %(size)s"
 
-#: ebook_audiobook/web/templates/job.html:721
+#: ebook_audiobook/web/templates/job.html:722
 #: ebook_audiobook/web/templates/storage.html:217
 msgid "Couldn't free that up"
 msgstr "No se pudo liberar eso"
 
-#: ebook_audiobook/web/templates/job.html:743
+#: ebook_audiobook/web/templates/job.html:744
 #, python-format
 msgid "%(n)s section"
 msgid_plural "%(n)s sections"
 msgstr[0] "%(n)s sección"
 msgstr[1] "%(n)s secciones"
 
-#: ebook_audiobook/web/templates/job.html:770
+#: ebook_audiobook/web/templates/job.html:771
 #, python-format
 msgid "%(inc)s of %(total)s sections"
 msgstr "%(inc)s de %(total)s secciones"
 
-#: ebook_audiobook/web/templates/job.html:776
+#: ebook_audiobook/web/templates/job.html:777
 msgid "Couldn't save that choice"
 msgstr "No se pudo guardar esa elección"
 
-#: ebook_audiobook/web/templates/job.html:801
+#: ebook_audiobook/web/templates/job.html:802
 #: ebook_audiobook/web/templates/settings.html:180
-#: ebook_audiobook/web/templates/settings.html:207
+#: ebook_audiobook/web/templates/settings.html:214
 msgid "Loading…"
 msgstr "Cargando…"
 
-#: ebook_audiobook/web/templates/job.html:804
+#: ebook_audiobook/web/templates/job.html:805
 msgid "Couldn't load that section"
 msgstr "No se pudo cargar esa sección"
 
-#: ebook_audiobook/web/templates/job.html:805
+#: ebook_audiobook/web/templates/job.html:806
 msgid "(untitled)"
 msgstr "(sin título)"
 
-#: ebook_audiobook/web/templates/job.html:805 ebook_audiobook/web/templates/job.html:806
+#: ebook_audiobook/web/templates/job.html:806 ebook_audiobook/web/templates/job.html:807
 #, python-format
 msgid "Section %(n)s · %(chars)s characters"
 msgstr "Sección %(n)s · %(chars)s caracteres"
 
-#: ebook_audiobook/web/templates/job.html:826
+#: ebook_audiobook/web/templates/job.html:827
 msgid "Narrate this section"
 msgstr "Narrar esta sección"
 
-#: ebook_audiobook/web/templates/job.html:833
+#: ebook_audiobook/web/templates/job.html:834
 msgid "Will be narrated"
 msgstr "Se narrará"
 
-#: ebook_audiobook/web/templates/job.html:833
+#: ebook_audiobook/web/templates/job.html:834
 msgid "Left out"
 msgstr "Excluida"
 
-#: ebook_audiobook/web/templates/job.html:837
+#: ebook_audiobook/web/templates/job.html:838
 msgid "Close"
 msgstr "Cerrar"
 
-#: ebook_audiobook/web/templates/job.html:871
+#: ebook_audiobook/web/templates/job.html:872
 msgid "Warming up — loading the voice…"
 msgstr "Calentando — cargando la voz…"
 
-#: ebook_audiobook/web/templates/job.html:872
+#: ebook_audiobook/web/templates/job.html:873
 msgid "Stitching chapters together…"
 msgstr "Uniendo los capítulos…"
 
-#: ebook_audiobook/web/templates/job.html:873
+#: ebook_audiobook/web/templates/job.html:874
 msgid "Packaging the audiobook…"
 msgstr "Empaquetando el audiolibro…"
 
-#: ebook_audiobook/web/templates/job.html:880
+#: ebook_audiobook/web/templates/job.html:881
 #, python-format
 msgid "Making a preview… %(pct)s%%"
 msgstr "Creando una vista previa… %(pct)s %%"
 
-#: ebook_audiobook/web/templates/job.html:881
+#: ebook_audiobook/web/templates/job.html:882
 msgid "Making a preview…"
 msgstr "Creando una vista previa…"
 
-#: ebook_audiobook/web/templates/job.html:884
+#: ebook_audiobook/web/templates/job.html:885
 #, python-format
 msgid "Narrating — section %(done)s of %(total)s"
 msgstr "Narrando — sección %(done)s de %(total)s"
 
-#: ebook_audiobook/web/templates/job.html:887 ebook_audiobook/web/templates/job.html:888
+#: ebook_audiobook/web/templates/job.html:888 ebook_audiobook/web/templates/job.html:889
 #, python-format
 msgid "Stopped by you — %(pct)s%% narrated and kept"
 msgstr "Detenido por ti — %(pct)s %% narrado y conservado"
 
-#: ebook_audiobook/web/templates/job.html:938
+#: ebook_audiobook/web/templates/job.html:939
 msgid "Finishing up…"
 msgstr "Terminando…"
 
-#: ebook_audiobook/web/templates/job.html:938
+#: ebook_audiobook/web/templates/job.html:939
 #, python-format
 msgid "About %(time)s remaining"
 msgstr "Quedan unos %(time)s"
 
-#: ebook_audiobook/web/templates/job.html:979
+#: ebook_audiobook/web/templates/job.html:950
+msgid "Narrating on the processor: the graphics card ran out of memory."
+msgstr "Narrando en el procesador: la tarjeta gráfica se quedó sin memoria."
+
+#: ebook_audiobook/web/templates/job.html:951
+msgid ""
+"Narrating on the processor: the graphics card hasn't enough free memory for the voice"
+" model."
+msgstr ""
+"Narrando en el procesador: la tarjeta gráfica no tiene suficiente memoria libre para "
+"el modelo de voz."
+
+#: ebook_audiobook/web/templates/job.html:952
+msgid "Narrating on the processor."
+msgstr "Narrando en el procesador."
+
+#: ebook_audiobook/web/templates/job.html:955
+#, python-format
+msgid "Narrating on %(gpu)s in compact mode, after it ran out of memory at full precision."
+msgstr ""
+"Narrando en %(gpu)s en modo compacto, tras quedarse sin memoria con la precisión "
+"completa."
+
+#: ebook_audiobook/web/templates/job.html:961
+#, python-format
+msgid "Narrating on %(gpu)s in compact mode, to fit the %(gb)s GB of memory available to it."
+msgstr ""
+"Narrando en %(gpu)s en modo compacto, para caber en los %(gb)s GB de memoria de que "
+"dispone."
+
+#: ebook_audiobook/web/templates/job.html:963
+#, python-format
+msgid "Narrating on %(gpu)s."
+msgstr "Narrando en %(gpu)s."
+
+#: ebook_audiobook/web/templates/job.html:1008
 msgid "No readable sections were found in this book."
 msgstr "No se encontró ninguna sección legible en este libro."
 
-#: ebook_audiobook/web/templates/job.html:1018
+#: ebook_audiobook/web/templates/job.html:1048
 #, python-format
 msgid "Finished %(when)s"
 msgstr "Terminado %(when)s"
 
-#: ebook_audiobook/web/templates/job.html:1041
+#: ebook_audiobook/web/templates/job.html:1071
 msgid "Preview ready — press play to hear it"
 msgstr "Vista previa lista — pulsa reproducir para escucharla"
 
-#: ebook_audiobook/web/templates/job.html:569
+#: ebook_audiobook/web/templates/job.html:570
 msgid "Free space where the audiobook is saved"
 msgstr "Espacio libre donde se guarda el audiolibro"
 
-#: ebook_audiobook/web/templates/job.html:572
+#: ebook_audiobook/web/templates/job.html:573
 msgid "Sections to narrate"
 msgstr "Secciones por narrar"
 
-#: ebook_audiobook/web/templates/job.html:573
+#: ebook_audiobook/web/templates/job.html:574
 msgid "Audio length"
 msgstr "Duración del audio"
 
-#: ebook_audiobook/web/templates/job.html:575
+#: ebook_audiobook/web/templates/job.html:576
 msgid "Working files, at peak"
 msgstr "Archivos de trabajo, en su punto máximo"
 
-#: ebook_audiobook/web/templates/job.html:576
+#: ebook_audiobook/web/templates/job.html:577
 msgid "Final audiobook"
 msgstr "Audiolibro final"
 
-#: ebook_audiobook/web/templates/job.html:577
+#: ebook_audiobook/web/templates/job.html:578
 msgid "Free space for working files"
 msgstr "Espacio libre para los archivos de trabajo"
 
-#: ebook_audiobook/web/templates/job.html:580
+#: ebook_audiobook/web/templates/job.html:581
 #, python-format
 msgid ""
 "While it narrates, every piece is saved as raw uncompressed audio — about "
@@ -2052,7 +2089,7 @@ msgstr ""
 " narrar en minutos en lugar de rehacer el libro entero. El audiolibro terminado ocupa"
 " solo <strong>%(size)s</strong>."
 
-#: ebook_audiobook/web/templates/job.html:582
+#: ebook_audiobook/web/templates/job.html:583
 msgid ""
 "Reclaim the working files from <strong>Storage</strong> whenever the book sounds "
 "right — or have it happen automatically."
@@ -2060,7 +2097,7 @@ msgstr ""
 "Recupera los archivos de trabajo desde <strong>Almacenamiento</strong> cuando el "
 "libro suene bien — o deja que ocurra automáticamente."
 
-#: ebook_audiobook/web/templates/job.html:584
+#: ebook_audiobook/web/templates/job.html:585
 msgid ""
 "You may not have enough free space for the working files. Free up some disk space "
 "first, or narrate fewer sections."
@@ -2068,15 +2105,15 @@ msgstr ""
 "Puede que no tengas espacio suficiente para los archivos de trabajo. Libera espacio "
 "en el disco antes o narra menos secciones."
 
-#: ebook_audiobook/web/templates/job.html:595
+#: ebook_audiobook/web/templates/job.html:596
 msgid "While this runs"
 msgstr "Mientras esto se ejecuta"
 
-#: ebook_audiobook/web/templates/job.html:804
+#: ebook_audiobook/web/templates/job.html:805
 msgid "This section's text isn't available."
 msgstr "El texto de esta sección no está disponible."
 
-#: ebook_audiobook/web/templates/job.html:809
+#: ebook_audiobook/web/templates/job.html:810
 msgid ""
 "This section has no readable text — it's likely a cover, an image, or a blank page. A"
 " good one to switch off."
@@ -2084,12 +2121,12 @@ msgstr ""
 "Esta sección no tiene texto legible — probablemente sea una portada, una imagen o una"
 " página en blanco. Una buena candidata para desactivar."
 
-#: ebook_audiobook/web/templates/job.html:811
+#: ebook_audiobook/web/templates/job.html:812
 #, python-format
 msgid "… showing the opening %(shown)s characters of %(total)s."
 msgstr "… se muestran los primeros %(shown)s caracteres de %(total)s."
 
-#: ebook_audiobook/web/templates/job.html:1015
+#: ebook_audiobook/web/templates/job.html:1045
 msgid "Save the .m4b"
 msgstr "Guardar el .m4b"
 
@@ -2493,7 +2530,21 @@ msgstr ""
 msgid "When something goes wrong"
 msgstr "Cuando algo va mal"
 
-#: ebook_audiobook/web/templates/settings.html:208
+#: ebook_audiobook/web/templates/settings.html:210
+msgid "Keep a detailed performance log"
+msgstr "Llevar un registro de rendimiento detallado"
+
+#: ebook_audiobook/web/templates/settings.html:211
+msgid ""
+"Records which graphics card and mode each narration uses, and how long every passage "
+"takes, so slow narration can be explained. It stays on this computer and goes into "
+"the report. Leave it off unless you are looking into a problem."
+msgstr ""
+"Anota qué tarjeta gráfica y qué modo usa cada narración, y cuánto tarda cada pasaje, "
+"para poder explicar una narración lenta. Se queda en este equipo y se incluye en el "
+"informe. Déjalo desactivado salvo que estés investigando un problema."
+
+#: ebook_audiobook/web/templates/settings.html:215
 msgid ""
 "A report has your home folder replaced with <code>~</code> and book titles removed, "
 "so filing one does not publish your reading history."
@@ -2501,87 +2552,87 @@ msgstr ""
 "En un informe, tu carpeta personal se sustituye por <code>~</code> y se eliminan los "
 "títulos de los libros, así que enviarlo no publica tu historial de lectura."
 
-#: ebook_audiobook/web/templates/settings.html:210
+#: ebook_audiobook/web/templates/settings.html:217
 msgid "Download report"
 msgstr "Descargar el informe"
 
-#: ebook_audiobook/web/templates/settings.html:211
+#: ebook_audiobook/web/templates/settings.html:218
 msgid "Clear the log"
 msgstr "Vaciar el registro"
 
-#: ebook_audiobook/web/templates/settings.html:235
+#: ebook_audiobook/web/templates/settings.html:242
 msgid "Couldn't save"
 msgstr "No se pudo guardar"
 
-#: ebook_audiobook/web/templates/settings.html:240
-#: ebook_audiobook/web/templates/settings.html:286
-#: ebook_audiobook/web/templates/settings.html:411
+#: ebook_audiobook/web/templates/settings.html:247
+#: ebook_audiobook/web/templates/settings.html:293
+#: ebook_audiobook/web/templates/settings.html:418
 msgid "Saved"
 msgstr "Guardado"
 
-#: ebook_audiobook/web/templates/settings.html:245
-#: ebook_audiobook/web/templates/settings.html:437
+#: ebook_audiobook/web/templates/settings.html:252
+#: ebook_audiobook/web/templates/settings.html:447
 msgid "Cleared"
 msgstr "Vaciado"
 
-#: ebook_audiobook/web/templates/settings.html:284
+#: ebook_audiobook/web/templates/settings.html:291
 msgid "Saved as the default for new conversions."
 msgstr "Guardado como predeterminado para las conversiones nuevas."
 
-#: ebook_audiobook/web/templates/settings.html:285
+#: ebook_audiobook/web/templates/settings.html:292
 msgid "Couldn't save that setting."
 msgstr "No se pudo guardar ese ajuste."
 
-#: ebook_audiobook/web/templates/settings.html:298
+#: ebook_audiobook/web/templates/settings.html:305
 msgid "Couldn't measure"
 msgstr "No se pudo medir"
 
-#: ebook_audiobook/web/templates/settings.html:301
+#: ebook_audiobook/web/templates/settings.html:308
 #, python-format
 msgid "backup size: %(size)s in %(files)s files"
 msgstr "tamaño de la copia: %(size)s en %(files)s archivos"
 
-#: ebook_audiobook/web/templates/settings.html:302
+#: ebook_audiobook/web/templates/settings.html:309
 #, python-format
 msgid "left out:    %(size)s"
 msgstr "excluido:    %(size)s"
 
-#: ebook_audiobook/web/templates/settings.html:304
+#: ebook_audiobook/web/templates/settings.html:311
 msgid "Couldn't measure the data folder."
 msgstr "No se pudo medir la carpeta de datos."
 
-#: ebook_audiobook/web/templates/settings.html:318
+#: ebook_audiobook/web/templates/settings.html:325
 msgid "Building the archive… the download starts when it's ready."
 msgstr "Creando el archivo… la descarga empezará cuando esté listo."
 
-#: ebook_audiobook/web/templates/settings.html:328
+#: ebook_audiobook/web/templates/settings.html:335
 msgid "Couldn't read the model cache."
 msgstr "No se pudo leer la caché de modelos."
 
-#: ebook_audiobook/web/templates/settings.html:369
+#: ebook_audiobook/web/templates/settings.html:376
 msgid "Remove this language model?"
 msgstr "¿Quitar este modelo de idioma?"
 
-#: ebook_audiobook/web/templates/settings.html:335
-#: ebook_audiobook/web/templates/settings.html:370
+#: ebook_audiobook/web/templates/settings.html:342
+#: ebook_audiobook/web/templates/settings.html:377
 msgid "Remove"
 msgstr "Quitar"
 
-#: ebook_audiobook/web/templates/settings.html:375
+#: ebook_audiobook/web/templates/settings.html:382
 msgid "Couldn't do that"
 msgstr "No se pudo hacer eso"
 
-#: ebook_audiobook/web/templates/settings.html:376
+#: ebook_audiobook/web/templates/settings.html:383
 msgid "Downloading — this takes a while"
 msgstr "Descargando — esto tarda un rato"
 
-#: ebook_audiobook/web/templates/settings.html:384
-#: ebook_audiobook/web/templates/settings.html:404
+#: ebook_audiobook/web/templates/settings.html:391
+#: ebook_audiobook/web/templates/settings.html:411
 msgid "Checking…"
 msgstr "Comprobando…"
 
-#: ebook_audiobook/web/templates/settings.html:396
-#: ebook_audiobook/web/templates/settings.html:397
+#: ebook_audiobook/web/templates/settings.html:403
+#: ebook_audiobook/web/templates/settings.html:404
 #, python-format
 msgid ""
 "Upgrade by running <code>ebook-audiobook update --apply</code>, or: "
@@ -2590,74 +2641,87 @@ msgstr ""
 "Actualiza ejecutando <code>ebook-audiobook update --apply</code>, o bien: "
 "<code>%(command)s</code>"
 
-#: ebook_audiobook/web/templates/settings.html:399
+#: ebook_audiobook/web/templates/settings.html:406
 msgid "Couldn't check right now."
 msgstr "No se pudo comprobar ahora mismo."
 
-#: ebook_audiobook/web/templates/settings.html:425
-#: ebook_audiobook/web/templates/settings.html:426
+#: ebook_audiobook/web/templates/settings.html:432
+#, python-format
+msgid "Performance log: %(kb)s KB."
+msgstr "Registro de rendimiento: %(kb)s KB."
+
+#: ebook_audiobook/web/templates/settings.html:435
+#: ebook_audiobook/web/templates/settings.html:436
 #, python-format
 msgid "No errors logged. (Log capped at %(kb)s KB, kept %(days)s days.)"
 msgstr ""
 "No hay errores registrados. (El registro se limita a %(kb)s KB y se conserva %(days)s"
 " días.)"
 
-#: ebook_audiobook/web/templates/settings.html:430
+#: ebook_audiobook/web/templates/settings.html:440
 #, python-format
 msgid "<strong>%(n)s recent error(s)</strong>, log is %(kb)s KB:"
 msgstr "<strong>%(n)s error(es) reciente(s)</strong>, el registro ocupa %(kb)s KB:"
 
-#: ebook_audiobook/web/templates/settings.html:433
+#: ebook_audiobook/web/templates/settings.html:443
 msgid "Couldn't read the log."
 msgstr "No se pudo leer el registro."
 
-#: ebook_audiobook/web/templates/settings.html:456
+#: ebook_audiobook/web/templates/settings.html:466
 #: ebook_audiobook/web/templates/storage.html:168
 msgid "Finished books will clean up after themselves."
 msgstr "Los libros terminados se limpiarán solos."
 
-#: ebook_audiobook/web/templates/settings.html:457
+#: ebook_audiobook/web/templates/settings.html:467
 msgid "Working files will be kept until you say otherwise."
 msgstr "Los archivos de trabajo se conservarán hasta que digas lo contrario."
 
-#: ebook_audiobook/web/templates/settings.html:462
+#: ebook_audiobook/web/templates/settings.html:473
+msgid "Narration will be logged in detail until you turn this off."
+msgstr "La narración se registrará en detalle hasta que lo desactives."
+
+#: ebook_audiobook/web/templates/settings.html:474
+msgid "Detailed logging is off."
+msgstr "El registro detallado está desactivado."
+
+#: ebook_audiobook/web/templates/settings.html:480
 msgid "Previews will play themselves."
 msgstr "Las vistas previas se reproducirán solas."
 
-#: ebook_audiobook/web/templates/settings.html:462
+#: ebook_audiobook/web/templates/settings.html:480
 msgid "Previews will wait for you."
 msgstr "Las vistas previas te esperarán."
 
-#: ebook_audiobook/web/templates/settings.html:300
+#: ebook_audiobook/web/templates/settings.html:307
 msgid "files"
 msgstr "archivos"
 
-#: ebook_audiobook/web/templates/settings.html:300
+#: ebook_audiobook/web/templates/settings.html:307
 msgid "(left out)"
 msgstr "(excluido)"
 
-#: ebook_audiobook/web/templates/settings.html:333
+#: ebook_audiobook/web/templates/settings.html:340
 msgid "installed"
 msgstr "instalado"
 
-#: ebook_audiobook/web/templates/settings.html:338
+#: ebook_audiobook/web/templates/settings.html:345
 msgid "downloading"
 msgstr "descargando"
 
-#: ebook_audiobook/web/templates/settings.html:344
+#: ebook_audiobook/web/templates/settings.html:351
 msgid "downloads with the first narration"
 msgstr "se descarga con la primera narración"
 
-#: ebook_audiobook/web/templates/settings.html:345
+#: ebook_audiobook/web/templates/settings.html:352
 msgid "not installed"
 msgstr "no instalado"
 
-#: ebook_audiobook/web/templates/settings.html:347
+#: ebook_audiobook/web/templates/settings.html:354
 #, python-format
 msgid "Install (%(size)s)"
 msgstr "Instalar (%(size)s)"
 
-#: ebook_audiobook/web/templates/settings.html:357
+#: ebook_audiobook/web/templates/settings.html:364
 msgid ""
 "Install the speech engine first (re-run the installer); a language model is of no use"
 " without it."
@@ -2665,20 +2729,20 @@ msgstr ""
 "Instala primero el motor de voz (vuelve a ejecutar el instalador); sin él, un modelo "
 "de idioma no sirve de nada."
 
-#: ebook_audiobook/web/templates/settings.html:371
+#: ebook_audiobook/web/templates/settings.html:378
 msgid "Books in its languages can't be narrated until it is downloaded again."
 msgstr "Los libros en sus idiomas no se podrán narrar hasta que se vuelva a descargar."
 
-#: ebook_audiobook/web/templates/settings.html:394
+#: ebook_audiobook/web/templates/settings.html:401
 msgid "Release notes"
 msgstr "Notas de la versión"
 
-#: ebook_audiobook/web/templates/settings.html:448
+#: ebook_audiobook/web/templates/settings.html:458
 #, python-format
 msgid "%(size)s can be freed"
 msgstr "se pueden liberar %(size)s"
 
-#: ebook_audiobook/web/templates/settings.html:449
+#: ebook_audiobook/web/templates/settings.html:459
 msgid "nothing to reclaim"
 msgstr "nada que recuperar"
 
@@ -3072,4 +3136,10 @@ msgstr "Muestra lista — pulsa reproducir para escucharla"
 
 #~ msgid "Japanese — Male"
 #~ msgstr "Japonés — Hombre"
+
+#~ msgid "only %(gb)s GB of VRAM; if it runs out mid-render the job continues on the CPU"
+#~ msgstr ""
+#~ "solo %(gb)s GB de VRAM; si se agota "
+#~ "durante la generación, el trabajo continúa en"
+#~ " la CPU"
 

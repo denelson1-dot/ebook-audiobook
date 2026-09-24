@@ -88,6 +88,12 @@ class Settings:
     # running it *is* the consent.
     check_for_updates: bool = False
 
+    # Keep a detailed performance log (see ebook_audiobook.debuglog): which
+    # card and tier each narration used, and how long every passage took. Off
+    # by default, because it writes a line every few seconds for hours, and it
+    # only earns that when someone is working out why narration is slow.
+    debug_log: bool = False
+
     # Interface language: "fr", or "" to follow the browser (and, for the tray,
     # the desktop). Precedence lives in ebook_audiobook.i18n.resolve.
     language: str = ""
