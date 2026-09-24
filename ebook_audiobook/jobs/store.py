@@ -18,6 +18,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from .. import winfs
 from ..config import VoiceSettings, paths, relocate
 from .models import Book, Chapter, JobState, Segment, Stage
 
@@ -54,7 +55,8 @@ def _atomic_write(path: Path, text: str) -> None:
     try:
         with open(fd, "w", encoding="utf-8") as f:
             f.write(text)
-        Path(tmp).replace(path)
+        # Retried on Windows, where a web request reading the file blocks it.
+        winfs.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -219,11 +221,15 @@ class JobStore:
         out = self.output_path()
         src = self.imported_source()  # read before the job dir (and book.json) go
         shutil.rmtree(self.dir, ignore_errors=True)
-        self.preview_path().unlink(missing_ok=True)
+        # book.json is gone with the directory, so from here on the book is
+        # deleted as far as the library is concerned. A file Windows won't let
+        # go of (the audiobook open in a player) is left behind rather than
+        # turning a finished delete into an error page.
+        winfs.unlink(self.preview_path())
         if src:
-            src.unlink(missing_ok=True)
+            winfs.unlink(src)
         if out:
-            Path(out).unlink(missing_ok=True)
+            winfs.unlink(out)
             # For a library-tree output, tidy up the book's own folder (its
             # cover.jpg sidecar and now-empty Author/Series dirs) rather than
             # leaving empty shells behind. Never touches a flat folder the user

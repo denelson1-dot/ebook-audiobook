@@ -8,7 +8,9 @@ browser polls ``/job/<id>/status`` and ``/api/status``.
 from __future__ import annotations
 
 import json
+import os
 import re
+import stat
 import threading
 import uuid
 from pathlib import Path
@@ -279,7 +281,43 @@ def _measured_here(store: JobStore, state) -> bool:
     return state.measured_voice_key == current
 
 
+def _windows_drives() -> list[str]:
+    """Every drive letter in use, as ``D:\\``, without touching any of them:
+    asking an empty card reader or DVD drive whether it exists can stall,
+    or put up a "no disk" dialog. [] off Windows."""
+    if os.name != "nt":
+        return []
+    try:
+        import ctypes
+        mask = ctypes.windll.kernel32.GetLogicalDrives()
+    except (AttributeError, OSError):
+        return []
+    return [f"{chr(65 + i)}:\\" for i in range(26) if mask >> i & 1]
+
+def _hidden_on_windows(entry: Path) -> bool:
+    """Windows' own hidden and system entries: the home folder is full of
+    legacy junctions ("Application Data", "My Documents", "Cookies"...)
+    that only answer "Access is denied"."""
+    try:
+        attrs = os.lstat(entry).st_file_attributes
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & (stat.FILE_ATTRIBUTE_HIDDEN | stat.FILE_ATTRIBUTE_SYSTEM))
+
+
+# Job ids are hex digests. Flask's default converter only refuses "/", and on
+# Windows "\\" and "C:" are path syntax too, so an id is checked before it is
+# ever joined onto a path.
+_JOB_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _check_job_id(job_id: str) -> None:
+    if not _JOB_ID.fullmatch(job_id or ""):
+        abort(404)
+
+
 def _job_or_404(job_id: str) -> JobStore:
+    _check_job_id(job_id)
     store = JobStore(job_id)
     if not store.exists():
         abort(404)
@@ -932,9 +970,17 @@ def create_app() -> Flask:
             base = base.resolve()
             if not base.is_dir():
                 base = base.parent
-            entries = sorted(base.iterdir(), key=lambda x: x.name.lower())
+            entries = sorted((e for e in base.iterdir() if not _hidden_on_windows(e)),
+                             key=lambda x: x.name.lower())
             dirs = [{"name": e.name, "path": str(e)} for e in entries
                     if e.is_dir() and not e.name.startswith(".")]
+            # A drive's root has no parent to go back to, so without this a
+            # book on a USB stick or a second disk could never be reached.
+            # The other drives are listed first, as folders.
+            if base.parent == base:
+                here = str(base).upper()
+                dirs[:0] = [{"name": d, "path": d} for d in _windows_drives()
+                            if d.upper() != here]
             files = []
             for e in entries:
                 # Hidden files are noise at best. At worst they are macOS
@@ -1341,6 +1387,7 @@ def create_app() -> Flask:
 
     @app.get("/job/<job_id>/preview.wav")
     def preview_audio(job_id):
+        _check_job_id(job_id)
         f = paths().outputs / f"{job_id}_preview.wav"
         if not f.exists():
             abort(404)
@@ -1348,6 +1395,7 @@ def create_app() -> Flask:
 
     @app.get("/job/<job_id>/download")
     def download(job_id):
+        _check_job_id(job_id)
         state = JobStore(job_id).load_state()
         if not state.output_path or not Path(state.output_path).exists():
             abort(404)

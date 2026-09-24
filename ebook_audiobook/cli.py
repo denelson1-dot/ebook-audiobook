@@ -17,6 +17,7 @@ import threading
 import argparse
 import os
 import sys
+import time
 
 from . import narration_langs, checks, config, power
 from .audio import estimate
@@ -107,6 +108,16 @@ def cmd_web(args) -> int:
     # address is asking for a specific server.
     if not (args.host or args.port):
         existing = runtime.probe()
+        if not existing and not runtime.claim_launch():
+            # Another launch is alive but not answering yet: still starting
+            # (a double-click on a cold machine), or busy. Wait for it rather
+            # than race it. Its record is kept however slowly it answers, and
+            # if it exits instead, this launch takes over at once.
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                existing = runtime.probe(timeout=3, forget=False)
+                if existing or runtime.claim_launch(wait=0.5):
+                    break
         if existing:
             if not args.no_browser:
                 open_window(existing)

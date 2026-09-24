@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import tools
+from . import tools, winfs
 from .config import paths
 
 DEFAULT_VOICE_ID = "default"
@@ -120,7 +120,11 @@ class Voice:
 def _slug(name: str, default: str = "voice") -> str:
     s = re.sub(r"[^\w\- ]+", "", name).strip().lower().replace(" ", "-")
     s = re.sub(r"-+", "-", s)
-    return s[:40] or default
+    s = s[:40] or default
+    # A voice called "Con" or "Aux" would be saved as con.wav, which Windows
+    # treats as a device rather than a file.
+    from .pipeline.layout import _WINDOWS_RESERVED
+    return f"{s}-voice" if s in _WINDOWS_RESERVED else s
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -129,7 +133,7 @@ def _atomic_write(path: Path, text: str) -> None:
     try:
         with open(fd, "w", encoding="utf-8") as f:
             f.write(text)
-        Path(tmp).replace(path)
+        winfs.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -257,7 +261,9 @@ class VoiceLibrary:
 
         if ext == ".wav":
             if src_path:
-                shutil.copy2(src_path, dest)
+                # Contents only: a read-only attribute carried over by copy2 would stop
+                # Windows deleting the clip with its voice.
+                shutil.copyfile(src_path, dest)
             elif file_storage is not None:
                 file_storage.save(str(dest))
             else:
@@ -313,8 +319,8 @@ class VoiceLibrary:
         if not removed:
             return False
         if removed.get("clip_filename"):
-            (self.dir / removed["clip_filename"]).unlink(missing_ok=True)
-        (self.dir / f"_sample_{voice_id}.wav").unlink(missing_ok=True)  # audition clip
+            winfs.unlink(self.dir / removed["clip_filename"])
+        winfs.unlink(self.dir / f"_sample_{voice_id}.wav")  # audition clip
         self._save_index(kept)
         return True
 
