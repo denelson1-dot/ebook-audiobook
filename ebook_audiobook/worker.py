@@ -888,9 +888,11 @@ def render_job(
             if path.exists() and is_valid_audio(path):
                 seg.status = "done"
             else:
-                seg_t0 = time.monotonic()
+                # perf_counter, not monotonic: on Windows monotonic ticks
+                # every 15.6 ms, which rounds a quick passage to no time at all.
+                seg_t0 = time.perf_counter()
                 _render_one(adapter, seg.text, path)
-                seg_elapsed = time.monotonic() - seg_t0
+                seg_elapsed = time.perf_counter() - seg_t0
                 work_seconds += seg_elapsed
                 seg.status = "done"
                 chars_done += len(seg.text)
@@ -1079,10 +1081,10 @@ def measure_job(job_id: str, progress: "Progress | None" = None,
                 raise JobCancelled()
             path = store.segment_audio_path(seg.segment_id)
             fresh = not (path.exists() and is_valid_audio(path))
-            t0 = time.monotonic()
+            t0 = time.perf_counter()   # see render_job: not monotonic, on Windows
             if fresh:
                 _render_one(adapter, seg.text, path)
-            elapsed = time.monotonic() - t0
+            elapsed = time.perf_counter() - t0
             if fresh:
                 _log_segment(job_id, "measure", adapter, seg.text, elapsed, path)
 
