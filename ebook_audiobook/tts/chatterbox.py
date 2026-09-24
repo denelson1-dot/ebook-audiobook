@@ -21,7 +21,7 @@ import time
 
 import numpy as np
 
-from .. import debuglog, device, narration_langs, quiet, tiers
+from .. import config, debuglog, device, narration_langs, quiet, tiers
 from .adapter import AudioClip, TTSAdapter, VoiceConfig
 
 # Imported for its side effect: the engine's import-time noise is filtered out
@@ -132,6 +132,47 @@ def _move(model, device_kind: str) -> None:
     model.device = device_kind
 
 
+# --- a card that stops making progress ------------------------------------------
+#
+# Running out of memory is an error and the fallback handles it. The failure a
+# Windows laptop actually showed was quieter: after one good preview, the next
+# stalled partway with the graphics card idle and nothing raised, so nothing
+# stepped down and nothing was logged. Whatever the cause (the driver paging
+# the card into system RAM, an allocator thrashing against its cap), a passage
+# that has run far longer than the processor would take is worth abandoning.
+
+# Healthy cards spend 0.3-0.6 seconds per second of speech; the processor 3-6.
+# Past 8, the card is slower than the CPU and waiting longer helps nobody.
+STALL_FACTOR = 8.0
+# Short passages still get a minute: the first after a load is slower.
+STALL_FLOOR_SECONDS = 60.0
+
+# Rungs that stalled in this process. Not tried again until the app restarts,
+# so a second preview doesn't spend another minute finding the same thing out.
+_STALLED: set = set()
+
+
+class Stalled(RuntimeError):
+    """A passage on the graphics card stopped making progress."""
+
+
+def _watched_parts(model) -> list:
+    """The modules that run once per step of a passage: T3's transformer once
+    per speech token, S3Gen's flow estimator once per decoding step."""
+    t3 = getattr(model, "t3", None)
+    flow = getattr(getattr(model, "s3gen", None), "flow", None)
+    decoder = getattr(flow, "decoder", None)
+    parts = [getattr(t3, "tfmr", None), getattr(decoder, "estimator", None)]
+    return [p for p in parts if p is not None and hasattr(p, "register_forward_hook")]
+
+
+def _alloc_retries(torch) -> int | None:
+    try:
+        return int(torch.cuda.memory_stats().get("num_alloc_retries", 0))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _say(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
@@ -164,6 +205,9 @@ class ChatterboxAdapter(TTSAdapter):
         self.reason: str | None = None
         # PyTorch's peak on the card during the last passage, for the debug log.
         self.last_peak: int | None = None
+        # When the passage in progress on the card counts as stalled (see
+        # Stalled). None when nothing is running, or on the CPU.
+        self._deadline: float | None = None
 
     @property
     def engine_version(self) -> str:
@@ -283,6 +327,8 @@ class ChatterboxAdapter(TTSAdapter):
                     )
                 if rung.device == "cuda":
                     _offload_speech_tokenizer(model)
+                if rung.device != "cpu":
+                    self._watch(model)
         except BaseException:
             # Never leave a model behind that loaded but has no voice: it
             # already holds the built-in one, and a retry of the passage would
@@ -294,7 +340,7 @@ class ChatterboxAdapter(TTSAdapter):
         self._rung = rung
         self._model_sr = int(getattr(model, "sr", 24_000))
         fields = {"device": rung.device, "tier": rung.tier, "language": self.voice.language,
-                  "load_seconds": round(time.monotonic() - t0, 1)}
+                  "load_seconds": round(time.monotonic() - t0, 1), "card_free_gb": self.card_free_gb()}
         if rung.device == "cuda":
             try:
                 import torch
@@ -304,6 +350,37 @@ class ChatterboxAdapter(TTSAdapter):
             except Exception:  # noqa: BLE001
                 pass
         debuglog.event("engine_loaded", **fields)
+
+    def _watch(self, model) -> None:
+        """Hook the per-step modules so a passage past its deadline raises."""
+        def check(_module, _inputs, _output):
+            if self._deadline is not None and time.monotonic() > self._deadline:
+                self._deadline = None
+                raise Stalled("the graphics card stopped making progress on this passage")
+
+        for part in _watched_parts(model):
+            part.register_forward_hook(check)
+
+    def _arm(self, text: str) -> None:
+        if self._rung is None or self._rung.device == "cpu":
+            self._deadline = None
+            return
+        speech = max(1.0, len(text) / config.CHARS_PER_AUDIO_SECOND)
+        self._deadline = time.monotonic() + max(STALL_FLOOR_SECONDS, STALL_FACTOR * speech)
+
+    last_alloc_retries: int | None = None
+
+    def card_free_gb(self) -> float | None:
+        """Free memory on the card as the driver reports it: near zero while
+        narrating means the driver is out of room, whatever PyTorch thinks."""
+        if self._rung is None or self._rung.device != "cuda":
+            return None
+        try:
+            import torch
+
+            return round(torch.cuda.mem_get_info()[0] / tiers.GiB, 2)
+        except Exception:  # noqa: BLE001
+            return None
 
     def _release(self) -> None:
         """Drop the model and hand its memory back.
@@ -325,17 +402,22 @@ class ChatterboxAdapter(TTSAdapter):
         dev = device.select_device()
         self._gpu = dev
         self._probe = tiers.probe(dev.kind)
-        self._ladder = tiers.ladder(self._probe, self._pin,
-                                    model=tiers.model_for(self.voice.language))
+        planned = tiers.ladder(self._probe, self._pin,
+                               model=tiers.model_for(self.voice.language))
+        # The CPU is never watched, so it is never among the stalled.
+        self._ladder = [r for r in planned if r not in _STALLED]
         first = self._ladder[0]
-        if dev.kind == "cuda" and first.device == "cpu":
+        if first != planned[0]:
+            self.reason = "stalled"
+        elif dev.kind == "cuda" and first.device == "cpu":
             self.reason = "no_room"
         debuglog.event(
             "engine_plan", gpu=dev.describe(), pinned=self._pin,
             free_gb=tiers.gb(self._probe.free), total_gb=tiers.gb(self._probe.total),
             budget_gb=tiers.gb(self._probe.budget), bf16=self._probe.bf16,
             capped_by_env=self._probe.capped_by_env,
-            ladder=[tiers.label(r) for r in self._ladder])
+            ladder=[tiers.label(r) for r in self._ladder],
+            skipped_after_stalling=[tiers.label(r) for r in planned if r in _STALLED])
 
         # Progress bars are disabled, so give a heads-up: load is ~10s, and the
         # very first run also downloads the model from Hugging Face.
@@ -405,7 +487,7 @@ class ChatterboxAdapter(TTSAdapter):
 
     # --- running out of memory --------------------------------------------------
 
-    def _step_down(self, error: BaseException) -> bool:
+    def _step_down(self, error: BaseException, reason: str = "ran_out") -> bool:
         """Carry on one rung down after the card ran out of memory.
 
         A long render is hours of work; losing all of it because one unusually
@@ -416,11 +498,12 @@ class ChatterboxAdapter(TTSAdapter):
             return False
         below = self._ladder[self._ladder.index(self._rung) + 1:]
         failed = self._rung
+        what = "stalled" if reason == "stalled" else "ran out of memory"
         for rung in below:
-            _say(f"  {tiers.label(failed)} ran out of memory — continuing on "
+            _say(f"  {tiers.label(failed)} {what} — continuing on "
                  f"{tiers.label(rung)} for the rest of this render (same voice)")
             debuglog.event("step_down", during="narrating", came_from=tiers.label(failed),
-                           to=tiers.label(rung), error=str(error)[:300])
+                           to=tiers.label(rung), reason=reason, error=str(error)[:300])
             self._release()
             try:
                 self._load_rung(rung)
@@ -429,7 +512,7 @@ class ChatterboxAdapter(TTSAdapter):
                     raise
                 failed, error = rung, e.with_traceback(None)
                 continue
-            self.reason = "ran_out"
+            self.reason = reason
             return True
         return False
 
@@ -450,9 +533,13 @@ class ChatterboxAdapter(TTSAdapter):
         """
         retried = False
         while True:
+            started = time.monotonic()
+            self._arm(text)
             try:
                 with _quiet_io():
                     return self._model.generate(text, **gen_kwargs)
+            except Stalled as e:
+                failure = e.with_traceback(None)
             except Exception as e:  # noqa: BLE001 - only OOM is handled; rest re-raise
                 if not device.is_out_of_memory(e):
                     raise
@@ -460,6 +547,20 @@ class ChatterboxAdapter(TTSAdapter):
                 # passage's tensors, and while they live, emptying the cache
                 # frees nothing and the next tier loads into a full card.
                 failure = e.with_traceback(None)
+            finally:
+                self._deadline = None
+            if isinstance(failure, Stalled):
+                # No retry: the same rung would stall the same way. Given up on
+                # for this session, and narration carries on a rung down.
+                stalled = self._rung
+                _STALLED.add(stalled)
+                debuglog.event("stalled", rung=tiers.label(stalled), chars=len(text),
+                               seconds=round(time.monotonic() - started, 1),
+                               card_free_gb=self.card_free_gb())
+                if not self._step_down(failure, reason="stalled"):
+                    raise failure
+                retried = False
+                continue
             if not retried:
                 retried = True
                 device.empty_cache(self._rung.device)
@@ -488,12 +589,20 @@ class ChatterboxAdapter(TTSAdapter):
         }
         if self.voice.language != "en":
             gen_kwargs["language_id"] = self.voice.language
+        retries_before = None
         if self.active_device == "cuda":
             torch.cuda.reset_peak_memory_stats()
+            retries_before = _alloc_retries(torch)
         wav = self._generate(text, gen_kwargs)
         # Read after, so a step-down to the CPU mid-passage reports nothing.
-        self.last_peak = (torch.cuda.max_memory_reserved()
-                          if self.active_device == "cuda" else None)
+        on_cuda = self.active_device == "cuda"
+        self.last_peak = torch.cuda.max_memory_reserved() if on_cuda else None
+        # How often PyTorch hit its cap and had to empty its cache to carry on.
+        # Cheap on Linux; on Windows each one is slow, and many per passage
+        # means the budget is too tight for this card.
+        after = _alloc_retries(torch) if on_cuda else None
+        self.last_alloc_retries = (after - retries_before
+                                   if after is not None and retries_before is not None else None)
 
         # Normalize to mono float32 numpy.
         if hasattr(wav, "detach"):

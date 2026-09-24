@@ -159,12 +159,79 @@ def _lower_thread_priority(delta: int) -> tuple[bool, bool]:
 
 
 def _windows_below_normal() -> bool:
-    """Put this thread below normal priority (reversible, unlike POSIX nice)."""
+    """Put this thread below normal priority (reversible, unlike POSIX nice).
+
+    This has never taken effect: GetCurrentThread's pseudo-handle is truncated
+    through ``ctypes.windll`` (see _kernel32), so the call fails and Balanced
+    on Windows has only ever limited threads and paced. It is left that way on
+    purpose until measured: a GPU render is paced by this thread handing the
+    card work token by token, and on a hybrid CPU below-normal priority moves
+    it to the efficiency cores, which is the slowdown _windows_ecoqos exists
+    to prevent.
+    """
     try:
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         # THREAD_PRIORITY_BELOW_NORMAL = -1
         return bool(kernel32.SetThreadPriority(kernel32.GetCurrentThread(), -1))
     except Exception:  # noqa: BLE001 - priority is a nicety, never fatal
+        return False
+
+
+def _kernel32():
+    """kernel32 with 64-bit-safe signatures, private to this module.
+
+    ``ctypes.windll.kernel32`` guesses ``int`` for every argument and result,
+    so GetCurrentThread's pseudo-handle came back truncated and every thread
+    call made with it failed: reading the priority returned the error value
+    (2147483647), found in a user's performance log. A separate WinDLL keeps
+    these prototypes from changing anyone else's.
+    """
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    k32.GetCurrentThread.restype = wintypes.HANDLE
+    k32.GetCurrentThread.argtypes = ()
+    k32.GetThreadPriority.restype = ctypes.c_int
+    k32.GetThreadPriority.argtypes = (wintypes.HANDLE,)
+    k32.SetThreadInformation.restype = wintypes.BOOL
+    k32.SetThreadInformation.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                         wintypes.DWORD)
+    return k32
+
+
+# SetThreadInformation(ThreadPowerThrottling): Windows 11's EcoQoS.
+_THREAD_POWER_THROTTLING = 3
+_THROTTLE_EXECUTION_SPEED = 0x1
+
+
+def _windows_ecoqos(on: bool) -> bool:
+    """Put the calling thread in, or explicitly out of, Windows' efficiency mode.
+
+    Windows decides for itself that a process with no window of its own is
+    background work and runs it on efficiency cores at low clocks. This app's
+    window belongs to the browser, so the narrating process qualifies. For a
+    GPU render that is ruinous: Chatterbox makes speech one token at a time,
+    and every token waits on this thread to hand the card its next piece of
+    work. A 4 GB laptop narrated at 3.5 s of work per second of speech, CPU
+    speed, with the graphics card idle. Setting the execution-speed bit in the
+    control mask and clearing it in the state mask says "never throttle this
+    thread", overriding the guess; setting both asks for throttling, which is
+    what Quiet mode wants. Per-thread and reversible, like the Darwin QoS.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        from ctypes import wintypes
+
+        class _State(ctypes.Structure):
+            _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG),
+                        ("StateMask", wintypes.ULONG)]
+
+        k32 = _kernel32()
+        state = _State(1, _THROTTLE_EXECUTION_SPEED, _THROTTLE_EXECUTION_SPEED if on else 0)
+        return bool(k32.SetThreadInformation(k32.GetCurrentThread(), _THREAD_POWER_THROTTLING,
+                                             ctypes.byref(state), ctypes.sizeof(state)))
+    except Exception:  # noqa: BLE001 - Windows 10 before 1709 has no such class
         return False
 
 
@@ -222,6 +289,11 @@ def apply(profile: Profile) -> list[str]:
     doesn't appear in the notes.
     """
     notes: list[str] = []
+    # Windows: never let the OS decide this thread is background work, except
+    # in Quiet mode, where that is the point. See _windows_ecoqos.
+    quiet = profile.mode == MODE_QUIET
+    if _windows_ecoqos(quiet):
+        notes.append("Windows efficiency mode on" if quiet else "Windows efficiency mode off")
     if profile.mode == MODE_FULL:
         # Undo anything a previous quiet render left behind that we *can* undo.
         _darwin_qos(None)
@@ -306,8 +378,8 @@ def thread_priority() -> int | None:
     thread priority (0 normal, -1 below normal), or the POSIX niceness."""
     try:
         if sys.platform == "win32":
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-            return int(kernel32.GetThreadPriority(kernel32.GetCurrentThread()))
+            k32 = _kernel32()
+            return int(k32.GetThreadPriority(k32.GetCurrentThread()))
         return os.getpriority(os.PRIO_PROCESS, 0)
     except Exception:  # noqa: BLE001
         return None

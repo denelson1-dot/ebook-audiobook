@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.6.0\n"
+"Project-Id-Version: ebook-audiobook 1.6.1\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-07 12:36-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1919,40 +1919,49 @@ msgid "Narrating on the processor: the graphics card ran out of memory."
 msgstr "CPU でナレーション中です。グラフィックカードのメモリが不足しました。"
 
 #: ebook_audiobook/web/templates/job.html:951
+msgid "Narrating on the processor: the graphics card stopped making progress."
+msgstr "CPU でナレーション中です。グラフィックカードの処理が進まなくなりました。"
+
+#: ebook_audiobook/web/templates/job.html:952
 msgid ""
 "Narrating on the processor: the graphics card hasn't enough free memory for the voice"
 " model."
 msgstr "CPU でナレーション中です。グラフィックカードの空きメモリが音声モデルには足りません。"
 
-#: ebook_audiobook/web/templates/job.html:952
+#: ebook_audiobook/web/templates/job.html:953
 msgid "Narrating on the processor."
 msgstr "CPU でナレーション中です。"
 
-#: ebook_audiobook/web/templates/job.html:955
+#: ebook_audiobook/web/templates/job.html:956
 #, python-format
 msgid "Narrating on %(gpu)s in compact mode, after it ran out of memory at full precision."
 msgstr "%(gpu)s のコンパクトモードでナレーション中です（フル精度ではメモリが不足しました）。"
 
-#: ebook_audiobook/web/templates/job.html:961
+#: ebook_audiobook/web/templates/job.html:957
+#, python-format
+msgid "Narrating on %(gpu)s in compact mode, after full precision stopped making progress."
+msgstr "%(gpu)s のコンパクトモードでナレーション中です（フル精度では処理が進まなくなりました）。"
+
+#: ebook_audiobook/web/templates/job.html:963
 #, python-format
 msgid "Narrating on %(gpu)s in compact mode, to fit the %(gb)s GB of memory available to it."
 msgstr "%(gpu)s のコンパクトモードでナレーション中です（使える %(gb)s GB のメモリに収めるため）。"
 
-#: ebook_audiobook/web/templates/job.html:963
+#: ebook_audiobook/web/templates/job.html:965
 #, python-format
 msgid "Narrating on %(gpu)s."
 msgstr "%(gpu)s でナレーション中です。"
 
-#: ebook_audiobook/web/templates/job.html:1008
+#: ebook_audiobook/web/templates/job.html:1010
 msgid "No readable sections were found in this book."
 msgstr "この本には読み取れるセクションが見つかりませんでした。"
 
-#: ebook_audiobook/web/templates/job.html:1048
+#: ebook_audiobook/web/templates/job.html:1050
 #, python-format
 msgid "Finished %(when)s"
 msgstr "完了 %(when)s"
 
-#: ebook_audiobook/web/templates/job.html:1071
+#: ebook_audiobook/web/templates/job.html:1073
 msgid "Preview ready — press play to hear it"
 msgstr "プレビューができました — 再生を押すと聴けます"
 
@@ -2023,7 +2032,7 @@ msgstr "このセクションには読み取れる文章がありません — �
 msgid "… showing the opening %(shown)s characters of %(total)s."
 msgstr "… %(total)s 文字のうち冒頭の %(shown)s 文字を表示しています。"
 
-#: ebook_audiobook/web/templates/job.html:1045
+#: ebook_audiobook/web/templates/job.html:1047
 msgid "Save the .m4b"
 msgstr ".m4b を保存"
 

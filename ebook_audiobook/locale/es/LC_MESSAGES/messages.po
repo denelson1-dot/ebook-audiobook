@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.6.0\n"
+"Project-Id-Version: ebook-audiobook 1.6.1\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-07 12:36-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -2009,6 +2009,10 @@ msgid "Narrating on the processor: the graphics card ran out of memory."
 msgstr "Narrando en el procesador: la tarjeta gráfica se quedó sin memoria."
 
 #: ebook_audiobook/web/templates/job.html:951
+msgid "Narrating on the processor: the graphics card stopped making progress."
+msgstr "Narrando en el procesador: la tarjeta gráfica dejó de avanzar."
+
+#: ebook_audiobook/web/templates/job.html:952
 msgid ""
 "Narrating on the processor: the graphics card hasn't enough free memory for the voice"
 " model."
@@ -2016,39 +2020,46 @@ msgstr ""
 "Narrando en el procesador: la tarjeta gráfica no tiene suficiente memoria libre para "
 "el modelo de voz."
 
-#: ebook_audiobook/web/templates/job.html:952
+#: ebook_audiobook/web/templates/job.html:953
 msgid "Narrating on the processor."
 msgstr "Narrando en el procesador."
 
-#: ebook_audiobook/web/templates/job.html:955
+#: ebook_audiobook/web/templates/job.html:956
 #, python-format
 msgid "Narrating on %(gpu)s in compact mode, after it ran out of memory at full precision."
 msgstr ""
 "Narrando en %(gpu)s en modo compacto, tras quedarse sin memoria con la precisión "
 "completa."
 
-#: ebook_audiobook/web/templates/job.html:961
+#: ebook_audiobook/web/templates/job.html:957
+#, python-format
+msgid "Narrating on %(gpu)s in compact mode, after full precision stopped making progress."
+msgstr ""
+"Narrando en %(gpu)s en modo compacto, después de que la precisión completa dejara de "
+"avanzar."
+
+#: ebook_audiobook/web/templates/job.html:963
 #, python-format
 msgid "Narrating on %(gpu)s in compact mode, to fit the %(gb)s GB of memory available to it."
 msgstr ""
 "Narrando en %(gpu)s en modo compacto, para caber en los %(gb)s GB de memoria de que "
 "dispone."
 
-#: ebook_audiobook/web/templates/job.html:963
+#: ebook_audiobook/web/templates/job.html:965
 #, python-format
 msgid "Narrating on %(gpu)s."
 msgstr "Narrando en %(gpu)s."
 
-#: ebook_audiobook/web/templates/job.html:1008
+#: ebook_audiobook/web/templates/job.html:1010
 msgid "No readable sections were found in this book."
 msgstr "No se encontró ninguna sección legible en este libro."
 
-#: ebook_audiobook/web/templates/job.html:1048
+#: ebook_audiobook/web/templates/job.html:1050
 #, python-format
 msgid "Finished %(when)s"
 msgstr "Terminado %(when)s"
 
-#: ebook_audiobook/web/templates/job.html:1071
+#: ebook_audiobook/web/templates/job.html:1073
 msgid "Preview ready — press play to hear it"
 msgstr "Vista previa lista — pulsa reproducir para escucharla"
 
@@ -2126,7 +2137,7 @@ msgstr ""
 msgid "… showing the opening %(shown)s characters of %(total)s."
 msgstr "… se muestran los primeros %(shown)s caracteres de %(total)s."
 
-#: ebook_audiobook/web/templates/job.html:1045
+#: ebook_audiobook/web/templates/job.html:1047
 msgid "Save the .m4b"
 msgstr "Guardar el .m4b"
 

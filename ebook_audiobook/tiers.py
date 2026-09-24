@@ -69,6 +69,8 @@ LOAD_NEEDS = {FULL: int(3.45 * GiB), COMPACT: int(2.40 * GiB)}
 
 # Left outside PyTorch's pool. The CUDA context grows as kernels load on first
 # use (0.21 GB measured once narration has started), and nothing else caps it.
+# Not more on Windows: a 4 GB laptop's compact tier peaked at 2.92 GB inside a
+# 3.0 GB budget, and a smaller budget would only have it fight the cap.
 HEADROOM = 256 * 1024**2
 
 BUDGET_ENV = "EBAB_VRAM_BUDGET_GB"

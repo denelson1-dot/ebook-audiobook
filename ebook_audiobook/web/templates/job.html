@@ -948,11 +948,13 @@ function engineLine(e) {
   if (!e) return "";
   if (e.device === "cpu") {
     if (e.reason === "ran_out") return _("Narrating on the processor: the graphics card ran out of memory.");
+    if (e.reason === "stalled") return _("Narrating on the processor: the graphics card stopped making progress.");
     if (e.reason === "no_room") return _("Narrating on the processor: the graphics card hasn't enough free memory for the voice model.");
     return _("Narrating on the processor.");
   }
   if (e.tier === "compact") {
     if (e.reason === "ran_out") return _("Narrating on %(gpu)s in compact mode, after it ran out of memory at full precision.", { gpu: e.name });
+    if (e.reason === "stalled") return _("Narrating on %(gpu)s in compact mode, after full precision stopped making progress.", { gpu: e.name });
     // The memory the choice was made from, not the card's size: a big card
     // that another program is using is short of room too.
     const gb = e.budget_gb

@@ -256,3 +256,43 @@ def test_state_files_written_before_tiers_still_load():
     path.write_text(json.dumps(d))
     st = store.load_state()
     assert st.engine_tier is None and st.engine is None
+
+
+# --- Windows' own idea of background work ------------------------------------------
+
+import sys  # noqa: E402
+
+from ebook_audiobook import power  # noqa: E402
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows thread APIs")
+def test_narration_is_exempt_from_windows_efficiency_mode_except_when_quiet():
+    """A windowless process counts as background to Windows 11, which runs it on
+    efficiency cores; a GPU render then crawls at CPU speed with the card idle."""
+    import threading
+
+    notes = {}
+
+    def run(mode):
+        notes[mode] = power.apply(power.profile_for(mode))
+
+    for mode in (power.MODE_FULL, power.MODE_BALANCED, power.MODE_QUIET):
+        t = threading.Thread(target=run, args=(mode,))   # apply() changes its thread
+        t.start()
+        t.join()
+    assert "Windows efficiency mode off" in notes[power.MODE_FULL]
+    assert "Windows efficiency mode off" in notes[power.MODE_BALANCED]
+    assert "Windows efficiency mode on" in notes[power.MODE_QUIET]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows thread APIs")
+def test_the_thread_priority_reads_as_a_real_priority_on_windows():
+    """It read 2147483647, Windows' error value, in a user's log."""
+    assert power.thread_priority() in range(-15, 16)
+
+
+def test_other_platforms_are_untouched_by_the_windows_switch():
+    if sys.platform == "win32":
+        pytest.skip("Windows")
+    assert power._windows_ecoqos(False) is False
+    assert not any("Windows" in n for n in power.apply(power.profile_for(power.MODE_FULL)))
