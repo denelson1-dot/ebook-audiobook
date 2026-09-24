@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.5.2\n"
+"Project-Id-Version: ebook-audiobook 1.6.0\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-07 12:36-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
