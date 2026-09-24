@@ -250,11 +250,38 @@ jobs:
           CB="$(python -c 'from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)')"
           DEPS="$(python -c 'from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(" ".join(CHATTERBOX_DEPS))')"
           IDX="$(python -c "from ebook_audiobook.torchbuild import BUILDS; print(BUILDS['cpu'].index_url)")"
-          python -m pip install --index-url "$IDX" --extra-index-url https://pypi.org/simple \
+          python -m pip install --no-warn-conflicts --index-url "$IDX" --extra-index-url https://pypi.org/simple \
             "torch==$PIN" "torchaudio==$PIN"
           python -m pip install --no-deps "$CB"
-          python -m pip install --index-url "$IDX" --extra-index-url https://pypi.org/simple \
+          python -m pip install --no-warn-conflicts --index-url "$IDX" --extra-index-url https://pypi.org/simple \
             "torch==$PIN" "torchaudio==$PIN" $DEPS
+
+      # The installers hide pip's conflict list from users, because a correct
+      # install always has one. It is held here to exactly the names we leave
+      # unmet on purpose. Anything else means Chatterbox gained a dependency
+      # the curated list lacks, or something else in the venv is broken.
+      - name: pip's only complaints are the deliberate ones
+        run: |
+          python -m pip check > pipcheck.txt || true
+          cat pipcheck.txt
+          python - <<'PY'
+          import re
+          from ebook_audiobook.torchbuild import UNMET_ON_PURPOSE
+          norm = lambda n: re.sub(r"[-_.]+", "-", n).lower()
+          found, stray = set(), []
+          for line in open("pipcheck.txt", encoding="utf-8").read().splitlines():
+              m = re.match(r"(\S+) \S+ (?:requires|has requirement) ([A-Za-z0-9._-]+)", line)
+              if m and norm(m.group(1)) == "chatterbox-tts":
+                  found.add(norm(m.group(2)))
+              elif line.strip():
+                  stray.append(line)
+          expected = {norm(n) for n in UNMET_ON_PURPOSE}
+          assert not stray, f"pip check reports more than Chatterbox's deliberate gaps: {stray}"
+          assert found == expected, (
+              f"unmet on purpose should be {sorted(expected)}, pip check says {sorted(found)}"
+          )
+          print("pip check lists exactly", sorted(found))
+          PY
 
       # The real test: every module Chatterbox imports at load time must be
       # present. An ImportError here means the curated list has a hole.

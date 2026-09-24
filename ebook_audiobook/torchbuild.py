@@ -104,6 +104,14 @@ CHATTERBOX_DEPS = (
 # above was bypassed and Chatterbox's own resolution ran instead.
 FORBIDDEN_PACKAGES = ("gradio", "spacy-pkuseg")
 
+# Chatterbox requirements that a correct install leaves unmet, on purpose: the
+# torch pair we replace, and the drops. pip's after-install check knows nothing
+# of the curated list and reports each of these as a red "ERROR:" (exit status
+# still 0), which a user reads as a failed install. So the installers pass
+# --no-warn-conflicts, and CI holds `pip check` to exactly this set instead: a
+# new name there means Chatterbox grew a dependency the list above lacks.
+UNMET_ON_PURPOSE = ("torch", "torchaudio", *FORBIDDEN_PACKAGES)
+
 # Lowest compute capability the default CUDA build has kernels for. Measured
 # from the wheel, not assumed: torch 2.9.1+cu128 reports
 # sm_70/75/80/86/90/100/120, so it gains Blackwell (RTX 50-series) and loses
@@ -257,19 +265,22 @@ def install_commands(build: Build) -> list[list[str]]:
     resolved from the chosen index first; Chatterbox goes in with --no-deps so
     its `torch==2.6.0` cannot drag the pinned build back down; then the curated
     dependency list, constrained so nothing in it can move torch either.
+
+    The two that resolve pass --no-warn-conflicts; see UNMET_ON_PURPOSE.
+    --no-deps already skips the check.
     """
     index = (["--index-url", build.index_url,
               "--extra-index-url", "https://pypi.org/simple"]
              if build.index_url else [])
     pins = [f"torch=={TORCH_PIN}", f"torchaudio=={TORCH_PIN}"]
     return [
-        ["install", *index, *pins],
+        ["install", "--no-warn-conflicts", *index, *pins],
         ["install", "--no-deps", CHATTERBOX_PIN],
         # The pins are repeated here as ordinary requirements, which makes pip
         # resolve them together with the dependency list. Without that, anything
         # in the list that requires torch is free to replace the build just
         # chosen — s3tokenizer does exactly this.
-        ["install", *index, *pins, *CHATTERBOX_DEPS],
+        ["install", "--no-warn-conflicts", *index, *pins, *CHATTERBOX_DEPS],
     ]
 
 

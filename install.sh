@@ -939,6 +939,11 @@ TORCHVARS
     #    build back down.
     # 3. Chatterbox's dependencies, curated by us (see torchbuild.py), with the
     #    torch pins repeated so nothing in that list can replace the build.
+    #
+    # 1 and 3 pass --no-warn-conflicts. Chatterbox's own torch==2.6.0, gradio
+    # and spacy-pkuseg are unmet on purpose, and pip's check lists them after
+    # every install in red, headed "ERROR:", though it exits 0 — which reads as
+    # a failed install. CI checks that list instead.
     ENGINE_MANUAL="$VENV/bin/pip install torch==$TORCH_PIN torchaudio==$TORCH_PIN"
     ENGINE_FAILED=0
     if [ -n "$TORCH_INDEX" ]; then
@@ -947,14 +952,14 @@ TORCHVARS
       IDX=""
     fi
     # shellcheck disable=SC2086  # IDX is a deliberate multi-word flag list
-    "$VPY" -m pip install --quiet $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
+    "$VPY" -m pip install --quiet --no-warn-conflicts $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
       || ENGINE_FAILED=1
     if [ "$ENGINE_FAILED" = "0" ]; then
       "$VPY" -m pip install --quiet --no-deps "$CHATTERBOX_PIN" || ENGINE_FAILED=1
     fi
     if [ "$ENGINE_FAILED" = "0" ]; then
       # shellcheck disable=SC2086
-      "$VPY" -m pip install --quiet $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
+      "$VPY" -m pip install --quiet --no-warn-conflicts $IDX "torch==$TORCH_PIN" "torchaudio==$TORCH_PIN" \
           $CHATTERBOX_DEPS || ENGINE_FAILED=1
     fi
     [ "$ENGINE_FAILED" = "0" ] || die "the speech engine failed to install. Re-run with --cpu, or by hand:
