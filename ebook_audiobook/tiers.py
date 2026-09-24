@@ -176,12 +176,15 @@ def probe(kind: str) -> Probe:
     if kind != "cuda":
         return Probe(kind, capped_by_env=capped)
     try:
+        import gc
+
         import torch
 
+        # Anything an earlier task left in this process's pool goes back first:
+        # a model kept alive by a reference cycle, or a cache nobody emptied.
+        gc.collect()
+        torch.cuda.empty_cache()
         free, total = torch.cuda.mem_get_info()
-        # The pool of an earlier load in this process counts as free: it is
-        # released before the next model arrives.
-        free += torch.cuda.memory_reserved()
         try:
             bf16 = bool(torch.cuda.is_bf16_supported(including_emulation=False))
         except TypeError:  # an older torch without the argument

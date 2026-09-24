@@ -103,7 +103,17 @@ def _compact(model) -> None:
     """
     import torch
 
+    # The rotary position tables stay float32. Rounded to bfloat16 they are
+    # 0.3% off, which by position 1200 (a long passage) turns into an angle
+    # error of a radian: the model loses track of where it is in the sentence
+    # exactly where it is already most prone to wander. Hugging Face's own bf16
+    # loading keeps them at full precision for the same reason.
+    keep = {name: buf.detach().clone() for name, buf in model.t3.named_buffers()
+            if name.endswith("inv_freq")}
     model.t3.to(dtype=torch.bfloat16)
+    for name, buf in keep.items():
+        owner, _, attr = name.rpartition(".")
+        model.t3.get_submodule(owner)._buffers[attr] = buf
     run = model.t3.inference
 
     def inference(*args, **kwargs):
@@ -233,9 +243,11 @@ class ChatterboxAdapter(TTSAdapter):
         fallback to catch. With one, PyTorch refuses first, with an
         out-of-memory error _generate knows what to do with.
         """
-        fraction = tiers.fraction_for(self._probe) if self._probe else None
-        if fraction is None:
+        if self._probe is None or self._probe.kind != "cuda":
             return
+        # 1.0 when the card couldn't be read: undo an earlier task's cap
+        # rather than inherit it.
+        fraction = tiers.fraction_for(self._probe) or 1.0
         try:
             import torch
 
@@ -250,26 +262,33 @@ class ChatterboxAdapter(TTSAdapter):
             import torch
 
             torch.cuda.reset_peak_memory_stats()
-        with _quiet_io():
-            if rung.tier == tiers.COMPACT:
-                model = self._build("cpu")
-                _compact(model)
-                _move(model, rung.device)
-            else:
-                model = self._build(rung.device)
-            # Held before the voice is prepared, so an out-of-memory there
-            # still lets _release free what is on the card.
-            self._model = model
-            # Embed the reference voice ONCE here (not per chunk). Subsequent
-            # generate() calls reuse self._model.conds, which is both faster and
-            # more consistent than re-embedding the clip every segment. With no
-            # reference clip, the model's built-in default voice is used.
-            if self.voice.reference_clip:
-                model.prepare_conditionals(
-                    self.voice.reference_clip, exaggeration=self.voice.exaggeration
-                )
-            if rung.device == "cuda":
-                _offload_speech_tokenizer(model)
+        try:
+            with _quiet_io():
+                if rung.tier == tiers.COMPACT:
+                    model = self._build("cpu")
+                    _compact(model)
+                    _move(model, rung.device)
+                else:
+                    model = self._build(rung.device)
+                # Held before the voice is prepared, so an out-of-memory there
+                # still lets _release free what is on the card.
+                self._model = model
+                # Embed the reference voice ONCE here (not per chunk). Later
+                # generate() calls reuse self._model.conds, which is both faster
+                # and more consistent than re-embedding the clip every segment.
+                # With no reference clip, the built-in default voice is used.
+                if self.voice.reference_clip:
+                    model.prepare_conditionals(
+                        self.voice.reference_clip, exaggeration=self.voice.exaggeration
+                    )
+                if rung.device == "cuda":
+                    _offload_speech_tokenizer(model)
+        except BaseException:
+            # Never leave a model behind that loaded but has no voice: it
+            # already holds the built-in one, and a retry of the passage would
+            # narrate in that voice and file the audio under this book's key.
+            self._model = None
+            raise
         if rung.device == "cuda":
             device.empty_cache("cuda")
         self._rung = rung
@@ -341,23 +360,30 @@ class ChatterboxAdapter(TTSAdapter):
 
         self._cap_memory()
         for i, rung in enumerate(self._ladder):
+            below = self._ladder[i + 1] if i + 1 < len(self._ladder) else None
             try:
                 self._load_rung(rung)
                 break
             except Exception as e:  # noqa: BLE001 - a card that can't hold the model
-                below = self._ladder[i + 1] if i + 1 < len(self._ladder) else None
                 if below is None or not device.is_out_of_memory(e):
                     raise
-                # Detected, but hasn't the memory to load this way. The rung
-                # below always has more room, and the CPU always can.
-                _say(f"  {tiers.label(rung)} ran out of memory loading the model — "
-                     f"trying {tiers.label(below)}")
-                debuglog.event("step_down", during="load", came_from=tiers.label(rung),
-                               to=tiers.label(below), error=str(e)[:300])
-                self.reason = "ran_out"
-                self._release()
+                # Without its traceback, whose frames hold the half-loaded model.
+                failure = e.with_traceback(None)
+            # Detected, but hasn't the memory to load this way. The rung below
+            # always has more room, and the CPU always can. Released here,
+            # outside the except block, so the attempt is gone from the card.
+            _say(f"  {tiers.label(rung)} ran out of memory loading the model — "
+                 f"trying {tiers.label(below)}")
+            debuglog.event("step_down", during="load", came_from=tiers.label(rung),
+                           to=tiers.label(below), error=str(failure)[:300])
+            self.reason = "ran_out"
+            self._release()
 
-        self._load_device = self._rung.device
+        # The device this machine narrates on, not where this load landed. A
+        # card that is short of room today, or ran out, keeps the key its
+        # audio was made under, exactly as a fallback partway through a render
+        # always has; otherwise a busy day would re-render a whole book.
+        self._load_device = self._gpu.kind if self.reason else self._rung.device
         self._identity = tiers.identity(self._pin, self._rung)
         # The torch version belongs in here. engine_version is folded into every
         # segment's content hash, so without it a book half-rendered on one torch
@@ -401,7 +427,7 @@ class ChatterboxAdapter(TTSAdapter):
             except Exception as e:  # noqa: BLE001
                 if rung.device == "cpu" or not device.is_out_of_memory(e):
                     raise
-                failed, error = rung, e
+                failed, error = rung, e.with_traceback(None)
                 continue
             self.reason = "ran_out"
             return True

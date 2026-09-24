@@ -129,10 +129,11 @@ def test_only_compact_changes_the_cache_key():
 
 # --- probing a real torch's answers ------------------------------------------------
 
-def _torch_with(free, total, reserved=0, bf16=True, capability=(8, 6), bf16_takes_arg=True):
+def _torch_with(free, total, bf16=True, capability=(8, 6), bf16_takes_arg=True, calls=None):
+    calls = calls if calls is not None else []
     cuda = types.SimpleNamespace(
-        mem_get_info=lambda: (free, total),
-        memory_reserved=lambda: reserved,
+        mem_get_info=lambda: calls.append("mem_get_info") or (free, total),
+        empty_cache=lambda: calls.append("empty_cache"),
         get_device_capability=lambda _i=0: capability,
     )
     if bf16_takes_arg:
@@ -148,10 +149,14 @@ def _torch_with(free, total, reserved=0, bf16=True, capability=(8, 6), bf16_take
     return mod
 
 
-def test_probe_counts_this_process_pool_as_free(monkeypatch):
-    monkeypatch.setitem(sys.modules, "torch", _torch_with(3 * GiB, 8 * GiB, reserved=2 * GiB))
+def test_probe_hands_back_the_pool_before_measuring(monkeypatch):
+    """What an earlier task left behind is released and then measured, not
+    assumed free: memory still held by live tensors is not room."""
+    calls = []
+    monkeypatch.setitem(sys.modules, "torch", _torch_with(3 * GiB, 8 * GiB, calls=calls))
     p = tiers.probe("cuda")
-    assert (p.free, p.total, p.bf16) == (5 * GiB, 8 * GiB, True)
+    assert (p.free, p.total, p.bf16) == (3 * GiB, 8 * GiB, True)
+    assert calls == ["empty_cache", "mem_get_info"]
 
 
 def test_probe_asks_for_native_bfloat16_only(monkeypatch):
@@ -310,6 +315,36 @@ def test_a_card_with_no_room_says_so(engine, monkeypatch):
     assert a.loads == [CPU]
     assert a.runtime == {"device": "cpu", "name": device.cpu_name(), "backend": "cpu",
                          "tier": FULL, "vram_gb": 2.0, "budget_gb": 1.2, "reason": "no_room"}
+    # Keyed to the machine's GPU, as a fallback partway through always was:
+    # a book begun on the card resumes on a busy day without starting over.
+    assert a.engine_version == "chatterbox-0.1.7-torch2.9-cuda"
+
+
+def test_compact_keeps_the_rotary_position_tables_at_full_precision():
+    torch = pytest.importorskip("torch")
+    from ebook_audiobook.tts.chatterbox import _compact
+
+    class Rotary(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("inv_freq", torch.rand(8), persistent=False)
+
+    class T3(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.proj = torch.nn.Linear(4, 4)
+            self.tfmr = torch.nn.Module()
+            self.tfmr.rotary_emb = Rotary()
+
+        def inference(self):
+            return None
+
+    model = types.SimpleNamespace(t3=T3())
+    before = model.t3.tfmr.rotary_emb.inv_freq.clone()
+    _compact(model)
+    assert model.t3.proj.weight.dtype == torch.bfloat16
+    assert model.t3.tfmr.rotary_emb.inv_freq.dtype == torch.float32
+    assert torch.equal(model.t3.tfmr.rotary_emb.inv_freq, before)
 
 
 # --- loading without the network ------------------------------------------------------
@@ -356,6 +391,27 @@ def test_an_installed_model_loads_from_disk_without_asking_the_network(stub_mode
     monkeypatch.setattr(narration_langs, "snapshot_dir", lambda root=None: tmp_path)
     ChatterboxAdapter(VoiceConfig(language="en")).load()
     assert stub_models == [("local", str(tmp_path), "cpu")]
+
+
+def test_a_voice_that_fails_to_prepare_leaves_no_model_behind(stub_models, monkeypatch, tmp_path):
+    """Loaded with the built-in voice and then failed on the book's own: a
+    retry of the passage must not narrate in the built-in voice."""
+    from ebook_audiobook import narration_langs
+    from ebook_audiobook.tts.adapter import VoiceConfig
+    from ebook_audiobook.tts.chatterbox import ChatterboxAdapter
+
+    monkeypatch.setattr(narration_langs, "is_installed", lambda pack_id, root=None: True)
+    monkeypatch.setattr(narration_langs, "snapshot_dir", lambda root=None: tmp_path)
+    Model = sys.modules["chatterbox.tts"].ChatterboxTTS
+
+    def broken(self, *a, **k):
+        raise FileNotFoundError("the reference clip has moved")
+
+    monkeypatch.setattr(Model, "prepare_conditionals", broken, raising=False)
+    adapter = ChatterboxAdapter(VoiceConfig(language="en", reference_clip=str(tmp_path / "gone.wav")))
+    with pytest.raises(FileNotFoundError):
+        adapter.load()
+    assert adapter._model is None
 
 
 def test_a_model_not_yet_downloaded_still_downloads(stub_models, monkeypatch):
