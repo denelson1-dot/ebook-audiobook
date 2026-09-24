@@ -730,8 +730,33 @@ def create_app() -> Flask:
         if runner.is_busy():
             # pip replaces torch and this package underneath a running render.
             return {"ok": False, "error": _("Something else is running.")}, 409
+        from .. import update as update_mod
+
+        if update_mod.closes_to_install():
+            return _hand_off_update(update_mod)
         started = update_watch.start_apply()
         return {"ok": True, "started": started}
+
+    def _hand_off_update(update_mod):
+        """Windows: start the installer in its own window, then quit so that it
+        can run. It starts the app again when it's done. Why the app can't stay
+        open is in update.closes_to_install."""
+        shutdown = current_app.config.get("EBAB_SHUTDOWN")
+        if shutdown is None:
+            # Not running as the application (a dev server), so there is
+            # nothing here that could quit; don't start a window that would
+            # wait on it and then close it.
+            return {"ok": False, "error": _(
+                "Quit ebook·audiobook, then run this in PowerShell: %(command)s",
+                command=update_mod.install_command())}, 501
+        try:
+            if not update_mod.start_windows_update(lang=i18n.current_language()):
+                return {"ok": False, "error": _("The update has already started.")}, 409
+        except update_mod.UpdateError as e:
+            return {"ok": False, "error": str(e)}, 500
+        # As /quit does: answer first, so the page can say what happens next.
+        threading.Timer(0.25, shutdown).start()
+        return {"ok": True, "closing": True}
 
     @app.post("/updates/dismiss")
     def updates_dismiss():

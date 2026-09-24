@@ -403,3 +403,305 @@ def test_keep_awake_is_a_no_op_elsewhere(monkeypatch):
     monkeypatch.setattr(power.os, "name", "posix")
     with power.keep_awake():
         pass
+
+
+# --- the in-app update -------------------------------------------------------
+#
+# On Windows the app can't be running while pip replaces it, so "Install"
+# starts the installer in a window of its own and quits; that window waits for
+# the app to go, runs the installer with -Update, and starts the app again.
+
+import base64
+import sys
+
+from ebook_audiobook import update
+
+
+class _Popen:
+    """Records what would have been started, and optionally refuses it."""
+
+    def __init__(self, refuse: list[BaseException] | None = None):
+        self.calls: list[dict] = []
+        self.refuse = list(refuse or [])
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append({"cmd": cmd, **kwargs})
+        if self.refuse:
+            raise self.refuse.pop(0)
+        return object()
+
+    def script(self, i: int = -1) -> str:
+        cmd = self.calls[i]["cmd"]
+        return base64.b64decode(cmd[cmd.index("-EncodedCommand") + 1]).decode("utf-16-le")
+
+
+@pytest.fixture
+def on_windows(monkeypatch, tmp_path):
+    """sys.platform says win32, and the app runs from an installer-made venv."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    install = tmp_path / "Programs" / "ebook-audiobook"
+    (install / "bin").mkdir(parents=True)
+    (install / "bin" / "ebook-audiobook.cmd").write_text("@echo off\n")
+    monkeypatch.setattr(sys, "prefix", str(install / "venv"))
+    popen = _Popen()
+    monkeypatch.setattr(update.subprocess, "Popen", popen)
+    monkeypatch.setattr(update, "_handoff_started", False)
+
+    def no_run(*a, **k):
+        raise AssertionError("the installer must not run beside the app on Windows")
+
+    monkeypatch.setattr(update.subprocess, "run", no_run)
+    return {"install": install, "popen": popen}
+
+
+def test_windows_installs_after_the_app_has_quit(on_windows):
+    assert update.closes_to_install() is True
+    update.start_windows_update(lang="fr")
+    popen = on_windows["popen"]
+    call = popen.calls[0]
+    assert call["cmd"][0].lower().endswith("powershell.exe") or call["cmd"][0] == "powershell"
+    # Not the app's working directory, which may be inside the venv an
+    # update rebuilds.
+    assert call["cwd"] == str(on_windows["install"])
+    # Its own console window, so it neither pops up over the app from nowhere
+    # nor dies with it.
+    assert call["creationflags"] & update.CREATE_NEW_CONSOLE
+    script = popen.script()
+    # Waits for this very process to exit before anything is replaced...
+    assert f"Get-Process -Id {os.getpid()}" in script
+    assert script.index("WaitForExit") < script.index("[scriptblock]::Create")
+    # ...runs the official installer, updating only, in the app's language,
+    # into the install that is actually running...
+    assert update.INSTALL_PS1 in script
+    assert "-Update" in script and "-Yes" not in script
+    assert "-Lang 'fr'" in script
+    assert f"-InstallDir '{on_windows['install']}'" in script
+    # ...and starts the app again from its Start Menu target.
+    assert str(on_windows["install"] / "venv" / "Scripts" / "ebook-audiobook-gui.exe") in script
+    assert script.index("[scriptblock]::Create") < script.index("Start-Process")
+
+
+def test_the_update_window_is_not_mistaken_for_the_app(on_windows):
+    """install.ps1 closes any process whose command line names the venv. The
+    script travels encoded, so this window's own command line doesn't."""
+    update.start_windows_update()
+    cmd = " ".join(on_windows["popen"].calls[0]["cmd"])
+    assert str(on_windows["install"]) not in cmd
+    assert "venv" not in cmd
+
+
+def test_breaking_away_from_the_launchers_job_is_optional(on_windows, monkeypatch):
+    """The launcher .exe may hold the app in a job object that dies with it.
+    Leaving it is tried first; a job that forbids it must not stop the update."""
+    popen = _Popen(refuse=[PermissionError(5, "Access is denied")])
+    monkeypatch.setattr(update.subprocess, "Popen", popen)
+    assert update.start_windows_update() is True
+    assert len(popen.calls) == 2
+    assert popen.calls[0]["creationflags"] & update.CREATE_BREAKAWAY_FROM_JOB
+    assert not popen.calls[1]["creationflags"] & update.CREATE_BREAKAWAY_FROM_JOB
+
+
+def test_an_update_window_that_cannot_start_is_an_error(on_windows, monkeypatch):
+    monkeypatch.setattr(update.subprocess, "Popen",
+                        _Popen(refuse=[OSError(1), OSError(1)]))
+    with pytest.raises(update.UpdateError):
+        update.start_windows_update()
+    monkeypatch.setattr(update.subprocess, "Popen", _Popen(refuse=[FileNotFoundError()]))
+    with pytest.raises(update.UpdateError, match="PowerShell"):
+        update.start_windows_update()
+    # A failed start doesn't count as the one allowed: trying again works.
+    monkeypatch.setattr(update.subprocess, "Popen", _Popen())
+    assert update.start_windows_update() is True
+
+
+def test_only_one_installer_is_ever_started(on_windows):
+    """A second "Install" in the moment before the app quits (another tab, a
+    double click) must not put two installers on one venv."""
+    assert update.start_windows_update() is True
+    assert update.start_windows_update() is False
+    assert len(on_windows["popen"].calls) == 1
+
+
+def test_the_command_line_update_hands_off_too(on_windows):
+    """`ebook-audiobook update --apply` has numpy loaded as well, so it can't
+    stay either. It doesn't restart the app it never started. --yes, being
+    unattended, only updates: -Yes would install whatever a new user is
+    offered; without it the new window asks, as the installer always has."""
+    assert update.apply_update(yes=True) == 0
+    script = on_windows["popen"].script()
+    assert "-Update" in script and "-Yes" not in script
+    assert "Start-Process" not in script
+    update._handoff_started = False  # a new command, a new process
+    assert update.apply_update(yes=False) == 0
+    script = on_windows["popen"].script()
+    assert "-Update" not in script and "-Yes" not in script
+
+
+def test_a_source_checkout_updates_the_default_install(on_windows, monkeypatch, tmp_path):
+    """A venv the installer didn't make is not handed to -InstallDir."""
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "checkout" / ".venv"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    install_dir, gui = update.installed_layout()
+    assert install_dir == ""
+    assert gui == str(tmp_path / "Local" / "ebook-audiobook" / "venv" / "Scripts"
+                      / "ebook-audiobook-gui.exe")
+    update.start_windows_update()
+    assert "-InstallDir" not in on_windows["popen"].script()
+
+
+def test_elsewhere_the_installer_still_runs_in_the_background(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert update.closes_to_install() is False
+
+
+@pytest.mark.parametrize("text", [
+    "plain", "O'Brien", "l’application n’a pas", "‘quoted’ ‚low‛", "a\nb", "$env:X `n",
+])
+def test_every_string_survives_powershell_quoting(text):
+    """French puts a typographic apostrophe in every elision, and PowerShell
+    ends a single-quoted string on one of those too."""
+    lit = update._ps_literal(text)
+    assert lit[0] == lit[-1] == "'"
+    body = lit[1:-1]
+    # Undo PowerShell's rule: a quote character doubled stands for itself.
+    out, i = [], 0
+    quotes = "'‘’‚‛"
+    while i < len(body):
+        ch = body[i]
+        if ch in quotes:
+            assert i + 1 < len(body) and body[i + 1] == ch, f"a lone quote ends the string early: {lit}"
+            i += 2
+        else:
+            i += 1
+        out.append(ch)
+    assert "".join(out) == text
+
+
+def test_a_failed_update_still_reopens_the_app_and_says_how_to_retry(on_windows):
+    update.start_windows_update()
+    script = on_windows["popen"].script()
+    tail = script[script.index("} catch {"):]
+    assert "Start-Process" in tail, "the app comes back whether or not the installer succeeded"
+    assert "Read-Host" in tail, "a failure keeps the window open to be read"
+    assert update.install_command() in script
+
+
+def test_the_window_closes_a_copy_that_will_not_quit(on_windows):
+    script = update.windows_update_script(wait_for=4242)
+    assert f"WaitForExit({update.APP_EXIT_TIMEOUT_SECONDS * 1000})" in script
+    assert "$app.Kill()" in script
+    # The handle is taken before waiting, and a process younger than this
+    # window can't be the app that started it: a recycled process id is
+    # never the one waited on, or killed.
+    assert script.index("$app.Handle") < script.index("WaitForExit")
+    assert "$app.StartTime -gt (Get-Process -Id $PID).StartTime" in script
+    assert script.index("StartTime") < script.index("WaitForExit")
+
+
+def test_the_installer_is_read_as_utf8():
+    """GitHub serves it with no charset; read as text, Windows PowerShell
+    would take it for Latin-1 and garble the French and Spanish."""
+    script = update.windows_update_script(wait_for=None)
+    assert "[Text.Encoding]::UTF8.GetString(" in script
+    assert "RawContentStream" in script
+
+
+# --- the route ---------------------------------------------------------------
+
+def _offer(monkeypatch):
+    from ebook_audiobook.web import update_watch
+
+    s = app_settings.load_settings()
+    s.check_for_updates = True
+    app_settings.save_settings(s)
+    with update_watch._state.lock:
+        update_watch._state.release = update.Release(version="99.0.0", tag="v99.0.0", url="")
+
+
+@pytest.fixture
+def windows_app(monkeypatch):
+    from ebook_audiobook.web import create_app
+    from ebook_audiobook.web import app as app_module
+    from ebook_audiobook.web.runner import Runner
+
+    monkeypatch.setattr(app_module, "runner", Runner())
+    monkeypatch.setattr(update, "closes_to_install", lambda: True)
+    started, quits = [], []
+    monkeypatch.setattr(update, "start_windows_update", lambda **kw: started.append(kw) or True)
+    monkeypatch.setattr(update, "apply_update", lambda *a, **k: pytest.fail("ran in place"))
+    app = create_app()
+    app.config["EBAB_SHUTDOWN"] = lambda: quits.append("quit")
+    return {"app": app, "started": started, "quits": quits}
+
+
+def _wait_for(pred, timeout=3.0):
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not pred() and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
+def test_install_on_windows_starts_the_installer_and_quits(windows_app, monkeypatch):
+    _offer(monkeypatch)
+    r = windows_app["app"].test_client().post("/updates/apply",
+                                              headers={"Accept-Language": "fr"})
+    assert r.status_code == 200
+    assert r.get_json() == {"ok": True, "closing": True}
+    assert len(windows_app["started"]) == 1
+    _wait_for(lambda: windows_app["quits"])
+    assert windows_app["quits"] == ["quit"]
+
+
+def test_the_confirmation_is_told_the_app_will_close(windows_app, monkeypatch):
+    _offer(monkeypatch)
+    d = windows_app["app"].test_client().get("/api/updates/status").get_json()
+    assert d["closes_to_install"] is True
+
+
+def test_install_on_windows_does_not_quit_if_the_installer_did_not_start(windows_app, monkeypatch):
+    _offer(monkeypatch)
+
+    def refuse(**kw):
+        raise update.UpdateError("Couldn't start the installer: nope")
+
+    monkeypatch.setattr(update, "start_windows_update", refuse)
+    r = windows_app["app"].test_client().post("/updates/apply")
+    assert r.status_code == 500
+    assert "nope" in r.get_json()["error"]
+    _wait_for(lambda: windows_app["quits"], timeout=0.5)
+    assert windows_app["quits"] == []
+
+
+def test_a_second_install_while_the_first_is_starting_is_refused(windows_app, monkeypatch):
+    _offer(monkeypatch)
+    monkeypatch.setattr(update, "start_windows_update", lambda **kw: False)
+    r = windows_app["app"].test_client().post("/updates/apply")
+    assert r.status_code == 409
+    _wait_for(lambda: windows_app["quits"], timeout=0.5)
+    assert windows_app["quits"] == []
+
+
+def test_install_on_windows_needs_an_app_that_can_quit(windows_app, monkeypatch):
+    """Under a dev server nothing could quit, and a window that waits for the
+    app would end up closing it instead."""
+    _offer(monkeypatch)
+    del windows_app["app"].config["EBAB_SHUTDOWN"]
+    r = windows_app["app"].test_client().post("/updates/apply")
+    assert r.status_code == 501
+    assert windows_app["started"] == []
+
+
+def test_install_on_windows_keeps_every_gate(windows_app, monkeypatch):
+    """Nothing about the Windows route relaxes the checks that stop another
+    site, or a render in progress, from reinstalling the app."""
+    from ebook_audiobook.web import app as app_module
+
+    client = windows_app["app"].test_client()
+    assert client.post("/updates/apply").status_code == 409  # checks off
+    _offer(monkeypatch)
+    assert client.post("/updates/apply",
+                       headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    app_module.runner.current = "job1:render"
+    assert client.post("/updates/apply").status_code == 409
+    assert windows_app["started"] == [] and windows_app["quits"] == []

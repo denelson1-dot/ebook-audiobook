@@ -197,10 +197,14 @@ def cmd_update(args) -> int:
         print("Re-running the official installer to upgrade in place.")
         print(f"  {update.install_command()}\n")
         try:
-            return update.apply_update(yes=args.yes)
+            code = update.apply_update(yes=args.yes)
         except update.UpdateError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
+        if update.closes_to_install():
+            print("The installer opens in a new window once this command has finished.\n"
+                  "Quit ebook-audiobook if it is open; the installer will offer to close it.")
+        return code
 
     print(f"installed: {update.current_version()}")
     print(f"this machine would install: {update.platform_hint()}")
@@ -600,7 +604,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--apply", action="store_true",
                    help="download and run the official installer to upgrade")
     c.add_argument("-y", "--yes", action="store_true",
-                   help="with --apply, accept the installer's prompts")
+                   help="with --apply, accept the installer's prompts "
+                        "(on Windows: update only what's installed, asking nothing)")
     c.set_defaults(func=cmd_update)
 
     c = sub.add_parser(

@@ -43,6 +43,12 @@
 .PARAMETER Yes
   Accept all prompts, for scripted installs.
 
+.PARAMETER Update
+  Upgrade what is already installed, asking nothing and adding nothing: no
+  Python, Calibre or shortcuts that aren't there already, and the speech
+  engine only if it was installed (a CPU build stays CPU). The app's own
+  "Install update" runs this after it has quit, then starts it again.
+
 .PARAMETER Uninstall
   Remove the program. Your books and settings are kept.
 #>
@@ -56,6 +62,7 @@ param(
     [switch]$Cuda128,
     [switch]$NoTts,
     [switch]$Yes,
+    [switch]$Update,
     [switch]$Uninstall,
     [string]$Lang = ""
 )
@@ -156,6 +163,10 @@ $French = [ordered]@{
     "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows va demander l'autorisation de l'installer. Si rien n'apparaît, cherchez une icône qui clignote dans la barre des tâches."
     "couldn't download or run the Calibre installer: *" = "impossible de télécharger ou de lancer l'installateur de Calibre : *"
     "This can take a few minutes, with nothing to show until it's done." = "Cela peut prendre quelques minutes, sans rien afficher avant la fin."
+    "started by the app's own updater: updating what's installed, nothing more" = "lancé par la mise à jour de l'application : mise à niveau de ce qui est installé, rien de plus"
+    "nothing to update - ebook-audiobook isn't installed at *" = "rien à mettre à jour - ebook-audiobook n'est pas installé dans *"
+    "Skipping the speech engine (it isn't installed, and -Update adds nothing)" = "Moteur vocal ignoré (il n'est pas installé, et -Update n'ajoute rien)"
+    "keeping the CPU build that is installed (-Update)" = "conservation de la version processeur déjà installée (-Update)"
 }
 
 $Spanish = [ordered]@{
@@ -215,6 +226,10 @@ $Spanish = [ordered]@{
     "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows pedirá permiso para instalarlo. Si no aparece nada, busca un icono que parpadee en la barra de tareas."
     "couldn't download or run the Calibre installer: *" = "no se pudo descargar o ejecutar el instalador de Calibre: *"
     "This can take a few minutes, with nothing to show until it's done." = "Puede tardar unos minutos, sin mostrar nada hasta que termine."
+    "started by the app's own updater: updating what's installed, nothing more" = "iniciado por el actualizador de la propia aplicación: se actualiza lo que ya está instalado, nada más"
+    "nothing to update - ebook-audiobook isn't installed at *" = "no hay nada que actualizar - ebook-audiobook no está instalado en *"
+    "Skipping the speech engine (it isn't installed, and -Update adds nothing)" = "Se omite el motor de voz (no está instalado y -Update no añade nada)"
+    "keeping the CPU build that is installed (-Update)" = "se conserva la versión para CPU ya instalada (-Update)"
 }
 
 # Japanese, base64-encoded — deliberately, and this is not decoration.
@@ -288,6 +303,10 @@ $JapaneseB64 = [ordered]@{
     "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "44Kk44Oz44K544OI44O844Or44Gu6Kix5Y+v44KSIFdpbmRvd3Mg44GM5rGC44KB44G+44GZ44CC5L2V44KC6KGo56S644GV44KM44Gq44GE5aC05ZCI44Gv44CB44K/44K544Kv44OQ44O844Gn54K55ruF44GX44Gm44GE44KL44Ki44Kk44Kz44Oz44KS5o6i44GX44Gm44GP44Gg44GV44GE44CC"
     "couldn't download or run the Calibre installer: *" = "Q2FsaWJyZSDjga7jgqTjg7Pjgrnjg4jjg7zjg6njg7zjgpLjg4Djgqbjg7Pjg63jg7zjg4njgb7jgZ/jga/lrp/ooYzjgafjgY3jgb7jgZvjgpPjgafjgZfjgZ86ICo="
     "This can take a few minutes, with nothing to show until it's done." = "5pWw5YiG44GL44GL44KL44GT44Go44GM44GC44KK44CB57WC44KP44KL44G+44Gn5L2V44KC6KGo56S644GV44KM44G+44Gb44KT44CC"
+    "started by the app's own updater: updating what's installed, nothing more" = "44Ki44OX44Oq6Ieq6Lqr44Gu5pu05paw5qmf6IO944GL44KJ6LW35YuV44GV44KM44G+44GX44Gf77ya44Kk44Oz44K544OI44O844Or5riI44G/44Gu44KC44Gu44Gg44GR44KS5pu05paw44GX44G+44GZ"
+    "nothing to update - ebook-audiobook isn't installed at *" = "5pu05paw44GZ44KL44KC44Gu44GM44GC44KK44G+44Gb44KTIC0gZWJvb2stYXVkaW9ib29rIOOBruOCpOODs+OCueODiOODvOODq+WFiOOBjOimi+OBpOOBi+OCiuOBvuOBm+OCkzogKg=="
+    "Skipping the speech engine (it isn't installed, and -Update adds nothing)" = "6Z+z5aOw44Ko44Oz44K444Oz44KS44K544Kt44OD44OX44GX44G+44GZ77yI5pyq44Kk44Oz44K544OI44O844Or44Gu44Gf44KB44CCLVVwZGF0ZSDjga/kvZXjgoLov73liqDjgZfjgb7jgZvjgpPvvIk="
+    "keeping the CPU build that is installed (-Update)" = "44Kk44Oz44K544OI44O844Or5riI44G/44GuIENQVSDniYjjgpLjgZ3jga7jgb7jgb7kvb/jgYTjgb7jgZnvvIgtVXBkYXRl77yJ"
 }
 $Japanese = [ordered]@{}
 foreach ($k in $JapaneseB64.Keys) {
@@ -337,7 +356,7 @@ function Ask($question, $default = "y") {
     $question = Tr $question
     $hint = if ($Lang -eq "fr") { if ($default -eq "y") { "[O/n]" } else { "[o/N]" } }
             else { if ($default -eq "y") { "[Y/n]" } else { "[y/N]" } }
-    if ($Yes) { Write-Host "  $question $hint $default (auto)"; return ($default -eq "y") }
+    if ($Yes -or $Update) { Write-Host "  $question $hint $default (auto)"; return ($default -eq "y") }
     $reply = Read-Host "  $question $hint"
     if ([string]::IsNullOrWhiteSpace($reply)) { $reply = $default }
     if ($reply -match '^(o|oui)$') { $reply = "y" }
@@ -356,18 +375,18 @@ $VenvPy  = Join-Path $VenvDir "Scripts\python.exe"
 # first. Every process in the chain - the entry-point .exe, the venv's
 # python.exe redirector and the real interpreter it starts - carries the venv
 # path in its executable path or its command line.
-function Stop-RunningApp {
-    if (-not (Test-Path $VenvDir)) { return }
-    $procs = @()
+#
+# Those that started this script are set apart as Caller rather than closed:
+# the app's "Install update" up to 1.5.1 ran it as its child, and waits for it.
+function Get-RunningApp {
+    $found = @{ Others = @(); Caller = $false }
+    if (-not (Test-Path $VenvDir)) { return $found }
     try {
         $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
         $procs = @($all | Where-Object {
             ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($VenvDir, [StringComparison]::OrdinalIgnoreCase)) -or
             ($_.CommandLine -and $_.CommandLine.IndexOf($VenvDir, [StringComparison]::OrdinalIgnoreCase) -ge 0)
         })
-        # The app's own "Install update" runs this script as its child. Then
-        # the app is not in the way, it is the caller, waiting for the result:
-        # leave it be, as it expects.
         $byId = @{}
         foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
         $ancestors = @{}
@@ -381,8 +400,16 @@ function Stop-RunningApp {
                 $byId[$parent].CreationDate -gt $byId[$cur].CreationDate) { break }
             $cur = $parent
         }
-        foreach ($p in $procs) { if ($ancestors.ContainsKey([int]$p.ProcessId)) { return } }
-    } catch { return }
+        $found.Others = @($procs | Where-Object { -not $ancestors.ContainsKey([int]$_.ProcessId) })
+        $found.Caller = ($found.Others.Count -lt $procs.Count)
+    } catch { }
+    return $found
+}
+
+function Stop-RunningApp {
+    # Another copy is in the way even when this one is the caller: an
+    # `ebook-audiobook update --apply` typed while the app is open.
+    $procs = @((Get-RunningApp).Others)
     if ($procs.Count -eq 0) { return }
     Write-Warn "ebook-audiobook is running, and has to close first"
     if (-not (Ask "Close it now? A render in progress stops, and picks up where it left off when you start it again." "y")) {
@@ -426,6 +453,29 @@ if ($Uninstall) {
 Write-Host ""
 Write-Host (Tr "ebook-audiobook installer") -ForegroundColor White
 Write-Host (Tr "Turns ebooks you own into narrated audiobooks, entirely offline.") -ForegroundColor DarkGray
+
+# The app's "Install update" up to 1.5.1 ran this as its child, with -Yes -
+# which would install Calibre, a Desktop shortcut and the speech engine on a
+# machine that had chosen to go without them. Recognise it, and only update.
+if ($Yes -and -not $Update -and (Test-Path $VenvPy) -and (Get-RunningApp).Caller) {
+    $Update = $true
+    Write-Dim "started by the app's own updater: updating what's installed, nothing more"
+}
+
+# What an update has to keep as it found it. Read from the files, not by asking
+# the venv's Python, which may be past running - and the venv may be rebuilt
+# below. A CUDA build's version carries "+cu"; Windows has no other GPU build.
+$HadEngine = $false
+$HadCpuEngine = $false
+if ($Update) {
+    if (-not (Test-Path $VenvDir)) { Fail "nothing to update - ebook-audiobook isn't installed at $VenvDir" }
+    $torchInfo = @(Get-ChildItem -Path (Join-Path $VenvDir "Lib\site-packages") -Directory `
+                       -Filter "torch-*.dist-info" -ErrorAction SilentlyContinue)
+    if ($torchInfo.Count -gt 0) {
+        $HadEngine = $true
+        $HadCpuEngine = ($torchInfo[0].Name -notmatch '\+cu')
+    }
+}
 
 # --- 1. Python ---------------------------------------------------------------
 Write-Step "Looking for Python 3.11 or newer"
@@ -509,8 +559,10 @@ $Python = Find-Python
 if (-not $Python) {
     Write-Warn "no Python 3.11+ found"
     Write-Dim "(it must be 64-bit x64 Python - PyTorch has no 32-bit or ARM64 Windows build)"
-    $declined = $false
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
+    # An update installs nothing new: the Python the app ran on is gone, so
+    # this is a repair, which is a question for a person.
+    $declined = [bool]$Update
+    if (-not $declined -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         if (Ask "Install Python 3.12 now with winget?" "y") {
             winget install --id Python.Python.3.12 --source winget --scope user --architecture x64 `
                 --accept-package-agreements --accept-source-agreements --silent
@@ -657,7 +709,10 @@ $appVer = & $VenvPy -c "import importlib.metadata as m; print(m.version('ebook-a
 Write-Ok "installed $appVer"
 
 # --- 4. PyTorch --------------------------------------------------------------
-if ($NoTts) {
+if ($Update -and -not $HadEngine) {
+    Write-Step "Skipping the speech engine (it isn't installed, and -Update adds nothing)"
+    Write-Dim "add it later with: `"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`""
+} elseif ($NoTts) {
     Write-Step "Skipping the speech engine (-NoTts)"
     Write-Warn "you can import books, but rendering audio needs the engine"
     Write-Dim "add it later with: `"$VenvDir\Scripts\pip.exe`" install torch torchaudio chatterbox-tts `"setuptools<81`""
@@ -695,6 +750,12 @@ if ($NoTts) {
     elseif ($Cuda126) { $forced = "cuda126" }
     elseif ($Cuda128) { $forced = "cuda128" }
     elseif ($Gpu) { $forced = "gpu" }
+    elseif ($Update -and $HadCpuEngine) {
+        # Chosen with -Cpu, or because no GPU was found then: either way, an
+        # update is not the moment to start a 2.5 GB download.
+        $forced = "cpu"
+        Write-Dim "keeping the CPU build that is installed (-Update)"
+    }
     $vendor = ""
     if ($hasNvidia) { $vendor = "nvidia" }
 
@@ -815,8 +876,10 @@ if (Test-Calibre) {
     Write-Ok "Calibre found"
 } else {
     Write-Warn "Calibre is not installed"
-    $declined = $false
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
+    # Never during an update: it installs for every user, so it asks Windows
+    # for permission, and it is not the app's to add unasked.
+    $declined = [bool]$Update
+    if (-not $declined -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         if (Ask "Install it now with 'winget install calibre.calibre'?" "y") {
             winget install --id calibre.calibre --source winget `
                 --accept-package-agreements --accept-source-agreements --silent
@@ -871,10 +934,11 @@ REM Generated by the ebook-audiobook installer.
 Write-Ok "command: ebook-audiobook"
 
 # Put the shim on the *user* PATH (never the machine PATH: no admin, no
-# surprises for other accounts).
+# surprises for other accounts). Not during an update: if it isn't there, it
+# was taken out.
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if (-not $userPath) { $userPath = "" }
-if ($userPath.Split(';') -notcontains $BinDir) {
+if (-not $Update -and $userPath.Split(';') -notcontains $BinDir) {
     $newPath = if ($userPath.TrimEnd(';')) { "$($userPath.TrimEnd(';'));$BinDir" } else { $BinDir }
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
     $env:Path = "$env:Path;$BinDir"
@@ -899,21 +963,26 @@ try {
     # Non-fatal: a shortcut with the default icon still launches the app.
 }
 
+# An update refreshes the shortcuts that exist and adds none: one that isn't
+# there was deleted, or declined.
 try {
     $shell = New-Object -ComObject WScript.Shell
     $startMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
-    New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
-    $lnk = $shell.CreateShortcut((Join-Path $startMenuDir "ebook-audiobook.lnk"))
-    $lnk.TargetPath = $targetExe
-    $lnk.WorkingDirectory = $DataDir
-    $lnk.Description = "Turn ebooks you own into narrated audiobooks"
-    if ($iconPath) { $lnk.IconLocation = "$iconPath,0" }
-    $lnk.Save()
-    Write-Ok "Start Menu shortcut"
+    $startLnk = Join-Path $startMenuDir "ebook-audiobook.lnk"
+    if (-not $Update -or (Test-Path $startLnk)) {
+        New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
+        $lnk = $shell.CreateShortcut($startLnk)
+        $lnk.TargetPath = $targetExe
+        $lnk.WorkingDirectory = $DataDir
+        $lnk.Description = "Turn ebooks you own into narrated audiobooks"
+        if ($iconPath) { $lnk.IconLocation = "$iconPath,0" }
+        $lnk.Save()
+        Write-Ok "Start Menu shortcut"
+    }
 
-    if (Ask "Add a Desktop shortcut too?" "y") {
-        $desktop = [Environment]::GetFolderPath("Desktop")
-        $dlnk = $shell.CreateShortcut((Join-Path $desktop "ebook-audiobook.lnk"))
+    $desktopLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "ebook-audiobook.lnk"
+    if (($Update -and (Test-Path $desktopLnk)) -or (-not $Update -and (Ask "Add a Desktop shortcut too?" "y"))) {
+        $dlnk = $shell.CreateShortcut($desktopLnk)
         $dlnk.TargetPath = $targetExe
         $dlnk.WorkingDirectory = $DataDir
         $dlnk.Description = "Turn ebooks you own into narrated audiobooks"

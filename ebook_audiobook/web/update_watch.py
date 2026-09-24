@@ -78,6 +78,9 @@ def status() -> dict:
         "apply_state": apply_state,
         "apply_error": apply_error,
         "applied_version": applied_version,
+        # Windows: installing means the app quits first and comes back after,
+        # which the confirmation has to say (see update.closes_to_install).
+        "closes_to_install": update_mod.closes_to_install(),
     }
 
 
@@ -129,7 +132,10 @@ def run_loop(stopping: threading.Event) -> None:
 
 def start_apply() -> bool:
     """Install the release found above, in the background. False if one is
-    already in progress. Runs the exact installer a manual upgrade would."""
+    already in progress. Runs the exact installer a manual upgrade would.
+
+    Not on Windows, where the app has to quit for its update instead: the
+    route hands that off to update.start_windows_update."""
     with _state.lock:
         if _state.apply_state == "running":
             return False
@@ -143,7 +149,7 @@ def _apply_worker() -> None:
     with _state.lock:
         release = _state.release
     try:
-        code = update_mod.apply_update(yes=True)
+        code = update_mod.apply_update(update_only=True)
     except update_mod.UpdateError as e:
         with _state.lock:
             _state.apply_state = "error"

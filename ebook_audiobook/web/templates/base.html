@@ -376,6 +376,7 @@
     const title = document.getElementById("updateDockTitle");
     const msg = document.getElementById("updateDockMsg");
     const actions = document.getElementById("updateDockActions");
+    if (!box) return;  // the page has been replaced by a quit screen
     if (!d.enabled || (!d.available && d.apply_state === "idle")) {
       box.hidden = true;
       return;
@@ -424,13 +425,28 @@
       <button type="button" class="btn sm primary" id="updateInstallBtn">${_("Install")}</button>
       <button type="button" class="btn sm ghost" id="updateDismissBtn">${_("Not now")}</button>`;
     document.getElementById("updateInstallBtn").addEventListener("click", async (e) => {
+      // On Windows the app can't stay open while it is replaced, so it closes,
+      // the installer runs in a window of its own, and the app comes back.
       const ok = await confirmDialog({
         title: _("Install this update?"),
         confirmLabel: _("Install"),
-        bodyHtml: `<p>${_("Re-runs the installer in the background — the same one you used to set this up. It can take a few minutes and needs a working connection. You can keep working while it runs, but you'll need to restart the app once it's done.")}</p>`,
+        bodyHtml: d.closes_to_install
+          ? `<p>${_("ebook·audiobook closes, and the installer — the same one you used to set this up — runs in a window of its own. It can take a few minutes and needs a working connection. The app opens again when it's done.")}</p>`
+          : `<p>${_("Re-runs the installer in the background — the same one you used to set this up. It can take a few minutes and needs a working connection. You can keep working while it runs, but you'll need to restart the app once it's done.")}</p>`,
       });
       if (!ok) return;
-      await withBusy(e.target, _("Starting…"), () => fetch("/updates/apply", { method: "POST" }));
+      const r = await withBusy(e.target, _("Starting…"), () => fetch("/updates/apply", { method: "POST" }));
+      const body = r ? await r.json().catch(() => ({})) : {};
+      if (body.closing) {
+        // The window usually closes with the app; this is for when the UI is a
+        // tab in the user's own browser, which is not ours to close.
+        clearTimeout(updateDockTimer);
+        document.body.innerHTML =
+          `<div class="quit-screen"><h1>${_("Installing the update…")}</h1>` +
+          `<p class="meta">${_("ebook·audiobook has closed so the installer can replace it. Its window shows the progress, and the app opens again when it's done.")}</p></div>`;
+        return;
+      }
+      if (r && !r.ok) toast(body.error || _("Couldn't start the update."));
       refreshUpdateBanner();
     });
     document.getElementById("updateDismissBtn").addEventListener("click", async () => {
