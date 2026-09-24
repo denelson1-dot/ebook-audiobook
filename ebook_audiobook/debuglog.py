@@ -10,10 +10,12 @@ mains cable. This records exactly that, one JSON line per event:
   from them (see :mod:`tiers`)
 * ``engine_loaded`` - the rung that loaded, how long it took, what it holds
 * ``step_down`` - the engine moving to a smaller tier, or to the CPU, and why
+* ``stalled`` - a passage on the card abandoned for making no progress, with
+  the card's free memory as the driver saw it at that moment
 * ``render_start`` - the job, the power mode and what it applied, the thread's
   priority, whether the machine is on mains power
 * ``segment`` - every passage: characters, seconds of work, seconds of audio,
-  and the card's peak memory while making it
+  PyTorch's peak on the card, and the card's free memory per the driver
 
 Off by default. It writes a line every few seconds for the length of a render,
 and nobody should pay for that without asking. Turned on in Settings (or with

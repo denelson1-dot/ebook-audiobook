@@ -167,9 +167,12 @@ def test_the_taint_flag_is_per_thread():
 
 
 def test_full_speed_applies_nothing_and_reports_nothing(monkeypatch):
+    """Nothing that slows it, anyway. On Windows the one note is the thread
+    being exempted from efficiency mode, which is what keeps it fast."""
     monkeypatch.setattr(power, "_lower_thread_priority",
                         lambda d: pytest.fail("full speed must not touch priority"))
-    assert power.apply(power.profile_for("full")) == []
+    expected = ["Windows efficiency mode off"] if power._windows_ecoqos(False) else []
+    assert power.apply(power.profile_for("full")) == expected
 
 
 def test_apply_reports_what_actually_took_effect(monkeypatch):

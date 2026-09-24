@@ -29,6 +29,16 @@ def no_budget_env(monkeypatch):
     monkeypatch.delenv(tiers.BUDGET_ENV, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def fresh_session():
+    """Stalls are remembered for the life of the process; each test is one."""
+    from ebook_audiobook.tts import chatterbox as cb
+
+    cb._STALLED.clear()
+    yield
+    cb._STALLED.clear()
+
+
 def card(free_gb, total_gb=None, bf16=True):
     return Probe("cuda", int(free_gb * GiB), int((total_gb or free_gb + 0.5) * GiB), bf16)
 
@@ -214,8 +224,11 @@ def engine(monkeypatch):
 
         def generate(self, text, **kw):
             step = self.script.get(self.rung, "ok")
+            self.script.setdefault("calls", []).append(self.rung)
             if step == "oom":
                 raise _oom()
+            if step == "stall":
+                raise cb.Stalled("the graphics card stopped making progress")
             if step == "boom":
                 raise ValueError("not a memory problem")
             return np.zeros(2_400, dtype="float32")
@@ -422,3 +435,74 @@ def test_a_model_not_yet_downloaded_still_downloads(stub_models, monkeypatch):
     monkeypatch.setattr(narration_langs, "is_installed", lambda pack_id, root=None: False)
     ChatterboxAdapter(VoiceConfig(language="en")).load()
     assert stub_models == [("network", "cpu")]
+
+
+# --- a card that stops making progress ------------------------------------------
+
+def test_a_stalled_passage_steps_down_without_retrying(engine):
+    """A Windows laptop's second preview stalled with the GPU idle and no error
+    to catch. Abandoned, it carries on a rung down instead of hanging."""
+    script = {GPU_FULL: "stall"}
+    a = engine(script=script)
+    a.load()
+    version = a.engine_version
+    a.synthesize("A sentence.")
+    assert a.loads == [GPU_FULL, GPU_COMPACT]
+    assert script["calls"].count(GPU_FULL) == 1   # the same rung would stall again
+    assert a.runtime["tier"] == COMPACT and a.reason == "stalled"
+    assert a.engine_version == version
+
+
+def test_a_rung_that_stalled_is_skipped_for_the_rest_of_the_session(engine):
+    first = engine(script={GPU_FULL: "stall"})
+    first.load()
+    first.synthesize("A sentence.")
+    later = engine()
+    later.load()
+    assert later.loads == [GPU_COMPACT]
+    assert later.reason == "stalled"
+
+
+def test_stalling_all_the_way_down_reaches_the_cpu(engine):
+    a = engine(script={GPU_FULL: "stall", GPU_COMPACT: "stall"})
+    a.load()
+    a.synthesize("A sentence.")
+    assert a.loads == [GPU_FULL, GPU_COMPACT, CPU]
+    assert a.runtime["device"] == "cpu" and a.reason == "stalled"
+
+
+def test_the_deadline_scales_with_the_passage_and_skips_the_cpu(engine):
+    from ebook_audiobook.tts import chatterbox as cb
+
+    a = engine()
+    a.load()
+    a._arm("x" * 15)            # a second of speech: the floor applies
+    assert a._deadline - cb.time.monotonic() == pytest.approx(cb.STALL_FLOOR_SECONDS, abs=1)
+    a._arm("x" * 1_500)         # a hundred seconds of speech
+    assert a._deadline - cb.time.monotonic() == pytest.approx(800, abs=1)
+    a._rung = CPU
+    a._arm("x" * 1_500)
+    assert a._deadline is None
+
+
+def test_the_watchdog_hooks_raise_only_past_the_deadline():
+    torch = pytest.importorskip("torch")
+    from ebook_audiobook.tts import chatterbox as cb
+    from ebook_audiobook.tts.adapter import VoiceConfig
+
+    flow = torch.nn.Module()
+    flow.decoder = torch.nn.Module()
+    flow.decoder.estimator = torch.nn.Linear(2, 2)
+    model = types.SimpleNamespace(t3=types.SimpleNamespace(tfmr=torch.nn.Linear(2, 2)),
+                                  s3gen=types.SimpleNamespace(flow=flow))
+    a = cb.ChatterboxAdapter(VoiceConfig())
+    a._watch(model)
+    x = torch.zeros(1, 2)
+    a._deadline = cb.time.monotonic() + 60
+    model.t3.tfmr(x)
+    flow.decoder.estimator(x)          # in time: nothing happens
+    a._deadline = cb.time.monotonic() - 1
+    with pytest.raises(cb.Stalled):
+        model.t3.tfmr(x)
+    assert a._deadline is None         # raised once, not by every later hook
+    flow.decoder.estimator(x)

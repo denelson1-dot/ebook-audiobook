@@ -179,6 +179,64 @@ def _command(browser: str, url: str) -> list[str]:
     return [browser, *flags]
 
 
+def _is_app_title(title: str) -> bool:
+    """Whether a window's title is one of this app's pages. Every page is
+    titled "<what> · ebook·audiobook" (the bare default is "ebook · audiobook"),
+    and a Chromium --app window takes its page's title as its own."""
+    return title.replace(" ", "").endswith("ebook·audiobook")
+
+
+def focus_existing_window() -> bool:
+    """Bring an app window that is already open to the front. Windows only.
+
+    Opening the app while it runs, from the shortcut or the tray, opened a new
+    window every time: Chromium's --app windows are never merged, so a user who
+    reopened it a few times had a stack of identical windows. The launch that
+    handles the click may take the foreground, and hands it to the window that
+    is already there, restoring it first if it was minimised. False when there
+    is no such window (or off Windows), so the caller opens one.
+    """
+    if not IS_WINDOWS:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
+        visit_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)  # type: ignore[attr-defined]
+        user32.EnumWindows.argtypes = (visit_type, wintypes.LPARAM)
+        user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)
+        user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+        user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+        user32.IsIconic.argtypes = (wintypes.HWND,)
+        user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        found: list = []
+
+        def visit(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):   # minimised windows count as visible
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length <= 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            if _is_app_title(buf.value):
+                found.append(hwnd)
+                return False                        # top-most first: stop there
+            return True
+
+        user32.EnumWindows(visit_type(visit), 0)
+        if not found:
+            return False
+        if user32.IsIconic(found[0]):
+            user32.ShowWindow(found[0], 9)          # SW_RESTORE
+        user32.SetForegroundWindow(found[0])
+        return True
+    except Exception:  # noqa: BLE001 - worst case, another window opens
+        return False
+
+
 def open_app_window(url: str) -> bool:
     """Open ``url`` as an application window. False if that wasn't possible.
 

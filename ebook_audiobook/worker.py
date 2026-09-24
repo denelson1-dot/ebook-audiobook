@@ -713,11 +713,14 @@ def _log_segment(job_id: str, kind: str, adapter, text: str, seconds: float,
         audio = _safe_duration(path)
         runtime = getattr(adapter, "runtime", None) or {}
         peak = getattr(adapter, "last_peak", None)
+        card_free = getattr(adapter, "card_free_gb", None)
         debuglog.event(
             "segment", job=job_id, what=kind, chars=len(text), seconds=round(seconds, 2),
             audio=round(audio, 2), work_per_audio=round(seconds / audio, 2) if audio else None,
             device=runtime.get("device"), tier=runtime.get("tier"),
-            peak_gb=round(peak / tiers.GiB, 2) if peak else None)
+            peak_gb=round(peak / tiers.GiB, 2) if peak else None,
+            card_free_gb=card_free() if callable(card_free) else None,
+            alloc_retries=getattr(adapter, "last_alloc_retries", None))
     except Exception:  # noqa: BLE001
         pass
 

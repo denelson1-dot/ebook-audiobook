@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.6.1 — 2026-09-24
+
+For narration on a Windows laptop that ran far slower than its graphics card
+should. A 4 GB RTX 3050 laptop, running the compact mode well inside its
+memory, took 3.5 seconds of work per second of speech, about processor speed,
+while an RTX 3070 Ti takes 0.5. Task Manager showed the card idle.
+
+- **Narration is exempt from Windows' efficiency mode.** Windows 11 decides
+  that a process with no window of its own is background work, and runs it on
+  efficiency cores at low clocks. This app's window belongs to the browser, so
+  its narrating process qualified. The engine makes speech one token at a
+  time, and each token waits on that thread to hand the card its next piece
+  of work, so the card sat idle. Narration now tells Windows not to throttle
+  it, except in Quiet mode, which asks for exactly that.
+- **A stalled passage is abandoned, not waited on.** A passage on the graphics
+  card that has run much longer than the processor would take (at least a
+  minute, or eight times its length in speech) is stopped. Narration carries
+  on a step down, in compact mode or on the processor. The mode that stalled
+  isn't tried again until the app restarts, and the book page says so.
+- **Opening the app while it's running brings its window forward** instead
+  of opening another one. On Windows, every click on the shortcut or the tray
+  icon stacked up another identical window. It now restores the one already
+  open, if it was minimised, and brings it to the front.
+- **The performance log shows more.** After loading and after every passage
+  it records the card's free memory as the graphics driver reports it, and
+  how often the engine hit its memory limit. It also reads the render
+  thread's priority correctly on Windows: it logged 2147483647, Windows' error
+  value. The same fault means Balanced mode has never lowered that priority
+  on Windows. That is left as it is for now, because lower priority on a
+  laptop CPU is exactly what slows a GPU render down.
+
 ## 1.6.0 — 2026-09-24
 
 Narration that fits the graphics card it's on. On a laptop with a 4 GB card,

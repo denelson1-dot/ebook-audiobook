@@ -99,7 +99,7 @@ def cmd_check(args) -> int:
 def cmd_web(args) -> int:
     """Start the local web UI (the way almost everyone uses this)."""
     from .desktop import runtime
-    from .web.server import open_window, serve
+    from .web.server import serve, show_window
 
     # Launching again while an instance is running means "show me the window",
     # not "start a second copy". Starting a second copy is actively harmful: it
@@ -123,7 +123,7 @@ def cmd_web(args) -> int:
                     break
         if existing:
             if not args.no_browser:
-                open_window(existing)
+                show_window(existing)
             print(f"ebook-audiobook is already running at {existing}", file=sys.stderr)
             return 0
 
