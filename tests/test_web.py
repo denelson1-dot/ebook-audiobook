@@ -504,7 +504,11 @@ def _offer_an_update(monkeypatch):
     release = update.Release(version="99.0.0", tag="v99.0.0", url="")
     with update_watch._state.lock:
         update_watch._state.release = release
-    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600: 0)
+    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600, update_only=False: 0)
+    # The background path, on every platform. On Windows the route hands off
+    # to a window of its own instead (tests/test_windows.py), and a test run
+    # there must never start a real installer.
+    monkeypatch.setattr(update, "closes_to_install", lambda: False)
 
 
 def test_updates_apply_starts_in_the_background(client, monkeypatch):
@@ -526,7 +530,7 @@ def test_updates_apply_refuses_unless_an_update_is_actually_on_offer(client, mon
 
     invoked = []
     monkeypatch.setattr(update, "apply_update",
-                        lambda yes=False, timeout=3600: invoked.append(yes) or 0)
+                        lambda yes=False, timeout=3600, update_only=False: invoked.append(yes) or 0)
 
     # Checks turned off, and no release known.
     s = app_settings.load_settings()

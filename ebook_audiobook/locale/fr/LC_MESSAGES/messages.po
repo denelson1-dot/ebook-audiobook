@@ -4,7 +4,7 @@
 # exactly as they are in the English; translate everything else.
 msgid ""
 msgstr ""
-"Project-Id-Version: ebook-audiobook 1.5.0\n"
+"Project-Id-Version: ebook-audiobook 1.5.2\n"
 "Report-Msgid-Bugs-To: https://github.com/denelson1-dot/ebook-audiobook/issues\n"
 "POT-Creation-Date: 2026-09-01 21:19-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -396,7 +396,7 @@ msgstr ""
 msgid "%(gb)s GB"
 msgstr "%(gb)s Go"
 
-#: ebook_audiobook/narration_langs.py:318 ebook_audiobook/web/app.py:1432
+#: ebook_audiobook/narration_langs.py:318 ebook_audiobook/web/app.py:1505
 msgid ""
 "The speech engine isn't installed, so there is nothing to add a language to. Install "
 "it first (re-run the installer)."
@@ -427,28 +427,28 @@ msgstr ""
 msgid "The download failed: %(e)s"
 msgstr "Le téléchargement a échoué : %(e)s"
 
-#: ebook_audiobook/power.py:67
+#: ebook_audiobook/power.py:68
 msgid "Full speed"
 msgstr "Pleine vitesse"
 
-#: ebook_audiobook/power.py:68
+#: ebook_audiobook/power.py:69
 msgid "Balanced"
 msgstr "Équilibré"
 
-#: ebook_audiobook/power.py:69
+#: ebook_audiobook/power.py:70
 msgid "Quiet / background"
 msgstr "Discret / arrière-plan"
 
-#: ebook_audiobook/power.py:73
+#: ebook_audiobook/power.py:74
 msgid "Use everything available. Fastest, and the machine will be busy."
 msgstr "Utilise tout ce qui est disponible. Le plus rapide, et la machine sera occupée."
 
-#: ebook_audiobook/power.py:74
+#: ebook_audiobook/power.py:75
 #, python-format
 msgid "Leave room to keep working. Roughly 10–25%% slower."
 msgstr "Laisse de quoi continuer à travailler. Environ 10 à 25 %% plus lent."
 
-#: ebook_audiobook/power.py:75
+#: ebook_audiobook/power.py:76
 msgid "Stay out of the way — fewer cores, cooler, quieter fans. Roughly 2x slower."
 msgstr ""
 "Reste discret — moins de cœurs, plus frais, ventilateurs plus silencieux. Environ 2 "
@@ -508,21 +508,21 @@ msgstr ""
 "Calibre n'est pas installé — c'est sa commande « ebook-convert » qui lit votre livre."
 " Installez Calibre, puis réessayez :"
 
-#: ebook_audiobook/update.py:111
+#: ebook_audiobook/update.py:120
 msgid "No published releases yet."
 msgstr "Aucune version publiée pour l'instant."
 
-#: ebook_audiobook/update.py:113
+#: ebook_audiobook/update.py:122
 #, python-format
 msgid "GitHub rate-limited the version check. Try again later, or see %(url)s"
 msgstr "GitHub a limité la vérification de version. Réessayez plus tard, ou consultez %(url)s"
 
-#: ebook_audiobook/update.py:114
+#: ebook_audiobook/update.py:123
 #, python-format
 msgid "GitHub returned HTTP %(code)s for the version check."
 msgstr "GitHub a répondu HTTP %(code)s à la vérification de version."
 
-#: ebook_audiobook/update.py:116
+#: ebook_audiobook/update.py:125
 #, python-format
 msgid ""
 "Couldn't reach GitHub to check for updates (%(e)s). You're offline, or a firewall is "
@@ -531,27 +531,66 @@ msgstr ""
 "Impossible de joindre GitHub pour vérifier les mises à jour (%(e)s). Vous êtes hors "
 "ligne, ou un pare-feu bloque."
 
-#: ebook_audiobook/update.py:119
+#: ebook_audiobook/update.py:128
 msgid "GitHub's reply wasn't valid JSON."
 msgstr "La réponse de GitHub n'était pas du JSON valide."
 
-#: ebook_audiobook/update.py:123
+#: ebook_audiobook/update.py:132
 msgid "GitHub's reply had no release tag."
 msgstr "La réponse de GitHub ne contenait pas de tag de version."
 
-#: ebook_audiobook/update.py:176
+#: ebook_audiobook/update.py:275
+msgid "The update didn't finish. To try again, run this in PowerShell:"
+msgstr "La mise à jour n'a pas abouti. Pour réessayer, lancez ceci dans PowerShell :"
+
+#: ebook_audiobook/update.py:284 ebook_audiobook/update.py:286
+msgid "Updating ebook·audiobook"
+msgstr "Mise à jour d'ebook·audiobook"
+
+#: ebook_audiobook/update.py:287
+msgid "Keep this window open until the update finishes. Closing it stops the update partway."
+msgstr ""
+"Laissez cette fenêtre ouverte jusqu'à la fin de la mise à jour. La fermer "
+"l'interrompt en cours de route."
+
+#: ebook_audiobook/update.py:291
+msgid "Waiting for ebook·audiobook to close…"
+msgstr "En attente de la fermeture d'ebook·audiobook…"
+
+#: ebook_audiobook/update.py:318
+msgid "The update is installed."
+msgstr "La mise à jour est installée."
+
+#: ebook_audiobook/update.py:328
+msgid "Starting ebook·audiobook…"
+msgstr "Démarrage d'ebook·audiobook…"
+
+#: ebook_audiobook/update.py:336
+msgid "Press Enter to close this window"
+msgstr "Appuyez sur Entrée pour fermer cette fenêtre"
+
+#: ebook_audiobook/update.py:422
+msgid "Couldn't find PowerShell to run the installer."
+msgstr "Impossible de trouver PowerShell pour lancer l'installateur."
+
+#: ebook_audiobook/update.py:425
+#, python-format
+msgid "Couldn't start the installer: %(e)s"
+msgstr "Impossible de lancer l'installateur : %(e)s"
+
+#: ebook_audiobook/update.py:437
 #, python-format
 msgid "%(latest)s is available (you have %(current)s)."
 msgstr "La version %(latest)s est disponible (vous avez la %(current)s)."
 
-#: ebook_audiobook/update.py:182
+#: ebook_audiobook/update.py:443
 #, python-format
 msgid "You're on %(current)s, ahead of the latest release (%(latest)s) — an unreleased build."
 msgstr ""
 "Vous avez la %(current)s, plus récente que la dernière version publiée (%(latest)s) —"
 " une version de développement."
 
-#: ebook_audiobook/update.py:183
+#: ebook_audiobook/update.py:444
 #, python-format
 msgid "You're on the latest version (%(current)s)."
 msgstr "Vous avez la dernière version (%(current)s)."
@@ -604,7 +643,7 @@ msgstr "日本語 — Femme"
 msgid "日本語 — Male"
 msgstr "日本語 — Homme"
 
-#: ebook_audiobook/voices.py:160
+#: ebook_audiobook/voices.py:164
 msgid "Default narrator"
 msgstr "Narrateur par défaut"
 
@@ -677,7 +716,7 @@ msgstr ""
 "%(kind)s ne sont pas pris en charge. Formats acceptés : %(formats)s. Pour de "
 "meilleurs résultats, convertissez d'abord votre livre en EPUB dans Calibre."
 
-#: ebook_audiobook/worker.py:332
+#: ebook_audiobook/worker.py:335
 #, python-format
 msgid ""
 "This book is in %(language)s. Narrating it in %(language)s needs the additional "
@@ -691,7 +730,7 @@ msgid "Open ebook-audiobook"
 msgstr "Ouvrir ebook-audiobook"
 
 #: ebook_audiobook/desktop/tray.py:198 ebook_audiobook/web/server.py:171
-#: ebook_audiobook/web/templates/base.html:248
+#: ebook_audiobook/web/templates/base.html:254
 msgid "Quit"
 msgstr "Quitter"
 
@@ -720,7 +759,7 @@ msgstr "Préparation"
 msgid "Making a preview"
 msgstr "Génération d'un aperçu"
 
-#: ebook_audiobook/jobs/models.py:49 ebook_audiobook/web/templates/base.html:228
+#: ebook_audiobook/jobs/models.py:49 ebook_audiobook/web/templates/base.html:234
 msgid "Narrating"
 msgstr "Narration"
 
@@ -744,24 +783,33 @@ msgstr "Arrêté par un problème"
 msgid "Stopped by you"
 msgstr "Arrêté par vous"
 
-#: ebook_audiobook/web/app.py:686
+#: ebook_audiobook/web/app.py:724
 msgid "That request didn't come from this app."
 msgstr "Cette requête ne vient pas de cette application."
 
-#: ebook_audiobook/web/app.py:689
+#: ebook_audiobook/web/app.py:727
 msgid "Update checks are turned off."
 msgstr "La recherche de mises à jour est désactivée."
 
-#: ebook_audiobook/web/app.py:691
+#: ebook_audiobook/web/app.py:729
 msgid "There is no newer release to install."
 msgstr "Il n'y a pas de version plus récente à installer."
 
-#: ebook_audiobook/web/app.py:694 ebook_audiobook/web/app.py:1108
-#: ebook_audiobook/web/app.py:1435 ebook_audiobook/web/app.py:1459
+#: ebook_audiobook/web/app.py:732 ebook_audiobook/web/app.py:1179
+#: ebook_audiobook/web/app.py:1508 ebook_audiobook/web/app.py:1532
 msgid "Something else is running."
 msgstr "Autre chose est en cours."
 
-#: ebook_audiobook/web/app.py:985
+#: ebook_audiobook/web/app.py:750
+#, python-format
+msgid "Quit ebook·audiobook, then run this in PowerShell: %(command)s"
+msgstr "Quittez ebook·audiobook, puis lancez ceci dans PowerShell : %(command)s"
+
+#: ebook_audiobook/web/app.py:754
+msgid "The update has already started."
+msgstr "La mise à jour a déjà commencé."
+
+#: ebook_audiobook/web/app.py:1056
 #, python-format
 msgid ""
 "Couldn't save the uploaded file — is the disk full?\n"
@@ -772,11 +820,11 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:991
+#: ebook_audiobook/web/app.py:1062
 msgid "Choose an ebook file first."
 msgstr "Choisissez d'abord un fichier de livre."
 
-#: ebook_audiobook/web/app.py:995
+#: ebook_audiobook/web/app.py:1066
 #, python-format
 msgid ""
 "That file no longer exists:\n"
@@ -785,7 +833,7 @@ msgstr ""
 "Ce fichier n'existe plus :\n"
 "%(path)s"
 
-#: ebook_audiobook/web/app.py:1001
+#: ebook_audiobook/web/app.py:1072
 #, python-format
 msgid ""
 "Couldn't import that book:\n"
@@ -796,60 +844,60 @@ msgstr ""
 "\n"
 "%(e)s"
 
-#: ebook_audiobook/web/app.py:1058 ebook_audiobook/web/app.py:1078
-#: ebook_audiobook/web/app.py:1123 ebook_audiobook/web/app.py:1219
+#: ebook_audiobook/web/app.py:1129 ebook_audiobook/web/app.py:1149
+#: ebook_audiobook/web/app.py:1194 ebook_audiobook/web/app.py:1290
 msgid "Already working on this book — stop it first."
 msgstr "Ce livre est déjà en cours de traitement — arrêtez-le d'abord."
 
-#: ebook_audiobook/web/app.py:1061
+#: ebook_audiobook/web/app.py:1132
 msgid "That isn't a language this can narrate."
 msgstr "Ce n'est pas une langue que l'application peut narrer."
 
-#: ebook_audiobook/web/app.py:1106
+#: ebook_audiobook/web/app.py:1177
 msgid "The book hasn't been read yet."
 msgstr "Le livre n'a pas encore été lu."
 
-#: ebook_audiobook/web/app.py:1125
+#: ebook_audiobook/web/app.py:1196
 msgid "Select at least one section to render."
 msgstr "Sélectionnez au moins une section à narrer."
 
-#: ebook_audiobook/web/app.py:1293
+#: ebook_audiobook/web/app.py:1364
 msgid "That folder doesn't exist yet."
 msgstr "Ce dossier n'existe pas encore."
 
-#: ebook_audiobook/web/app.py:1295
+#: ebook_audiobook/web/app.py:1366
 msgid "Couldn't open a file manager on this system."
 msgstr "Impossible d'ouvrir un gestionnaire de fichiers sur ce système."
 
-#: ebook_audiobook/web/app.py:1393
+#: ebook_audiobook/web/app.py:1466
 msgid "Give the voice a name."
 msgstr "Donnez un nom à la voix."
 
-#: ebook_audiobook/web/app.py:1399
+#: ebook_audiobook/web/app.py:1472
 msgid "That isn't an audio format this can read."
 msgstr "Ce n'est pas un format audio lisible ici."
 
-#: ebook_audiobook/web/app.py:1406
+#: ebook_audiobook/web/app.py:1479
 msgid "Choose a clip first."
 msgstr "Choisissez d'abord un extrait."
 
-#: ebook_audiobook/web/app.py:1410
+#: ebook_audiobook/web/app.py:1483
 #, python-format
 msgid "Couldn't add that voice: %(e)s"
 msgstr "Impossible d'ajouter cette voix : %(e)s"
 
-#: ebook_audiobook/web/app.py:1429 ebook_audiobook/web/app.py:1457
+#: ebook_audiobook/web/app.py:1502 ebook_audiobook/web/app.py:1530
 msgid "No such language model."
 msgstr "Ce modèle de langue n'existe pas."
 
-#: ebook_audiobook/web/app.py:1441
+#: ebook_audiobook/web/app.py:1514
 #, python-format
 msgid "Not enough free space where the model cache lives: about %(size)s is needed."
 msgstr ""
 "Pas assez d'espace libre là où se trouve le cache des modèles : il faut environ "
 "%(size)s."
 
-#: ebook_audiobook/web/app.py:1508
+#: ebook_audiobook/web/app.py:1581
 msgid "Narrating in this language needs its model. Install it in Settings."
 msgstr "Narrer dans cette langue demande son modèle. Installez-le dans les Réglages."
 
@@ -1017,144 +1065,144 @@ msgstr "Aucun sous-dossier ici"
 msgid "No matching files in this folder"
 msgstr "Aucun fichier correspondant dans ce dossier"
 
-#: ebook_audiobook/web/templates/base.html:42
+#: ebook_audiobook/web/templates/base.html:48
 msgid "Welcome to ebook·audiobook"
 msgstr "Bienvenue dans ebook·audiobook"
 
-#: ebook_audiobook/web/templates/base.html:43
+#: ebook_audiobook/web/templates/base.html:49
 msgid "Three quick things, then you're in. Change any of it later in Settings."
 msgstr "Trois petites choses, et c'est parti. Tout se change ensuite dans les réglages."
 
-#: ebook_audiobook/web/templates/base.html:47
+#: ebook_audiobook/web/templates/base.html:53
 msgid "Interface language"
 msgstr "Langue de l'interface"
 
-#: ebook_audiobook/web/templates/base.html:49
+#: ebook_audiobook/web/templates/base.html:55
 #: ebook_audiobook/web/templates/settings.html:130
 msgid "Automatic — follow the browser"
 msgstr "Automatique — suivre le navigateur"
 
-#: ebook_audiobook/web/templates/base.html:57
+#: ebook_audiobook/web/templates/base.html:63
 #: ebook_audiobook/web/templates/settings.html:88
 msgid "Look"
 msgstr "Style"
 
-#: ebook_audiobook/web/templates/base.html:64
+#: ebook_audiobook/web/templates/base.html:70
 #: ebook_audiobook/web/templates/settings.html:96
 msgid "Classic"
 msgstr "Classique"
 
-#: ebook_audiobook/web/templates/base.html:65
+#: ebook_audiobook/web/templates/base.html:71
 #: ebook_audiobook/web/templates/settings.html:97
 msgid "Warm, amber accent — the original look"
 msgstr "Chaleureux, accent ambré — le style d'origine"
 
-#: ebook_audiobook/web/templates/base.html:73
+#: ebook_audiobook/web/templates/base.html:79
 #: ebook_audiobook/web/templates/settings.html:106
 msgid "Modern"
 msgstr "Moderne"
 
-#: ebook_audiobook/web/templates/base.html:74
+#: ebook_audiobook/web/templates/base.html:80
 #: ebook_audiobook/web/templates/settings.html:107
 msgid "Cooler and neutral, one indigo accent"
 msgstr "Plus froid et neutre, un accent indigo"
 
-#: ebook_audiobook/web/templates/base.html:79
+#: ebook_audiobook/web/templates/base.html:85
 #: ebook_audiobook/web/templates/settings.html:113
 msgid "Match my system"
 msgstr "Suivre mon système"
 
-#: ebook_audiobook/web/templates/base.html:80
+#: ebook_audiobook/web/templates/base.html:86
 #: ebook_audiobook/web/templates/settings.html:114
 msgid "Light"
 msgstr "Clair"
 
-#: ebook_audiobook/web/templates/base.html:81
+#: ebook_audiobook/web/templates/base.html:87
 #: ebook_audiobook/web/templates/settings.html:115
 msgid "Dark"
 msgstr "Sombre"
 
-#: ebook_audiobook/web/templates/base.html:89
+#: ebook_audiobook/web/templates/base.html:95
 #: ebook_audiobook/web/templates/settings.html:197
 msgid "Automatically check for updates"
 msgstr "Vérifier automatiquement les mises à jour"
 
-#: ebook_audiobook/web/templates/base.html:90
+#: ebook_audiobook/web/templates/base.html:96
 msgid "Off by default. Enable to get the latest from GitHub — zero phoning home otherwise."
 msgstr ""
 "Désactivé par défaut. Activez-la pour recevoir les dernières nouveautés de GitHub — "
 "sinon, aucun contact."
 
-#: ebook_audiobook/web/templates/base.html:95
+#: ebook_audiobook/web/templates/base.html:101
 msgid "Get started"
 msgstr "Commencer"
 
-#: ebook_audiobook/web/templates/base.html:138
+#: ebook_audiobook/web/templates/base.html:144
 msgid "Setting up…"
 msgstr "Configuration…"
 
-#: ebook_audiobook/web/templates/base.html:169
+#: ebook_audiobook/web/templates/base.html:175
 #: ebook_audiobook/web/templates/library.html:53 ebook_audiobook/web/templates/new.html:4
 #: ebook_audiobook/web/templates/new.html:9
 msgid "Add a book"
 msgstr "Ajouter un livre"
 
-#: ebook_audiobook/web/templates/base.html:174 ebook_audiobook/web/templates/job.html:9
+#: ebook_audiobook/web/templates/base.html:180 ebook_audiobook/web/templates/job.html:9
 #: ebook_audiobook/web/templates/library.html:4
 #: ebook_audiobook/web/templates/library.html:43
 msgid "Library"
 msgstr "Bibliothèque"
 
-#: ebook_audiobook/web/templates/base.html:177 ebook_audiobook/web/templates/voices.html:4
+#: ebook_audiobook/web/templates/base.html:183 ebook_audiobook/web/templates/voices.html:4
 #: ebook_audiobook/web/templates/voices.html:9
 msgid "Voices"
 msgstr "Voix"
 
-#: ebook_audiobook/web/templates/base.html:180
+#: ebook_audiobook/web/templates/base.html:186
 #: ebook_audiobook/web/templates/settings.html:3
 #: ebook_audiobook/web/templates/settings.html:8
 msgid "Settings"
 msgstr "Réglages"
 
-#: ebook_audiobook/web/templates/base.html:209
+#: ebook_audiobook/web/templates/base.html:215
 #: ebook_audiobook/web/templates/settings.html:44
 msgid "Working files"
 msgstr "Fichiers de travail"
 
-#: ebook_audiobook/web/templates/base.html:212
+#: ebook_audiobook/web/templates/base.html:218
 msgid "can go"
 msgstr "peuvent partir"
 
-#: ebook_audiobook/web/templates/base.html:217
+#: ebook_audiobook/web/templates/base.html:223
 msgid "Left behind by books you have already finished."
 msgstr "Laissés par des livres déjà terminés."
 
-#: ebook_audiobook/web/templates/base.html:234 ebook_audiobook/web/templates/job.html:328
+#: ebook_audiobook/web/templates/base.html:240 ebook_audiobook/web/templates/job.html:328
 #: ebook_audiobook/web/templates/library.html:136
 msgid "Stop"
 msgstr "Arrêter"
 
-#: ebook_audiobook/web/templates/base.html:238
+#: ebook_audiobook/web/templates/base.html:244
 msgid "Nothing rendering"
 msgstr "Rien en cours"
 
-#: ebook_audiobook/web/templates/base.html:239
+#: ebook_audiobook/web/templates/base.html:245
 msgid "One book is narrated at a time, so the machine only ever has one job."
 msgstr "Un seul livre est narré à la fois, la machine n'a donc jamais qu'une tâche."
 
-#: ebook_audiobook/web/templates/base.html:247
+#: ebook_audiobook/web/templates/base.html:253
 msgid "Closing this window keeps the app running in your menu bar."
 msgstr "Fermer cette fenêtre laisse l'application tourner dans la barre de menus."
 
-#: ebook_audiobook/web/templates/base.html:261
+#: ebook_audiobook/web/templates/base.html:267
 msgid "Something this needs is missing"
 msgstr "Il manque quelque chose de nécessaire"
 
-#: ebook_audiobook/web/templates/base.html:267
+#: ebook_audiobook/web/templates/base.html:273
 msgid "Where should finished audiobooks go?"
 msgstr "Où ranger les livres audio terminés ?"
 
-#: ebook_audiobook/web/templates/base.html:268
+#: ebook_audiobook/web/templates/base.html:274
 msgid ""
 "Choose your audiobooks library folder — the one Plex watches. Books are filed into it"
 " as <code>Author / Title (Year) / Title.m4b</code>. You can change it any time in "
@@ -1164,23 +1212,23 @@ msgstr ""
 "surveille. Les livres y sont rangés sous la forme <code>Auteur / Titre (Année) / "
 "Titre.m4b</code>. Vous pourrez le changer à tout moment dans les Réglages."
 
-#: ebook_audiobook/web/templates/base.html:270
+#: ebook_audiobook/web/templates/base.html:276
 msgid "Choose library folder…"
 msgstr "Choisir le dossier de la bibliothèque…"
 
-#: ebook_audiobook/web/templates/base.html:271
+#: ebook_audiobook/web/templates/base.html:277
 msgid "Skip for now"
 msgstr "Plus tard"
 
-#: ebook_audiobook/web/templates/base.html:298
+#: ebook_audiobook/web/templates/base.html:304
 msgid "After installing, restart ebook-audiobook."
 msgstr "Après l'installation, redémarrez ebook-audiobook."
 
-#: ebook_audiobook/web/templates/base.html:312
+#: ebook_audiobook/web/templates/base.html:318
 msgid "A render is still going"
 msgstr "Une narration est en cours"
 
-#: ebook_audiobook/web/templates/base.html:312
+#: ebook_audiobook/web/templates/base.html:318
 msgid ""
 "Quitting stops it. Finished chapters are kept, so re-rendering later picks up where "
 "this left off rather than starting over."
@@ -1188,71 +1236,71 @@ msgstr ""
 "Quitter l'arrête. Les chapitres terminés sont conservés : une narration ultérieure "
 "reprendra là où celle-ci s'est arrêtée au lieu de tout recommencer."
 
-#: ebook_audiobook/web/templates/base.html:313
+#: ebook_audiobook/web/templates/base.html:319
 msgid "A preview is still rendering"
 msgstr "Un aperçu est en cours"
 
-#: ebook_audiobook/web/templates/base.html:313
+#: ebook_audiobook/web/templates/base.html:319
 msgid "Quitting stops it. You can render another one any time."
 msgstr "Quitter l'arrête. Vous pourrez en générer un autre à tout moment."
 
-#: ebook_audiobook/web/templates/base.html:314
+#: ebook_audiobook/web/templates/base.html:320
 msgid "A book is still being read"
 msgstr "Un livre est en cours de lecture"
 
-#: ebook_audiobook/web/templates/base.html:314
+#: ebook_audiobook/web/templates/base.html:320
 msgid "Quitting stops it. The book stays imported and you can read it again."
 msgstr "Quitter l'arrête. Le livre reste importé et vous pourrez relancer sa lecture."
 
-#: ebook_audiobook/web/templates/base.html:315
+#: ebook_audiobook/web/templates/base.html:321
 msgid "The text is still being prepared for the new language"
 msgstr "Le texte est encore en cours de préparation pour la nouvelle langue"
 
-#: ebook_audiobook/web/templates/base.html:315
+#: ebook_audiobook/web/templates/base.html:321
 msgid "Quitting stops it. Choose the language again and it redoes it in a moment."
 msgstr "Quitter l'arrête. Choisissez à nouveau la langue et ce sera refait en un instant."
 
-#: ebook_audiobook/web/templates/base.html:316
+#: ebook_audiobook/web/templates/base.html:322
 msgid "A voice sample is still rendering"
 msgstr "Un échantillon de voix est en cours"
 
-#: ebook_audiobook/web/templates/base.html:316
+#: ebook_audiobook/web/templates/base.html:322
 msgid "Quitting stops it. It only takes a few seconds to redo."
 msgstr "Quitter l'arrête. Il ne faut que quelques secondes pour le refaire."
 
-#: ebook_audiobook/web/templates/base.html:317
+#: ebook_audiobook/web/templates/base.html:323
 msgid "A language model is still downloading"
 msgstr "Un modèle de langue est en cours de téléchargement"
 
-#: ebook_audiobook/web/templates/base.html:317
+#: ebook_audiobook/web/templates/base.html:323
 msgid "Quitting stops it. The download picks up where it left off next time."
 msgstr "Quitter l'arrête. Le téléchargement reprendra là où il s'est arrêté la prochaine fois."
 
-#: ebook_audiobook/web/templates/base.html:329
+#: ebook_audiobook/web/templates/base.html:335
 msgid "Something is still running"
 msgstr "Quelque chose tourne encore"
 
-#: ebook_audiobook/web/templates/base.html:329
+#: ebook_audiobook/web/templates/base.html:335
 msgid "Quitting stops it."
 msgstr "Quitter l'arrête."
 
-#: ebook_audiobook/web/templates/base.html:332
+#: ebook_audiobook/web/templates/base.html:338
 msgid "Restart anyway"
 msgstr "Redémarrer quand même"
 
-#: ebook_audiobook/web/templates/base.html:332
+#: ebook_audiobook/web/templates/base.html:338
 msgid "Quit anyway"
 msgstr "Quitter quand même"
 
-#: ebook_audiobook/web/templates/base.html:338
+#: ebook_audiobook/web/templates/base.html:344
 msgid "Couldn't quit — see the terminal or the logs."
 msgstr "Impossible de quitter — voir le terminal ou le journal."
 
-#: ebook_audiobook/web/templates/base.html:346
+#: ebook_audiobook/web/templates/base.html:352
 msgid "Restarting…"
 msgstr "Redémarrage…"
 
-#: ebook_audiobook/web/templates/base.html:347
+#: ebook_audiobook/web/templates/base.html:353
 msgid ""
 "ebook·audiobook is coming back up. Reopen it from where you normally launch it if "
 "this window doesn't reconnect on its own."
@@ -1260,79 +1308,93 @@ msgstr ""
 "ebook·audiobook redémarre. Rouvrez-le depuis l'endroit où vous le lancez d'habitude "
 "si cette fenêtre ne se reconnecte pas d'elle-même."
 
-#: ebook_audiobook/web/templates/base.html:348
+#: ebook_audiobook/web/templates/base.html:354
 msgid "ebook·audiobook has stopped"
 msgstr "ebook·audiobook s'est arrêté"
 
-#: ebook_audiobook/web/templates/base.html:349
+#: ebook_audiobook/web/templates/base.html:355
 msgid "You can close this window."
 msgstr "Vous pouvez fermer cette fenêtre."
 
-#: ebook_audiobook/web/templates/base.html:381
+#: ebook_audiobook/web/templates/base.html:388
 msgid "Installing update…"
 msgstr "Installation en cours…"
 
-#: ebook_audiobook/web/templates/base.html:382
+#: ebook_audiobook/web/templates/base.html:389
 msgid "A few minutes, usually. Keep working — nothing else waits on it."
 msgstr "Quelques minutes en général. Continuez à travailler, rien d'autre n'attend dessus."
 
-#: ebook_audiobook/web/templates/base.html:389
+#: ebook_audiobook/web/templates/base.html:396
 msgid "Update didn't install"
 msgstr "Échec de la mise à jour"
 
-#: ebook_audiobook/web/templates/base.html:393 ebook_audiobook/web/templates/base.html:427
+#: ebook_audiobook/web/templates/base.html:400 ebook_audiobook/web/templates/base.html:438
 #: ebook_audiobook/web/templates/job.html:439
 msgid "Starting…"
 msgstr "Démarrage…"
 
-#: ebook_audiobook/web/templates/base.html:401
+#: ebook_audiobook/web/templates/base.html:408
 msgid "Update ready"
 msgstr "Mise à jour prête"
 
-#: ebook_audiobook/web/templates/base.html:402
+#: ebook_audiobook/web/templates/base.html:409
 #, python-format
 msgid "Restart for %(version)s."
 msgstr "Redémarrez pour la %(version)s."
 
-#: ebook_audiobook/web/templates/base.html:408
+#: ebook_audiobook/web/templates/base.html:415
 msgid "Restart ebook-audiobook yourself to finish."
 msgstr "Redémarrez ebook-audiobook vous-même pour terminer."
 
-#: ebook_audiobook/web/templates/base.html:415
+#: ebook_audiobook/web/templates/base.html:422
 #, python-format
 msgid "%(version)s available"
 msgstr "%(version)s disponible"
 
-#: ebook_audiobook/web/templates/base.html:416
+#: ebook_audiobook/web/templates/base.html:423
 #, python-format
 msgid "You're on %(current)s."
 msgstr "Vous êtes sur la %(current)s."
 
-#: ebook_audiobook/web/templates/base.html:422
+#: ebook_audiobook/web/templates/base.html:431
 msgid "Install this update?"
 msgstr "Installer cette mise à jour ?"
 
-#: ebook_audiobook/web/templates/base.html:418 ebook_audiobook/web/templates/base.html:423
+#: ebook_audiobook/web/templates/base.html:425 ebook_audiobook/web/templates/base.html:432
 msgid "Install"
 msgstr "Installer"
 
-#: ebook_audiobook/web/templates/base.html:391
+#: ebook_audiobook/web/templates/base.html:449
+msgid "Couldn't start the update."
+msgstr "Impossible de lancer la mise à jour."
+
+#: ebook_audiobook/web/templates/base.html:398
 msgid "Try again"
 msgstr "Réessayer"
 
-#: ebook_audiobook/web/templates/base.html:404
+#: ebook_audiobook/web/templates/base.html:411
 msgid "Restart now"
 msgstr "Redémarrer maintenant"
 
-#: ebook_audiobook/web/templates/base.html:405
+#: ebook_audiobook/web/templates/base.html:412
 msgid "Later"
 msgstr "Plus tard"
 
-#: ebook_audiobook/web/templates/base.html:419
+#: ebook_audiobook/web/templates/base.html:426
 msgid "Not now"
 msgstr "Pas maintenant"
 
-#: ebook_audiobook/web/templates/base.html:424
+#: ebook_audiobook/web/templates/base.html:434
+msgid ""
+"ebook·audiobook closes, and the installer — the same one you used to set this up — "
+"runs in a window of its own. It can take a few minutes and needs a working "
+"connection. The app opens again when it's done."
+msgstr ""
+"ebook·audiobook se ferme, et l'installateur — le même que celui que vous avez utilisé"
+" pour l'installation — s'exécute dans sa propre fenêtre. Cela peut prendre quelques "
+"minutes et demande une connexion. L'application se rouvre une fois terminé."
+
+#: ebook_audiobook/web/templates/base.html:435
 msgid ""
 "Re-runs the installer in the background — the same one you used to set this up. It "
 "can take a few minutes and needs a working connection. You can keep working while it "
@@ -1343,7 +1405,19 @@ msgstr ""
 "Vous pouvez continuer à travailler pendant ce temps, mais il faudra redémarrer "
 "l'application une fois terminé."
 
-#: ebook_audiobook/web/templates/base.html:447
+#: ebook_audiobook/web/templates/base.html:445
+msgid "Installing the update…"
+msgstr "Installation de la mise à jour…"
+
+#: ebook_audiobook/web/templates/base.html:446
+msgid ""
+"ebook·audiobook has closed so the installer can replace it. Its window shows the "
+"progress, and the app opens again when it's done."
+msgstr ""
+"ebook·audiobook s'est fermé pour que l'installateur puisse le remplacer. Sa fenêtre "
+"montre la progression, et l'application se rouvre une fois terminé."
+
+#: ebook_audiobook/web/templates/base.html:469
 #: ebook_audiobook/web/templates/library.html:214
 msgid "Couldn't use that folder"
 msgstr "Impossible d'utiliser ce dossier"

@@ -518,6 +518,83 @@ jobs:
           powershell -NoProfile -Command "& ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Yes -NoTts -Version $v"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # What the app's "Install update" runs on macOS and Linux: --update, which
+      # must upgrade what is there and add nothing. This install has no speech
+      # engine (--no-tts) and, once removed here, no menu entry; neither may come
+      # back, and nothing may be offered - no Calibre cask, no sudo prompt.
+      - name: install.sh --update adds nothing
+        if: runner.os != 'Windows'
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            VENV="$HOME/Library/Application Support/ebook-audiobook/venv"
+          else
+            VENV="${XDG_DATA_HOME:-$HOME/.local/share}/ebook-audiobook/venv"
+            rm -f "$HOME/.local/share/applications/ebook-audiobook.desktop"
+          fi
+          bash install.sh --update 2>&1 | tee update.log
+          if ls -d "$VENV"/lib/python3*/site-packages/torch-*.dist-info >/dev/null 2>&1; then
+            echo "--update installed the speech engine"; exit 1
+          fi
+          if [ -e "$HOME/.local/share/applications/ebook-audiobook.desktop" ] && [ "$RUNNER_OS" = "Linux" ]; then
+            echo "--update recreated the menu entry"; exit 1
+          fi
+          if grep -q "(auto)" update.log; then
+            echo "--update answered a prompt it should never have asked:"; grep "(auto)" update.log; exit 1
+          fi
+          echo "--update upgraded in place and added nothing"
+
+      # What the app's "Install update" runs: -Update, which must upgrade what
+      # is there and add nothing. This install has no speech engine (-NoTts)
+      # and, once removed here, no Desktop shortcut; neither may come back.
+      - name: install.ps1 -Update adds nothing (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "ebook-audiobook.lnk"
+          Remove-Item $desktop -ErrorAction SilentlyContinue
+          ./install.ps1 -Update
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path $desktop) { Write-Host "-Update recreated the Desktop shortcut"; exit 1 }
+          $venv = Join-Path $env:LOCALAPPDATA "ebook-audiobook\venv"
+          if (Test-Path (Join-Path $venv "Lib\site-packages\torch")) { Write-Host "-Update installed the speech engine"; exit 1 }
+          Write-Host "-Update upgraded in place and added nothing"
+
+      # And the whole in-app update on Windows, minus its console window: wait
+      # for "the app" (a stand-in process) to exit, run the installer the way
+      # irm | iex does, and start the installed app again.
+      - name: The in-app update runs after the app, and starts it again
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EBAB_NO_BROWSER: "1"
+        run: |
+          $v = (gh release view -R $env:GITHUB_REPOSITORY --json tagName -q .tagName).TrimStart('v')
+          $venv = Join-Path $env:LOCALAPPDATA "ebook-audiobook\venv"
+          $gui = Join-Path $venv "Scripts\ebook-audiobook-gui.exe"
+          $standIn = Start-Process -FilePath ping -ArgumentList @("-n", "20", "127.0.0.1") -PassThru -WindowStyle Hidden
+          $encoded = python ci/windows_update_script.py --wait-for $standIn.Id --installer "$PWD\install.ps1" --relaunch $gui -- -Update -Version $v
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded
+          $code = $LASTEXITCODE
+          # The order (wait, then install) is pinned by tests/test_windows.py;
+          # this is what only Windows can show: that it all actually runs there.
+          if (-not $standIn.HasExited) { Write-Host "the stand-in app was left running"; exit 1 }
+          if ($code -ne 0) { Write-Host "the update window exited with $code"; exit 1 }
+          $app = $null
+          for ($i = 0; $i -lt 30 -and -not $app; $i++) {
+            Start-Sleep -Seconds 1
+            $app = @(Get-CimInstance Win32_Process | Where-Object {
+              $_.CommandLine -and $_.CommandLine.IndexOf($venv, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+            if ($app.Count -eq 0) { $app = $null }
+          }
+          if (-not $app) { Write-Host "the app was not started again"; exit 1 }
+          Start-Sleep -Seconds 5
+          $alive = @($app | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+          if ($alive.Count -eq 0) { Write-Host "the app started again, then exited"; exit 1 }
+          Write-Host "the app is running again:"; $alive | ForEach-Object { Write-Host "  $($_.CommandLine)" }
+          $alive | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
       - name: The installed launcher runs
         if: runner.os != 'Windows'
         shell: bash

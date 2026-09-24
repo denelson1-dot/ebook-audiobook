@@ -153,6 +153,7 @@ Run with `--no-tray` to skip the tray deliberately.
 | `--version X.Y.Z` | Install a specific release |
 | `--dir PATH` / `-InstallDir` | Install somewhere other than the default |
 | `--yes` / `-Yes` | Accept all prompts (scripted installs) |
+| `--update` / `-Update` | Upgrade what's installed, asking nothing and adding nothing: no Calibre, launchers or speech engine that weren't there, and the engine keeps its CPU/CUDA/ROCm build (what the app's **Install** runs) |
 | `--uninstall` / `-Uninstall` | Remove the program, keeping your books and settings |
 
 </details>
@@ -335,6 +336,12 @@ before anything downloads. Once installed, you restart the app yourself (a
 button on the banner does it in one click) to start using it. `ebook-audiobook
 update` and the button in Settings always work regardless of the setting;
 running either *is* the consent for that one check.
+
+**Install** updates only what is already there — no Calibre, shortcuts or
+speech engine you didn't have (the installers' `--update`). On Windows the app
+can't be replaced while it's running, so **Install** closes it instead: the
+installer runs in a window of its own and opens the app again when it's done. `ebook-audiobook update --apply` likewise
+starts the installer in a new window once the command has finished.
 
 Upgrading — automatic or manual — re-runs the same installer a new user runs,
 rather than a separate upgrade path that gets less testing. Your books and

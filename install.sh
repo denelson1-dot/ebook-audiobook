@@ -22,6 +22,7 @@
 #   --cuda128 / --cuda126  pick a specific CUDA build (see --help)
 #   --no-tts           skip PyTorch entirely (import books, can't render yet)
 #   --yes              accept all prompts (for scripted installs)
+#   --update           upgrade what's installed; ask nothing, add nothing
 #   --lang fr          messages in French (default: your desktop's language)
 #   --uninstall        remove the app (your books and settings are kept)
 
@@ -36,6 +37,8 @@ VERSION="latest"
 # calling the GitHub API, which is rate-limited for unauthenticated users.
 PINNED_VERSION="__EBAB_VERSION__"
 ASSUME_YES=0
+# --update: what the app's own "Install update" runs. See the note at its parsing.
+DO_UPDATE=0
 FORCE_CPU=0
 FORCE_GPU=0
 FORCE_ROCM=0
@@ -68,6 +71,7 @@ resolve_lang() {
 
 fr_msg() {
   case "$1" in
+    "nothing to update — ebook-audiobook isn't installed at "*) printf '%s' "rien à mettre à jour — ebook-audiobook n'est pas installé dans ${1#nothing to update — ebook-audiobook isn?t installed at }" ;;
     "Uninstalling ebook-audiobook") printf '%s' "Désinstallation d'ebook-audiobook" ;;
     "program removed") printf '%s' "programme retiré" ;;
     "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  Vos livres, réglages et livres audio n'ont PAS été supprimés. Ils sont dans :" ;;
@@ -131,12 +135,16 @@ fr_msg() {
     "  Until then, start it with: "*) printf '%s' "  En attendant, démarrez-la avec : ${1#  Until then, start it with: }" ;;
     "couldn't ask for your password here, so nothing was installed") printf '%s' "impossible de demander votre mot de passe ici, donc rien n'a été installé" ;;
     "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "l'installation de ${p% failed (see below)} a échoué (voir ci-dessous)" ;;
+    *"Updating what's installed; nothing new is added (--update)"*) printf '%s' "  ${DIM}Mise à jour de ce qui est installé ; rien de nouveau n'est ajouté (--update)${N}" ;;
+    "Skipping the speech engine (it isn't installed, and --update adds nothing)") printf '%s' "Moteur vocal ignoré (il n'est pas installé, et --update n'ajoute rien)" ;;
+    *"keeping the speech engine build that is installed (--update)"*) printf '%s' "  ${DIM}conservation de la version du moteur vocal déjà installée (--update)${N}" ;;
     *) printf '%s' "$1" ;;
   esac
 }
 
 es_msg() {
   case "$1" in
+    "nothing to update — ebook-audiobook isn't installed at "*) printf '%s' "no hay nada que actualizar — ebook-audiobook no está instalado en ${1#nothing to update — ebook-audiobook isn?t installed at }" ;;
     "Uninstalling ebook-audiobook") printf '%s' "Desinstalando ebook-audiobook" ;;
     "program removed") printf '%s' "programa eliminado" ;;
     "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  Tus libros, ajustes y audiolibros NO se han borrado. Están en:" ;;
@@ -200,12 +208,16 @@ es_msg() {
     "  Until then, start it with: "*) printf '%s' "  Mientras tanto, iníciala con: ${1#  Until then, start it with: }" ;;
     "couldn't ask for your password here, so nothing was installed") printf '%s' "no se pudo pedir tu contraseña aquí, así que no se instaló nada" ;;
     "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "falló la instalación de ${p% failed (see below)} (ver más abajo)" ;;
+    *"Updating what's installed; nothing new is added (--update)"*) printf '%s' "  ${DIM}Se actualiza lo que ya está instalado; no se añade nada nuevo (--update)${N}" ;;
+    "Skipping the speech engine (it isn't installed, and --update adds nothing)") printf '%s' "Se omite el motor de voz (no está instalado y --update no añade nada)" ;;
+    *"keeping the speech engine build that is installed (--update)"*) printf '%s' "  ${DIM}se conserva la versión del motor de voz ya instalada (--update)${N}" ;;
     *) printf '%s' "$1" ;;
   esac
 }
 
 ja_msg() {
   case "$1" in
+    "nothing to update — ebook-audiobook isn't installed at "*) printf '%s' "更新するものがありません — ebook-audiobook のインストール先が見つかりません: ${1#nothing to update — ebook-audiobook isn?t installed at }" ;;
     "Uninstalling ebook-audiobook") printf '%s' "ebook-audiobook をアンインストールしています" ;;
     "program removed") printf '%s' "プログラムを削除しました" ;;
     "  Your books, settings, and audiobooks were NOT deleted. They're in:") printf '%s' "  本、設定、オーディオブックは削除されていません。場所:" ;;
@@ -269,6 +281,9 @@ ja_msg() {
     "  Until then, start it with: "*) printf '%s' "  それまでは次のコマンドで起動してください: ${1#  Until then, start it with: }" ;;
     "couldn't ask for your password here, so nothing was installed") printf '%s' "ここではパスワードを尋ねられなかったため、何もインストールされていません" ;;
     "installing "*" failed (see below)") p="${1#installing }"; printf '%s' "${p% failed (see below)} のインストールに失敗しました（下記参照）" ;;
+    *"Updating what's installed; nothing new is added (--update)"*) printf '%s' "  ${DIM}インストール済みのものだけを更新します。新しいものは追加しません（--update）${N}" ;;
+    "Skipping the speech engine (it isn't installed, and --update adds nothing)") printf '%s' "音声エンジンをスキップします（未インストールのため。--update は何も追加しません）" ;;
+    *"keeping the speech engine build that is installed (--update)"*) printf '%s' "  ${DIM}インストール済みの音声エンジンの版をそのまま使います（--update）${N}" ;;
     *) printf '%s' "$1" ;;
   esac
 }
@@ -363,6 +378,27 @@ hsa_override_for() {
   esac
 }
 
+# --- BEGIN installed-torch-flavour (extracted by tests; keep the markers) ------
+# Which PyTorch build a venv holds, as the --forced value that asks for the
+# same again: read from the dist-info folder's name (torch-2.9.1+cu128.dist-info)
+# so it works even when the venv's Python no longer runs. A CUDA build maps to
+# "gpu" - stay on CUDA, and let the card pick 12.6 or 12.8 as a new install
+# would - rather than naming a variant a later release may have dropped.
+# Nothing is printed for no engine; "any" for a build with no local tag (the
+# single macOS build, or a plain PyPI wheel), where there is nothing to keep.
+installed_torch_flavour() { # installed_torch_flavour VENV
+  local info
+  info="$(ls -d "$1"/lib/python3*/site-packages/torch-*.dist-info 2>/dev/null | head -1 || true)"
+  [ -n "$info" ] || return 0
+  case "${info##*/}" in
+    *+cpu.dist-info)   echo "cpu" ;;
+    *+cu[0-9]*)        echo "gpu" ;;
+    *+rocm[0-9]*)      echo "rocm" ;;
+    *)                 echo "any" ;;
+  esac
+}
+# --- END installed-torch-flavour ----------------------------------------------
+
 # Is there an NVIDIA GPU that CUDA can actually use?
 #
 # nvidia-smi is the friendly answer — it hands us the model name — but it is not
@@ -434,7 +470,7 @@ ask() { # ask "question" [default y|n] -> 0 for yes
   else
     [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
   fi
-  if [ "$ASSUME_YES" = "1" ]; then say "  $q $hint $default (auto)"; [ "$default" = "y" ]; return; fi
+  if [ "$ASSUME_YES" = "1" ] || [ "$DO_UPDATE" = "1" ]; then say "  $q $hint $default (auto)"; [ "$default" = "y" ]; return; fi
   if [ ! -t 0 ] && [ ! -r /dev/tty ]; then say "  $q $hint $default (no terminal)"; [ "$default" = "y" ]; return; fi
   printf '  %s %s ' "$q" "$hint"
   read -r reply < /dev/tty || reply=""
@@ -453,6 +489,12 @@ while [ $# -gt 0 ]; do
     --cuda128) FORCE_CUDA="cuda128"; shift ;;
     --no-tts)  SKIP_TTS=1; shift ;;
     --yes|-y)  ASSUME_YES=1; shift ;;
+    # Upgrade what is already installed, asking nothing and adding nothing: no
+    # Python, Calibre, launcher or menu entry that isn't there already, and the
+    # speech engine only if it was installed, in the flavour it was (CPU, CUDA,
+    # ROCm). Unattended, like --yes, without --yes's accepting every offer a new
+    # user gets - a Homebrew cask, a sudo prompt nobody is there to answer.
+    --update)  DO_UPDATE=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
     --lang)    LANG_CODE="${2:?--lang needs a value}"; shift 2 ;;
     # Printed inline rather than read back out of "$0": piped from curl, "$0" is
@@ -479,6 +521,8 @@ Options:
   --cuda126         force the CUDA 12.6 build (GTX 900/1000-series and older)
   --no-tts          skip PyTorch entirely (import books, can't render yet)
   --yes, -y         accept all prompts (for scripted installs)
+  --update          upgrade what's installed, asking nothing and adding nothing
+                    (what the app's own "Install update" runs)
   --uninstall       remove the app (your books and settings are kept)
   -h, --help        show this
 HELP
@@ -528,6 +572,14 @@ say ""
 say "${B}ebook-audiobook installer${N}"
 say "${DIM}Turns ebooks you own into narrated audiobooks, entirely offline.${N}"
 
+# What an update has to keep as it found it, read before anything changes.
+KEPT_FLAVOUR=""
+if [ "$DO_UPDATE" = "1" ]; then
+  [ -d "$VENV" ] || die "nothing to update — ebook-audiobook isn't installed at $VENV"
+  say "  ${DIM}Updating what's installed; nothing new is added (--update)${N}"
+  KEPT_FLAVOUR="$(installed_torch_flavour "$VENV")"
+fi
+
 # --- 1. Python ---------------------------------------------------------------
 step "Looking for Python 3.11 or newer"
 PYTHON=""
@@ -541,7 +593,11 @@ done
 
 if [ -z "$PYTHON" ]; then
   warn "no Python 3.11+ found"
-  if [ "$PLATFORM" = "macos" ] && command -v brew >/dev/null 2>&1; then
+  # An update installs nothing new: the Python the app ran on is gone, so this
+  # is a repair, which is a question for a person.
+  if [ "$DO_UPDATE" = "1" ]; then
+    :
+  elif [ "$PLATFORM" = "macos" ] && command -v brew >/dev/null 2>&1; then
     if ask "Install Python 3.12 with Homebrew?" y; then
       brew install python@3.12 || die "Homebrew couldn't install Python"
       PYTHON="$(command -v python3.12 || command -v python3)"
@@ -582,7 +638,7 @@ fi
 NEED_PIP_BOOTSTRAP=0
 if ! "$PYTHON" -c 'import venv' >/dev/null 2>&1; then
   warn "Python's 'venv' module is missing"
-  if command -v apt-get >/dev/null 2>&1 && have_sudo \
+  if [ "$DO_UPDATE" != "1" ] && command -v apt-get >/dev/null 2>&1 && have_sudo \
      && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
     apt_install python3-venv || true
   fi
@@ -593,7 +649,7 @@ if ! "$PYTHON" -c 'import venv' >/dev/null 2>&1; then
 fi
 if ! "$PYTHON" -c 'import ensurepip' >/dev/null 2>&1; then
   warn "Python's 'ensurepip' module is missing (common on Debian/Ubuntu)"
-  if command -v apt-get >/dev/null 2>&1 && have_sudo \
+  if [ "$DO_UPDATE" != "1" ] && command -v apt-get >/dev/null 2>&1 && have_sudo \
      && ask "Install it with 'sudo apt-get install python3-venv'?" y; then
     apt_install python3-venv || true
   fi
@@ -723,7 +779,11 @@ fi
 ok "installed $("$VPY" -c 'import importlib.metadata as m; print(m.version("ebook-audiobook"))' 2>/dev/null || echo "")"
 
 # --- 4. PyTorch --------------------------------------------------------------
-if [ "$SKIP_TTS" = "1" ]; then
+if [ "$DO_UPDATE" = "1" ] && [ -z "$KEPT_FLAVOUR" ]; then
+  step "Skipping the speech engine (it isn't installed, and --update adds nothing)"
+  say "  add it later with:"
+  say "    $VENV/bin/pip install torch torchaudio chatterbox-tts 'setuptools<81'"
+elif [ "$SKIP_TTS" = "1" ]; then
   step "Skipping the speech engine (--no-tts)"
   warn "you can import books, but rendering audio needs the engine"
   say "  add it later with:"
@@ -782,6 +842,15 @@ else
   [ "$FORCE_GPU" = "1" ]  && FORCED="gpu"
   [ "$FORCE_ROCM" = "1" ] && FORCED="rocm"
   [ -n "$FORCE_CUDA" ]    && FORCED="$FORCE_CUDA"
+  # An update keeps the build it found, unless a flag says otherwise: a CPU
+  # build chosen with --cpu, or because no GPU was found then, is not to turn
+  # into a 2.5 GB CUDA download unasked, nor the reverse.
+  KEPT_BUILD=0
+  if [ -z "$FORCED" ] && [ "$DO_UPDATE" = "1" ] && [ "$PLATFORM" = "linux" ]; then
+    case "$KEPT_FLAVOUR" in
+      cpu|gpu|rocm) FORCED="$KEPT_FLAVOUR"; KEPT_BUILD=1 ;;
+    esac
+  fi
 
   TORCH_ID=""; TORCH_INDEX=""; TORCH_LABEL=""; SIZE=""; TORCH_NOTE=""; TORCH_PIN=""
   CHATTERBOX_PIN="$("$VPY" -c 'from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)' 2>/dev/null || echo "chatterbox-tts")"
@@ -820,7 +889,9 @@ TORCHVARS
            DEVICE_DESC="${GPU_NAME:-NVIDIA GPU} via ${TORCH_LABEL} — a novel takes roughly 2-3 hours" ;;
     rocm)  DEVICE_DESC="${GPU_NAME:-AMD Radeon} via ROCm — a novel takes roughly 3-4 hours" ;;
     mac)   : ;;  # already set above, with the Metal/Intel distinction
-    *)     if [ -n "$FORCED" ]; then
+    *)     if [ "$KEPT_BUILD" = "1" ]; then
+             DEVICE_DESC="CPU only, as installed (--update keeps it)"
+           elif [ -n "$FORCED" ]; then
              DEVICE_DESC="CPU only (forced with --$FORCED)"
            else
              DEVICE_DESC="no GPU detected, CPU only — a novel can take many hours"
@@ -830,6 +901,7 @@ TORCHVARS
   say "  Detected: ${B}${DEVICE_DESC}${N}"
   say "  Download: ${B}${SIZE}${N}"
   [ -n "$MAC_NOTE" ] && say "  ${DIM}${MAC_NOTE}${N}"
+  [ "$KEPT_BUILD" = "1" ] && say "  ${DIM}keeping the speech engine build that is installed (--update)${N}"
   # A Radeon whose architecture ROCm doesn't list needs one environment
   # variable to be visible at all. Work it out here and bake it into the
   # launcher, so the user never has to find this out from a forum thread.
@@ -849,7 +921,7 @@ TORCHVARS
   [ "$NVML_BROKEN" = "1" ] && \
     say "  ${DIM} without a reboot — but the driver and CUDA libraries are present.)${N}"
   if [ "$FORCE_CPU" != "1" ] && [ "$FORCE_GPU" != "1" ] && [ -z "$GPU_NAME" ] \
-     && [ "$PLATFORM" = "linux" ]; then
+     && [ "$KEPT_BUILD" != "1" ] && [ "$PLATFORM" = "linux" ]; then
     say "  ${DIM}If this machine does have an NVIDIA GPU, re-run with --gpu.${N}"
   fi
   if [ "$INTEL_MAC" = "1" ]; then
@@ -905,7 +977,11 @@ if "$VPY" -c 'from ebook_audiobook import tools; raise SystemExit(0 if tools.ebo
 else
   warn "Calibre is not installed"
   INSTALLED_CALIBRE=0
-  if [ "$PLATFORM" = "macos" ] && command -v brew >/dev/null 2>&1; then
+  # Never during an update: a Homebrew cask, or sudo with nobody at the
+  # terminal to answer it, is not the app's to add unasked.
+  if [ "$DO_UPDATE" = "1" ]; then
+    :
+  elif [ "$PLATFORM" = "macos" ] && command -v brew >/dev/null 2>&1; then
     if ask "Install it now with 'brew install --cask calibre'?" y; then
       brew install --cask calibre && INSTALLED_CALIBRE=1 || warn "Homebrew install failed"
     fi
@@ -929,15 +1005,21 @@ fi
 
 # --- 6. launchers ------------------------------------------------------------
 step "Creating the launcher"
-mkdir -p "$BIN_DIR"
-cat > "$BIN_DIR/ebook-audiobook" <<LAUNCHER
+# Whether to write a launcher file: always on an install; on an update only to
+# refresh one that is there. One that isn't was removed, and stays removed.
+writes() { [ "$DO_UPDATE" != "1" ] || [ -e "$1" ]; }
+
+if writes "$BIN_DIR/ebook-audiobook"; then
+  mkdir -p "$BIN_DIR"
+  cat > "$BIN_DIR/ebook-audiobook" <<LAUNCHER
 #!/usr/bin/env bash
 # Generated by the ebook-audiobook installer.
 ${HSA_OVERRIDE:+export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE
 }exec "$VENV/bin/ebook-audiobook" "\$@"
 LAUNCHER
-chmod +x "$BIN_DIR/ebook-audiobook"
-ok "command: ebook-audiobook"
+  chmod +x "$BIN_DIR/ebook-audiobook"
+  ok "command: ebook-audiobook"
+fi
 
 # Where the wheel keeps the icons, so the desktop entry and the .app bundle can
 # point at real files rather than a stock system icon.
@@ -953,7 +1035,9 @@ esac
 
 # A self-contained uninstaller, so removing the app never requires re-fetching
 # this script or remembering which directories it touched.
-cat > "$BIN_DIR/ebook-audiobook-uninstall" <<UNINSTALL
+if writes "$BIN_DIR/ebook-audiobook-uninstall"; then
+  mkdir -p "$BIN_DIR"
+  cat > "$BIN_DIR/ebook-audiobook-uninstall" <<UNINSTALL
 #!/usr/bin/env bash
 # Generated by the ebook-audiobook installer.
 set -euo pipefail
@@ -974,10 +1058,12 @@ echo "  $DATA_DIR"
 echo "Delete that folder yourself if you want them gone too."
 rm -f "$BIN_DIR/ebook-audiobook-uninstall"
 UNINSTALL
-chmod +x "$BIN_DIR/ebook-audiobook-uninstall"
-ok "command: ebook-audiobook-uninstall"
+  chmod +x "$BIN_DIR/ebook-audiobook-uninstall"
+  ok "command: ebook-audiobook-uninstall"
+fi
 
-if [ "$PLATFORM" = "linux" ]; then
+# The icons go with the menu entry: an update refreshes both or neither.
+if [ "$PLATFORM" = "linux" ] && writes "$HOME/.local/share/applications/ebook-audiobook.desktop"; then
   # Install the icon into the hicolor theme, which is where the panel, the
   # window manager and the application menu all look it up by name.
   if [ -n "$ASSETS" ] && [ -d "$ASSETS" ]; then
@@ -1023,7 +1109,7 @@ DESKTOP
   ok "application menu entry"
 fi
 
-if [ "$PLATFORM" = "macos" ]; then
+if [ "$PLATFORM" = "macos" ] && writes "$HOME/Applications/ebook-audiobook.app"; then
   # Until now macOS got only the CLI: no Dock icon, no Spotlight entry, no way
   # to start this without opening Terminal first. A bundle is the minimum that
   # makes it an application — a plist, a shell stub, and an icon.

@@ -145,7 +145,7 @@ def test_a_failed_check_is_swallowed_not_raised(monkeypatch):
 
 def test_start_apply_runs_the_installer_and_reports_done(monkeypatch):
     update_watch._state.release = _release("9.9.9")
-    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600: 0)
+    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600, update_only=False: 0)
     assert update_watch.start_apply() is True
 
     import time
@@ -159,7 +159,7 @@ def test_start_apply_runs_the_installer_and_reports_done(monkeypatch):
 
 
 def test_start_apply_reports_installer_failure(monkeypatch):
-    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600: 1)
+    monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600, update_only=False: 1)
     update_watch.start_apply()
 
     import time
@@ -173,7 +173,7 @@ def test_start_apply_reports_installer_failure(monkeypatch):
 
 
 def test_start_apply_reports_an_update_error(monkeypatch):
-    def boom(yes=False, timeout=3600):
+    def boom(yes=False, timeout=3600, update_only=False):
         raise update.UpdateError("no curl or PowerShell found")
 
     monkeypatch.setattr(update, "apply_update", boom)
@@ -193,7 +193,7 @@ def test_start_apply_refuses_a_second_run_while_one_is_in_flight(monkeypatch):
     started = threading.Event()
     finish = threading.Event()
 
-    def slow_apply(yes=False, timeout=3600):
+    def slow_apply(yes=False, timeout=3600, update_only=False):
         started.set()
         finish.wait(2)
         return 0
@@ -203,3 +203,19 @@ def test_start_apply_refuses_a_second_run_while_one_is_in_flight(monkeypatch):
     started.wait(2)
     assert update_watch.start_apply() is False
     finish.set()
+
+
+def test_the_app_asks_the_installer_for_an_update_only(monkeypatch):
+    """--update, not --yes: see update.apply_update."""
+    seen = []
+    monkeypatch.setattr(update, "apply_update",
+                        lambda yes=False, timeout=3600, update_only=False:
+                        seen.append((yes, update_only)) or 0)
+    update_watch._state.release = _release("9.9.9")
+    update_watch.start_apply()
+    import time
+
+    deadline = time.monotonic() + 2
+    while update_watch.status()["apply_state"] == "running" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert seen == [(False, True)]
