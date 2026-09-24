@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ebook-audiobook installer for macOS and Linux.
 #
-#   curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.sh | bash
+#   curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-macos-linux.sh | bash
 #
 # What it does, in order:
 #   1. finds a Python 3.11+ interpreter
@@ -461,7 +461,7 @@ while [ $# -gt 0 ]; do
       cat <<'HELP'
 ebook-audiobook installer (macOS and Linux)
 
-  curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.sh | bash
+  curl -fsSL https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-macos-linux.sh | bash
 
 Creates a private Python environment under your user data directory, installs
 the app and a suitable PyTorch build, checks for Calibre, and adds an
@@ -892,7 +892,7 @@ TORCHVARS
     # precisely because nothing ever said which torch you ended up with.
     TORCH_BUILD="$("$VPY" -c 'import torch; print(torch.__version__)' 2>/dev/null || true)"
     ok "speech engine ready${TORCH_BUILD:+ (torch $TORCH_BUILD)}"
-    say "  ${DIM}The ~1 GB voice model downloads the first time you render.${N}"
+    say "  ${DIM}The ~3 GB voice model downloads the first time you render.${N}"
   else
     warn "skipped — add it later by re-running this installer."
   fi
