@@ -501,6 +501,23 @@ jobs:
           ./install.ps1 -Yes -NoTts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # And the way people actually run it: text handed to the parser, no file
+      # behind it ($PSScriptRoot and $PSCommandPath empty), in a fresh 5.1
+      # process. That is the path where `exit` would close the user's window,
+      # and where the installer fetches a released wheel rather than the
+      # checkout. The version is looked up here, with a token, because the
+      # installer's own unauthenticated lookup shares the runner's rate limit.
+      - name: Run install.ps1 the irm | iex way (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = (gh release view -R $env:GITHUB_REPOSITORY --json tagName -q .tagName).TrimStart('v')
+          Write-Host "installing released $v through a scriptblock, as iex would"
+          powershell -NoProfile -Command "& ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Yes -NoTts -Version $v"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: The installed launcher runs
         if: runner.os != 'Windows'
         shell: bash

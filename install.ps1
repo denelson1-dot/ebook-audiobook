@@ -153,8 +153,9 @@ $French = [ordered]@{
     "Download Python 3.12 from python.org and install it, just for you?" = "Télécharger Python 3.12 depuis python.org et l'installer, pour vous seul ?"
     "couldn't download or run the Python installer: *" = "impossible de télécharger ou de lancer l'installateur de Python : *"
     "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "Télécharger Calibre (environ 220 Mo) depuis calibre-ebook.com et l'installer ?"
-    "Windows will ask for permission to install it." = "Windows va demander l'autorisation de l'installer."
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows va demander l'autorisation de l'installer. Si rien n'apparaît, cherchez une icône qui clignote dans la barre des tâches."
     "couldn't download or run the Calibre installer: *" = "impossible de télécharger ou de lancer l'installateur de Calibre : *"
+    "This can take a few minutes, with nothing to show until it's done." = "Cela peut prendre quelques minutes, sans rien afficher avant la fin."
 }
 
 $Spanish = [ordered]@{
@@ -211,8 +212,9 @@ $Spanish = [ordered]@{
     "Download Python 3.12 from python.org and install it, just for you?" = "¿Descargar Python 3.12 de python.org e instalarlo solo para ti?"
     "couldn't download or run the Python installer: *" = "no se pudo descargar o ejecutar el instalador de Python: *"
     "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "¿Descargar Calibre (unos 220 MB) de calibre-ebook.com e instalarlo?"
-    "Windows will ask for permission to install it." = "Windows pedirá permiso para instalarlo."
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows pedirá permiso para instalarlo. Si no aparece nada, busca un icono que parpadee en la barra de tareas."
     "couldn't download or run the Calibre installer: *" = "no se pudo descargar o ejecutar el instalador de Calibre: *"
+    "This can take a few minutes, with nothing to show until it's done." = "Puede tardar unos minutos, sin mostrar nada hasta que termine."
 }
 
 # Japanese, base64-encoded — deliberately, and this is not decoration.
@@ -283,8 +285,9 @@ $JapaneseB64 = [ordered]@{
     "Download Python 3.12 from python.org and install it, just for you?" = "cHl0aG9uLm9yZyDjgYvjgokgUHl0aG9uIDMuMTIg44KS44OA44Km44Oz44Ot44O844OJ44GX44Gm44CB44GT44Gu44Om44O844K244O844Gg44GR44Gr44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
     "couldn't download or run the Python installer: *" = "UHl0aG9uIOOBruOCpOODs+OCueODiOODvOODqeODvOOCkuODgOOCpuODs+ODreODvOODieOBvuOBn+OBr+Wun+ihjOOBp+OBjeOBvuOBm+OCk+OBp+OBl+OBnzogKg=="
     "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "Y2FsaWJyZS1lYm9vay5jb20g44GL44KJIENhbGlicmXvvIjntIQgMjIwIE1C77yJ44KS44OA44Km44Oz44Ot44O844OJ44GX44Gm44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
-    "Windows will ask for permission to install it." = "44Kk44Oz44K544OI44O844Or44Gu6Kix5Y+v44KSIFdpbmRvd3Mg44GM5rGC44KB44G+44GZ44CC"
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "44Kk44Oz44K544OI44O844Or44Gu6Kix5Y+v44KSIFdpbmRvd3Mg44GM5rGC44KB44G+44GZ44CC5L2V44KC6KGo56S644GV44KM44Gq44GE5aC05ZCI44Gv44CB44K/44K544Kv44OQ44O844Gn54K55ruF44GX44Gm44GE44KL44Ki44Kk44Kz44Oz44KS5o6i44GX44Gm44GP44Gg44GV44GE44CC"
     "couldn't download or run the Calibre installer: *" = "Q2FsaWJyZSDjga7jgqTjg7Pjgrnjg4jjg7zjg6njg7zjgpLjg4Djgqbjg7Pjg63jg7zjg4njgb7jgZ/jga/lrp/ooYzjgafjgY3jgb7jgZvjgpPjgafjgZfjgZ86ICo="
+    "This can take a few minutes, with nothing to show until it's done." = "5pWw5YiG44GL44GL44KL44GT44Go44GM44GC44KK44CB57WC44KP44KL44G+44Gn5L2V44KC6KGo56S644GV44KM44G+44Gb44KT44CC"
 }
 $Japanese = [ordered]@{}
 foreach ($k in $JapaneseB64.Keys) {
@@ -371,7 +374,12 @@ function Stop-RunningApp {
         $cur = [int]$PID
         for ($i = 0; $i -lt 64 -and $byId.ContainsKey($cur); $i++) {
             $ancestors[$cur] = $true
-            $cur = [int]$byId[$cur].ParentProcessId
+            $parent = [int]$byId[$cur].ParentProcessId
+            # Windows reuses process ids: a long-dead parent's id may belong to
+            # something newer now. A real parent is older than its child.
+            if (-not $byId.ContainsKey($parent) -or
+                $byId[$parent].CreationDate -gt $byId[$cur].CreationDate) { break }
+            $cur = $parent
         }
         foreach ($p in $procs) { if ($ancestors.ContainsKey([int]$p.ProcessId)) { return } }
     } catch { return }
@@ -446,13 +454,16 @@ function Find-Python {
         try {
             $listed = Invoke-Native { & py -0p 2>$null }
             foreach ($line in @($listed)) {
-                if ("$line" -match '([A-Za-z]:\\.*?pythonw?\.exe)\s*$') { $candidates.Add($Matches[1]) }
+                if ("$line" -match '([A-Za-z]:\\.*?pythonw?\.exe)(\s+\*)?\s*$') { $candidates.Add($Matches[1]) }
             }
         } catch {}
     }
     foreach ($name in @("python3.12", "python3.13", "python3.11", "python", "python3")) {
-        $cmd = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($cmd) { $candidates.Add($cmd.Source) }
+        # Every match, not the first: the Store stub is often first on PATH,
+        # ahead of a real interpreter.
+        foreach ($cmd in @(Get-Command $name -CommandType Application -All -ErrorAction SilentlyContinue)) {
+            if ($cmd.Source) { $candidates.Add($cmd.Source) }
+        }
     }
     # Where python.org's installer puts things, for when PATH hasn't caught up:
     # a winget install a moment ago, or "Add python.exe to PATH" left unticked.
@@ -518,6 +529,7 @@ if (-not $Python) {
             try {
                 New-Item -ItemType Directory -Force -Path $pyDl | Out-Null
                 Write-Dim $pyUrl
+                Write-Dim "This can take a few minutes, with nothing to show until it's done."
                 Invoke-WebRequest -Uri $pyUrl -OutFile $pyInstaller -UseBasicParsing
                 # Silent and per-user. PATH, the py launcher and file
                 # associations are left alone; Find-Python looks where this
@@ -548,7 +560,9 @@ Stop-RunningApp
 # since been uninstalled, or that an interrupted install left half-built, is
 # rebuilt instead. Nothing of the user's lives in it.
 $venvWorks = $false
-if (Test-Path $VenvPy) { $venvWorks = [bool](Get-PythonInfo $VenvPy) }
+# ...and only if it is one this installer would pick today: a venv built on a
+# 32-bit or ARM64 Python runs fine and still can never install the engine.
+if (Test-Path $VenvPy) { $venvWorks = "$(Get-PythonInfo $VenvPy)" -match '^3\.(1[1-9]|[2-9]\d) win-amd64$' }
 if ($venvWorks) {
     Write-Ok "reusing the existing environment (upgrading in place)"
 } else {
@@ -654,8 +668,13 @@ if ($NoTts) {
     $computeCaps = ""
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         try {
-            $gpuName = (Invoke-Native { & nvidia-smi --query-gpu=name --format=csv,noheader 2>$null } | Select-Object -First 1)
-            if ($LASTEXITCODE -eq 0 -and $gpuName) { $hasNvidia = $true }
+            # Captured whole, then trimmed to the first line: through a pipeline
+            # into Select-Object, $LASTEXITCODE would be the previous command's.
+            $smiOut = @(Invoke-Native { & nvidia-smi --query-gpu=name --format=csv,noheader 2>$null })
+            if ($LASTEXITCODE -eq 0 -and $smiOut.Count -gt 0 -and "$($smiOut[0])".Trim()) {
+                $gpuName = "$($smiOut[0])".Trim()
+                $hasNvidia = $true
+            }
         } catch {}
         try {
             # One line per GPU. Decides which CUDA build has kernels for the
@@ -686,7 +705,7 @@ if ($NoTts) {
     $tbArgs = @("-m", "ebook_audiobook.torchbuild", "--platform", "windows", "--arch", "amd64")
     if ($vendor)  { $tbArgs += @("--vendor", $vendor) }
     if ($forced)  { $tbArgs += @("--forced", $forced) }
-    if ($gpuName) { $tbArgs += @("--gpu-name", $gpuName.Trim()) }
+    if ($gpuName) { $tbArgs += @("--gpu-name", "$gpuName".Trim()) }
     if ($computeCaps) { $tbArgs += @("--compute-caps", $computeCaps) }
     try {
         $out = Invoke-Native { & $VenvPy @tbArgs 2>$null }
@@ -713,7 +732,8 @@ if ($NoTts) {
     # The module supplies the facts; this supplies the phrasing.
     if ($id -eq "cu128" -or $id -eq "cu126") {
         if ($forced -eq "gpu") { $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours" }
-        else { $desc = "$($gpuName.Trim()) via $label - a novel takes roughly 2-3 hours" }
+        elseif ($gpuName) { $desc = "$("$gpuName".Trim()) via $label - a novel takes roughly 2-3 hours" }
+        else { $desc = "CUDA via $label - a novel takes roughly 2-3 hours" }
     } elseif ($forced -eq "cpu") {
         $desc = "CPU only (forced with -Cpu)"
     } else {
@@ -814,8 +834,9 @@ if (Test-Calibre) {
             try {
                 New-Item -ItemType Directory -Force -Path $calDl | Out-Null
                 Write-Dim "https://calibre-ebook.com/dist/win64"
+                Write-Dim "This can take a few minutes, with nothing to show until it's done."
                 Invoke-WebRequest -Uri "https://calibre-ebook.com/dist/win64" -OutFile $calMsi -UseBasicParsing
-                Write-Dim "Windows will ask for permission to install it."
+                Write-Dim "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar."
                 Start-Process -FilePath "msiexec.exe" -Verb RunAs -Wait -ArgumentList @("/i", "`"$calMsi`"", "/qb", "/norestart")
             } catch {
                 Write-Warn "couldn't download or run the Calibre installer: $_"
