@@ -104,6 +104,12 @@ def start_app() -> tuple[int, str]:
     raise AssertionError  # unreachable
 
 
+def uninstaller_running() -> bool:
+    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq _unins.tmp", "/NH"],
+                         capture_output=True, text=True).stdout
+    return "_unins.tmp" in out.lower()
+
+
 def running(pid: int) -> bool:
     out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                          capture_output=True, text=True).stdout
@@ -173,10 +179,13 @@ def main(setup_path: str) -> int:
     log = Path("uninstall.log").resolve()
     subprocess.run([str(uninstaller), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                     f"/LOG={log}"], timeout=300)
-    # The uninstaller copies itself to %TEMP% and runs from there, so the
-    # process above returns at once: wait for the result instead.
+    # The uninstaller copies itself to %TEMP% (as _unins.tmp) and runs from
+    # there, so the process above returns at once. Wait for that copy to exit:
+    # its last step (PATH, the browser cache) runs after the files and the
+    # Add/Remove Programs entry are already gone.
     deadline = time.monotonic() + 180
-    while time.monotonic() < deadline and (uninstall_entry() or (APP / "python").exists()):
+    while time.monotonic() < deadline and (uninstall_entry() or (APP / "python").exists()
+                                           or uninstaller_running()):
         time.sleep(2)
     if uninstall_entry() is not None:
         print(subprocess.run(["tasklist", "/V"], capture_output=True, text=True).stdout[-3000:])
@@ -185,7 +194,7 @@ def main(setup_path: str) -> int:
     check(uninstall_entry() is None, "Add/Remove Programs no longer lists it")
     check(not (APP / "python").exists(), "the bundled Python is gone")
     check(not SHORTCUT.exists(), "the Start-menu shortcut is gone")
-    check(not on_path(APP / "bin"), "the command line is off PATH")
+    check(not on_path(APP / "bin"), f"the command line is off PATH: {user_path()}")
     check(not running(pid), "the running app was closed")
     check(settings.is_file(), "the data folder was kept (a silent uninstall never deletes it)")
     check(not (DATA / "browser-profile").exists(), "the app window's browser cache is gone")
