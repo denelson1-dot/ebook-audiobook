@@ -559,15 +559,16 @@ def test_a_book_of_one_short_section_can_still_be_measured():
 # --- measuring: the warm-up is the first *fresh* generation ---------------------
 
 class _Clock:
-    """A monotonic clock that charges a fixed cost per render: a slow first
-    generation (the model warming up) and a quick one after that."""
+    """A clock that charges a fixed cost per render: a slow first generation
+    (the model warming up) and a quick one after that. Stands in for
+    time.perf_counter, which is what the worker times passages with."""
 
     def __init__(self, first=10.0, rest=1.0):
         self.now = 0.0
         self.first, self.rest = first, rest
         self.renders = 0
 
-    def monotonic(self):
+    def perf_counter(self):
         return self.now
 
     def render(self):
@@ -599,7 +600,7 @@ def _measure_with_clock(job_id, monkeypatch, clock):
         return real_render(adapter, text, path)
 
     monkeypatch.setattr(worker, "_render_one", timed)
-    monkeypatch.setattr(worker.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(worker.time, "perf_counter", clock.perf_counter)
     return worker.measure_job(job_id)
 
 

@@ -142,8 +142,9 @@ def engine_install_hint() -> str:
         return _("  PyTorch stopped building for Intel Macs after 2.2.2, so the speech\n"
                  "  engine can't be installed on this Mac. Importing and reading books\n"
                  "  still works; rendering needs an Apple Silicon Mac, Windows or Linux.")
-    return (f'  Re-run the installer — it picks the right PyTorch build for\n'
-            f'  this machine. By hand, into this environment:\n'
+    return (f'  Install it from Settings, under Speech engine (or re-run the\n'
+            f'  installer): either picks the right PyTorch build for this machine.\n'
+            f'  By hand, into this environment:\n'
             f'    "{sys.executable}" -m pip install torch=={TORCH_PIN} '
             f'torchaudio=={TORCH_PIN}\n'
             f'  (see the README for which package index to use)')

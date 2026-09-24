@@ -212,3 +212,38 @@ def test_relaunch_works_for_the_documented_python_m_launcher():
         assert cmd[3:] == ["web", "--no-tray"]
     finally:
         sys.argv = original
+
+
+def test_relaunch_works_for_the_windows_installer_shortcut():
+    """The installer's shortcuts run `pythonw -m ebook_audiobook --gui`. The
+    cli module has no --gui, so a restart must come back the same way."""
+    import sys
+
+    from ebook_audiobook.web import server
+
+    original = sys.argv
+    try:
+        sys.argv = [r"C:\Users\x\AppData\Local\Programs\ebook-audiobook\python\Lib"
+                    r"\site-packages\ebook_audiobook\__main__.py", "--gui"]
+        assert server._relaunch_command() == [sys.executable, "-m", "ebook_audiobook", "--gui"]
+    finally:
+        sys.argv = original
+
+
+def test_python_m_ebook_audiobook_is_the_cli_and_gui_is_the_desktop_launch(monkeypatch):
+    import runpy
+    import sys
+
+    from ebook_audiobook import cli
+
+    called = []
+    monkeypatch.setattr(cli, "main_gui", lambda: called.append("gui") or 0)
+    monkeypatch.setattr(cli, "main", lambda argv=None: called.append("cli") or 0)
+    for argv, expected in ((["x", "--gui"], "gui"), (["x", "paths"], "cli")):
+        monkeypatch.setattr(sys, "argv", argv)
+        sys.modules.pop("ebook_audiobook.__main__", None)
+        try:
+            runpy.run_module("ebook_audiobook", run_name="__main__")
+        except SystemExit as e:
+            assert e.code == 0
+        assert called[-1] == expected

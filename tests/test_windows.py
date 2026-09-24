@@ -705,3 +705,44 @@ def test_install_on_windows_keeps_every_gate(windows_app, monkeypatch):
     app_module.runner.current = "job1:render"
     assert client.post("/updates/apply").status_code == 409
     assert windows_app["started"] == [] and windows_app["quits"] == []
+
+
+# --- the in-app update, for a copy the setup.exe installed -------------------------
+
+@pytest.fixture
+def setup_install(on_windows, monkeypatch, tmp_path):
+    """The app runs from <app>\\python, with Inno Setup's uninstaller beside it."""
+    app = tmp_path / "Programs" / "ebook-audiobook-setup"
+    (app / "python").mkdir(parents=True)
+    (app / "unins000.exe").write_bytes(b"")
+    monkeypatch.setattr(sys, "prefix", str(app / "python"))
+    return {**on_windows, "app": app}
+
+
+def test_a_setup_install_is_recognised(setup_install):
+    assert update.installed_by_setup() is True
+
+
+def test_a_venv_install_is_not_a_setup_install(on_windows):
+    assert update.installed_by_setup() is False
+
+
+def test_a_setup_install_updates_with_the_next_setup_exe(setup_install):
+    """Not install.ps1, which knows nothing of <app>\\python: the next setup.exe
+    recognises this copy by its AppId and installs over it."""
+    update.start_windows_update(lang="fr")
+    popen = setup_install["popen"]
+    assert popen.calls[0]["cwd"] == str(setup_install["app"])
+    script = popen.script()
+    assert f"Get-Process -Id {os.getpid()}" in script
+    assert update.SETUP_EXE in script and update.INSTALL_PS1 not in script
+    assert "curl.exe" in script and "'/SILENT'" in script
+    assert script.index("WaitForExit") < script.index("curl.exe") < script.index("Start-Process -FilePath $setup")
+    # Started again the way its shortcut starts it.
+    pythonw = str(setup_install["app"] / "python" / "pythonw.exe")
+    assert pythonw in script and "-ArgumentList '-m','ebook_audiobook','--gui'" in script
+    assert script.index("Start-Process -FilePath $setup") < script.index(pythonw)
+
+
+def test_a_setup_install_is_told_how_to_update_by_hand(setup_install):
+    assert "ebook-audiobook-setup.exe" in update.install_command()

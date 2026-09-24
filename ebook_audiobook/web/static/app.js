@@ -376,7 +376,9 @@ function startSidebar() {
       idleTitle.textContent = (s && s.busy && s.kind === "voice_test")
         ? _("Rendering a voice sample")
         : (s && s.busy && s.kind === "model_download")
-          ? _("Downloading a language model") : idleText;
+          ? _("Downloading a language model")
+          : (s && s.busy && s.kind === "engine_install")
+            ? _("Installing the speech engine") : idleText;
     }
     if (!rendering) return;
 

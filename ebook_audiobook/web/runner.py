@@ -169,6 +169,13 @@ class Runner:
             # same disk at the same time helps neither, and Quit already knows
             # how to warn about whatever this thread is doing.
             narration_langs.install(task.kwargs["pack"], should_cancel=cancelled)
+        elif task.kind == "engine_install":
+            from .. import engine_setup
+
+            try:
+                engine_setup.install(should_cancel=cancelled)
+            except engine_setup.Cancelled:
+                pass  # a stop the user asked for, not a failure
 
     def submit(self, job_id: str, kind: str, **kwargs) -> None:
         with self._lock:
