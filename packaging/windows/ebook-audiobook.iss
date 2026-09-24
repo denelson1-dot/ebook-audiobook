@@ -204,16 +204,21 @@ begin
     AddToPath(ExpandConstant('{app}\bin'));
 end;
 
+{ First thing, before the uninstaller looks at which files are in use: a
+  running copy holds the bundled Python's files, and a silent uninstall can't
+  ask anyone to close it. }
+function InitializeUninstall(): Boolean;
+begin
+  StopProcessesUsing(ExpandConstant('{app}'));
+  StopProcessesUsing(DataDir() + '\browser-profile');
+  Result := True;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Data: String;
 begin
   Data := DataDir();
-  if CurUninstallStep = usUninstall then
-  begin
-    StopProcessesUsing(ExpandConstant('{app}'));
-    StopProcessesUsing(Data + '\browser-profile');
-  end;
   if CurUninstallStep = usPostUninstall then
   begin
     RemoveFromPath(ExpandConstant('{app}\bin'));

@@ -165,12 +165,18 @@ def main(setup_path: str) -> int:
     print("5. uninstall", flush=True)
     uninstaller = APP / "unins000.exe"
     check(uninstaller.is_file(), "the uninstaller is there")
-    subprocess.run([str(uninstaller), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], timeout=300)
+    log = Path("uninstall.log").resolve()
+    subprocess.run([str(uninstaller), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                    f"/LOG={log}"], timeout=300)
     # The uninstaller copies itself to %TEMP% and runs from there, so the
     # process above returns at once: wait for the result instead.
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline and (uninstall_entry() or (APP / "python").exists()):
         time.sleep(2)
+    if uninstall_entry() is not None:
+        print(subprocess.run(["tasklist", "/V"], capture_output=True, text=True).stdout[-3000:])
+        if log.is_file():
+            print(log.read_text(errors="replace")[-6000:])
     check(uninstall_entry() is None, "Add/Remove Programs no longer lists it")
     check(not (APP / "python").exists(), "the bundled Python is gone")
     check(not SHORTCUT.exists(), "the Start-menu shortcut is gone")
