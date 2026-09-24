@@ -149,25 +149,46 @@ begin
   RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Kept);
 end;
 
-{ Stop every process running from Dir, or whose command line names it: the
-  app's own Python, and the app window's browser, which runs from Program
-  Files but with its profile in the data folder. }
-procedure StopProcessesUsing(Dir: String);
+{ Stop the processes that would hold Dir's files. By default those running
+  from it: the app's own Python. ByCommandLine instead matches any process
+  whose command line names it: the app window's browser, which runs from
+  Program Files with its profile in the data folder.
+
+  Never this PowerShell, whose own command line names Dir, nor Inno Setup's
+  uninstaller, whose command line names the program folder too: an earlier
+  version matched both, and killed the uninstaller partway through. }
+procedure StopProcesses(Dir: String; ByCommandLine: Boolean);
 var
-  Quoted: String;
+  Quoted, Test: String;
   RC: Integer;
 begin
   Quoted := Dir;
   { A single quote in a user name would end the PowerShell string early. }
   StringChangeEx(Quoted, '''', '''''', True);
+  if ByCommandLine then
+    Test := '($_.CommandLine -and $_.CommandLine.IndexOf($d, [StringComparison]::OrdinalIgnoreCase) -ge 0)'
+  else
+    Test := '($_.ExecutablePath -and $_.ExecutablePath.StartsWith($d, [StringComparison]::OrdinalIgnoreCase))';
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
     '$d = ''' + Quoted + '''; ' +
     'Get-CimInstance Win32_Process | Where-Object { ' +
-    '($_.ExecutablePath -and $_.ExecutablePath.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) -or ' +
-    '($_.CommandLine -and $_.CommandLine.IndexOf($d, [StringComparison]::OrdinalIgnoreCase) -ge 0) } | ' +
+    '$_.ProcessId -ne $PID -and $_.Name -notlike ''*unins*'' -and ' + Test + ' } | ' +
     'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"',
     '', SW_HIDE, ewWaitUntilTerminated, RC);
+end;
+
+{ The app's own Python, installed in Dir. }
+procedure StopRunningFrom(Dir: String);
+begin
+  StopProcesses(Dir, False);
+end;
+
+{ Anything started with Dir on its command line: the app window's browser,
+  and the real Python behind a venv's python.exe, which is only a launcher. }
+procedure StopNaming(Dir: String);
+begin
+  StopProcesses(Dir, True);
 end;
 
 { A copy installed by the PowerShell one-liner lives inside the data folder
@@ -180,8 +201,8 @@ begin
   Old := DataDir();
   if not DirExists(Old + '\venv') then
     exit;
-  StopProcessesUsing(Old + '\venv');
-  StopProcessesUsing(Old + '\browser-profile');
+  StopNaming(Old + '\venv');
+  StopNaming(Old + '\browser-profile');
   DelTree(Old + '\venv', True, True, True);
   DelTree(Old + '\bin', True, True, True);
   RemoveFromPath(Old + '\bin');
@@ -194,8 +215,8 @@ begin
   Result := '';
   RemovePowerShellInstall();
   { An upgrade over a running copy: it holds the files about to be replaced. }
-  StopProcessesUsing(ExpandConstant('{app}'));
-  StopProcessesUsing(DataDir() + '\browser-profile');
+  StopRunningFrom(ExpandConstant('{app}'));
+  StopNaming(DataDir() + '\browser-profile');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -209,8 +230,8 @@ end;
   ask anyone to close it. }
 function InitializeUninstall(): Boolean;
 begin
-  StopProcessesUsing(ExpandConstant('{app}'));
-  StopProcessesUsing(DataDir() + '\browser-profile');
+  StopRunningFrom(ExpandConstant('{app}'));
+  StopNaming(DataDir() + '\browser-profile');
   Result := True;
 end;
 

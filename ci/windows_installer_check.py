@@ -124,9 +124,14 @@ def main(setup_path: str) -> int:
     set_user_path(user_path() + [str(DATA / "bin")])
     START_MENU.mkdir(parents=True, exist_ok=True)
     SHORTCUT.write_bytes(b"old shortcut")
+    # Standing in for the old app: a venv's real Python runs from the base
+    # install, with the venv only on its command line.
+    old_app = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(900)",
+                                str(DATA / "venv" / "Scripts" / "pythonw.exe")])
 
     print("2. install", flush=True)
     run_setup(setup, "install.log")
+    check(not running(old_app.pid), "the old program's running copy was closed")
     check(not (DATA / "venv").exists(), "the old program's venv is gone")
     check(not (DATA / "bin").exists(), "the old program's bin folder is gone")
     check(not on_path(DATA / "bin"), "the old program is off PATH")
