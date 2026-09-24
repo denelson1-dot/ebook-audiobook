@@ -505,6 +505,10 @@ def _offer_an_update(monkeypatch):
     with update_watch._state.lock:
         update_watch._state.release = release
     monkeypatch.setattr(update, "apply_update", lambda yes=False, timeout=3600, update_only=False: 0)
+    # The background path, on every platform. On Windows the route hands off
+    # to a window of its own instead (tests/test_windows.py), and a test run
+    # there must never start a real installer.
+    monkeypatch.setattr(update, "closes_to_install", lambda: False)
 
 
 def test_updates_apply_starts_in_the_background(client, monkeypatch):
