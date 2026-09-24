@@ -169,6 +169,10 @@ def _relaunch_command() -> list[str]:
     argv = list(sys.argv)
     if argv and os.access(argv[0], os.X_OK) and not argv[0].endswith(".py"):
         return argv
+    if argv and argv[0].endswith("__main__.py"):
+        # `python -m ebook_audiobook [--gui]`, which is how the Windows
+        # installer's shortcuts start it; the cli module has no --gui.
+        return [sys.executable, "-m", "ebook_audiobook", *argv[1:]]
     return [sys.executable, "-m", "ebook_audiobook.cli", *argv[1:]]
 
 
