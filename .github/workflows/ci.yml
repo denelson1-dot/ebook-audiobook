@@ -487,6 +487,37 @@ jobs:
         shell: pwsh
         run: ./install.ps1 -Yes -NoTts
 
+      # Again, under Windows PowerShell 5.1: the shell a fresh Windows machine
+      # actually opens, and the one that behaves differently - it reads this
+      # BOM-less file in the ANSI code page, and turns a native command's
+      # redirected stderr into errors that "Stop" makes fatal. Everything above
+      # ran under PowerShell 7, which does neither. Second, so it also covers
+      # upgrading an existing install in place.
+      - name: Run install.ps1 under Windows PowerShell 5.1 (upgrade in place)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          ./install.ps1 -Yes -NoTts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # And the way people actually run it: text handed to the parser, no file
+      # behind it ($PSScriptRoot and $PSCommandPath empty), in a fresh 5.1
+      # process. That is the path where `exit` would close the user's window,
+      # and where the installer fetches a released wheel rather than the
+      # checkout. The version is looked up here, with a token, because the
+      # installer's own unauthenticated lookup shares the runner's rate limit.
+      - name: Run install.ps1 the irm | iex way (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = (gh release view -R $env:GITHUB_REPOSITORY --json tagName -q .tagName).TrimStart('v')
+          Write-Host "installing released $v through a scriptblock, as iex would"
+          powershell -NoProfile -Command "& ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Yes -NoTts -Version $v"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: The installed launcher runs
         if: runner.os != 'Windows'
         shell: bash

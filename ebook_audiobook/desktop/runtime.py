@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .. import winfs
 from ..config import data_root
 
 FILENAME = "runtime.json"
@@ -51,7 +52,7 @@ def write(port: int, host: str = "127.0.0.1") -> Path:
     try:
         with open(fd, "w", encoding="utf-8") as f:
             f.write(payload)
-        Path(tmp).replace(path)
+        winfs.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -102,7 +103,58 @@ def url_for(record: dict) -> str:
     return f"http://{host}:{record['port']}"
 
 
-def probe(timeout: float = 1.5) -> str | None:
+# Held for the life of the process, and released by Windows when it ends,
+# however it ends.
+_launch_mutex = None
+
+
+def claim_launch(wait: float = 0.0) -> bool:
+    """Whether this process may start the server, waiting up to *wait* seconds.
+
+    Windows only; True everywhere else. The runtime record appears only once
+    the server is up, which on a cold start is several seconds after the click
+    — long enough for an impatient second double-click to find no record and
+    start a second copy. A named mutex, owned by the first launch from its very
+    start, closes that window: a later launch sees it owned and waits for the
+    first to answer instead. Ownership passes on when its owner exits, so a
+    restart after an update is not held up by the process it replaces. Keyed
+    by data folder, like everything else that is "this instance".
+    """
+    global _launch_mutex
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        import hashlib
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        if _launch_mutex is None:
+            k32.CreateMutexW.restype = wintypes.HANDLE
+            k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+            tag = hashlib.sha1(str(data_root()).lower().encode("utf-8")).hexdigest()[:16]
+            handle = k32.CreateMutexW(None, False, f"Local\\{APP_ID}-{tag}")
+            if not handle:
+                return True
+            _launch_mutex = handle
+        k32.WaitForSingleObject.restype = wintypes.DWORD
+        k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        result = k32.WaitForSingleObject(_launch_mutex, int(wait * 1000))
+    except (AttributeError, OSError):
+        return True  # no guard is better than no app
+    # WAIT_OBJECT_0, or WAIT_ABANDONED: the previous owner exited.
+    return result in (0x0, 0x80)
+
+
+def _no_proxy_opener() -> urllib.request.OpenerDirector:
+    # urllib honours the system proxy, which on Windows comes from the
+    # registry and does not necessarily exempt 127.0.0.1 - on a managed laptop
+    # the probe would ask a corporate proxy for our own loopback port, fail,
+    # and a second copy would start.
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def probe(timeout: float = 1.5, forget: bool = True) -> str | None:
     """The URL of a live instance, or None.
 
     Deliberately does not consult the recorded PID. PIDs are recycled, so a stale
@@ -110,18 +162,21 @@ def probe(timeout: float = 1.5) -> str | None:
     port whether it is us is both simpler and correct. A record that fails to
     answer is deleted on the way out, so a crashed instance self-heals on the
     next launch rather than needing the user to find and delete a file.
+    *forget* False keeps the record even so: for a caller that knows the
+    instance is alive and merely slow to answer.
     """
     record = read()
     if not record:
         return None
     url = url_for(record)
     try:
-        with urllib.request.urlopen(f"{url}/api/status", timeout=timeout) as r:
+        with _no_proxy_opener().open(f"{url}/api/status", timeout=timeout) as r:
             if r.status != 200:
                 raise OSError(f"status {r.status}")
             body = json.loads(r.read().decode("utf-8", "replace"))
     except (urllib.error.URLError, OSError, ValueError):
-        clear()
+        if forget:
+            clear()
         return None
     if not isinstance(body, dict) or body.get("app") != APP_ID:
         # Something else owns that port now. Drop the record, but do not touch

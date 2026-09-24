@@ -36,6 +36,7 @@ applied to the render thread and fully reversible.
 from __future__ import annotations
 
 from .i18n import N_, _
+import contextlib
 import ctypes
 import os
 import sys
@@ -263,3 +264,39 @@ def pace(profile: Profile, work_seconds: float) -> float:
 def describe(mode: str | None) -> str:
     m = normalize_mode(mode)
     return f"{_(MODE_LABELS[m])} — {_(MODE_DESCRIPTIONS[m])}"
+
+
+# SetThreadExecutionState flags.
+_ES_CONTINUOUS = 0x80000000
+_ES_SYSTEM_REQUIRED = 0x00000001
+
+
+@contextlib.contextmanager
+def keep_awake():
+    """Hold off idle sleep for the duration of the block. Windows only.
+
+    A CPU render runs for hours, and Windows' default idle timeout sends a
+    laptop to sleep long before it finishes: the render doesn't fail, it just
+    stops, and "running overnight" becomes "a tenth done in the morning".
+    Idle sleep only: the display may still turn off, and closing the lid still
+    does what the user has set it to do. The request belongs to the calling
+    thread and ends with the block, or with the thread.
+    """
+    if os.name != "nt":
+        yield
+        return
+    try:
+        set_state = ctypes.windll.kernel32.SetThreadExecutionState
+        set_state.restype = ctypes.c_uint32
+        set_state.argtypes = [ctypes.c_uint32]
+        held = bool(set_state(_ES_CONTINUOUS | _ES_SYSTEM_REQUIRED))
+    except (AttributeError, OSError):
+        held = False
+    try:
+        yield
+    finally:
+        if held:
+            try:
+                set_state(_ES_CONTINUOUS)
+            except OSError:
+                pass

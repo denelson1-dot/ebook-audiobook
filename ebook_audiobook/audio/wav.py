@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from .. import winfs
+
 
 def write_wav(path, samples: np.ndarray, sample_rate: int) -> None:
     path = Path(path)
@@ -27,7 +29,9 @@ def write_wav(path, samples: np.ndarray, sample_rate: int) -> None:
     os.close(fd)
     try:
         sf.write(tmp, data, sample_rate, subtype="PCM_16", format="WAV")
-        os.replace(tmp, path)
+        # Retried on Windows: a preview the browser is still streaming, or an
+        # antivirus scan of the file just written, holds the target open.
+        winfs.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

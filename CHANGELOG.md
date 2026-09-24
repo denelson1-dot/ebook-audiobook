@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.5.1 — 2026-09-24
+
+A Windows hotfix: a read-through of the install and the running app for things
+that only go wrong there, before anyone meets them on a fresh laptop.
+
+### Installing
+
+- **A failed install no longer closes its own window.** Piped through
+  `irm | iex`, the installer's `exit` ended PowerShell itself, taking the error
+  message with it. It now stops and leaves the window, and the message, open.
+- **Windows PowerShell 5.1 can't be tripped by a warning.** It turns anything a
+  program writes to stderr into an error, fatal under the installer's settings,
+  so a stray Python warning could end the install, or quietly lose the GPU probe
+  and install the CPU build on an NVIDIA machine. CI now runs the installer
+  under 5.1 as well as PowerShell 7.
+- **Python is found, and installed, more reliably.** Only a 64-bit x64 Python
+  is accepted (PyTorch has no 32-bit or ARM64 Windows build, so on an ARM
+  laptop it picks the x64 one Windows emulates), 3.12 is preferred, and
+  python.org's usual install folders are searched when PATH hasn't caught up.
+  If winget is missing or broken, the installer offers python.org's own
+  installer, per-user and without admin rights; likewise Calibre's own
+  installer when winget can't install it.
+- **Upgrading or uninstalling while the app runs** closes it first (after
+  asking), instead of failing halfway with "Access is denied".
+- **An environment that no longer runs is rebuilt** rather than reused.
+- The `ebook-audiobook` command works for a Windows account whose name has an
+  accented letter, and big downloads ride out a Wi-Fi stall instead of giving
+  up after 15 seconds.
+- The installers print the right uninstall command (it named an asset the
+  release doesn't have) and the right size for the voice model: about 3 GB, not
+  1.
+
+### Running
+
+- **A render could stop with "Access is denied"** when a save of its progress
+  met the page reading it; Windows refuses to replace a file that is open.
+  Saves now wait the moment out. A settings file that is briefly locked is no
+  longer mistaken for a corrupt one and moved aside.
+- **Double-clicking the shortcut twice** could start two copies. A second launch
+  now waits for the first and opens its window.
+- **Long renders keep the PC awake.** Windows' idle sleep used to pause them.
+- **The file picker reaches every drive**, so a book on a USB stick can be
+  imported, and hides Windows' own system folders that only answer "Access is
+  denied".
+- Deleting a book whose audiobook is open in a player, or whose source was
+  read-only, no longer fails halfway; a finished audiobook is no longer marked
+  failed because its preview was still playing; a voice named "Con" or "Aux"
+  can be saved.
+- The browser no longer offers to translate the interface back to English after
+  you've picked another language.
+
 ## 1.5.0 — 2026-09-07
 
 ### Spanish and Japanese, spoken and written

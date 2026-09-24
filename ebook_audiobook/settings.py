@@ -13,6 +13,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import winfs
 from .config import paths
 from .jobs.store import _atomic_write
 
@@ -187,11 +188,21 @@ def load_settings() -> Settings:
     if not p.exists():
         return Settings(preferences_onboarded=False, power_mode=NEW_INSTALL_MODE)
     try:
-        loaded = json.loads(p.read_text("utf-8"))
+        text = winfs.read_text(p)
+    except OSError:
+        # Unreadable right now - locked, or a permissions problem - is not the
+        # same as corrupt, and must not be treated like it: moving the file
+        # aside would throw away a good library over a momentary clash. Serve
+        # the defaults for this one request and leave the file alone. The
+        # dataclass defaults, not the new-install ones, so the first-run
+        # modal doesn't flash up at someone mid-render.
+        return Settings()
+    try:
+        loaded = json.loads(text)
         if not isinstance(loaded, dict):
             raise ValueError("settings.json is not an object")
         return Settings.from_dict(loaded)
-    except (ValueError, TypeError, OSError):
+    except (ValueError, TypeError):
         # Unreadable. Falling back to defaults is right — the app has to start —
         # but the next save would write those defaults over whatever is there,
         # and the first-run modal would present the loss as a fresh install. So

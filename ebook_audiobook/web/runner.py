@@ -98,7 +98,10 @@ class Runner:
                     return
             self.current = f"{task.job_id}:{task.kind}"
             try:
-                self._run(task)
+                # Everything this thread does is either quick or worth staying
+                # awake for: a render, a measurement, a 3 GB download.
+                with power.keep_awake():
+                    self._run(task)
             except Exception as e:  # noqa: BLE001 - error is recorded on job state
                 # The job page shows the message; the log keeps the traceback,
                 # which is the only thing that makes a report actionable.

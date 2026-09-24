@@ -26,7 +26,7 @@ from typing import Callable
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-from . import config, power, settings
+from . import config, power, settings, winfs
 from .audio.wav import is_valid_audio, read_wav, write_wav
 from .config import VoiceSettings, paths
 from .hashing import file_hash, segment_id, text_hash, voice_key
@@ -213,7 +213,10 @@ def import_ebook(source_path: str, engine: str = "chatterbox") -> str:
 
     imported = p.imports / f"{job_id}{src.suffix.lower()}"
     if not imported.exists():
-        shutil.copy2(src, imported)
+        # Contents only. copy2 would carry over the source's read-only
+        # attribute too (a book copied from a CD, a download some tools mark
+        # read-only), and Windows then refuses to delete the copy with its book.
+        shutil.copyfile(src, imported)
 
     store.save_book(Book(job_id=job_id, source_path=str(imported), source_hash=job_id))
 
@@ -875,7 +878,10 @@ def render_job(
             state.output_bytes = out.stat().st_size
         except OSError:
             state.output_bytes = None
-        store.preview_path().unlink(missing_ok=True)
+        # Best effort: on Windows the browser may still be streaming it, and a
+        # preview that outlives its render must not mark the finished
+        # audiobook as failed.
+        winfs.unlink(store.preview_path())
         state.preview_output = None
         # Both, or the page reloads an <audio> pointed at a file that is gone.
         state.preview_at = None

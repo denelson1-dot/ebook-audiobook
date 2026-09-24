@@ -36,7 +36,9 @@ def _quiet_io():
     if _VERBOSE:
         yield
         return
-    with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull), \
+    # UTF-8 explicitly: the platform default on Windows is cp1252, and a
+    # library echoing Japanese text into a cp1252 stream would raise.
+    with open(os.devnull, "w", encoding="utf-8", errors="replace") as devnull, contextlib.redirect_stdout(devnull), \
             contextlib.redirect_stderr(devnull):
         yield
 

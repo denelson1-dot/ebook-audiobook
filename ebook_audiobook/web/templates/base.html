@@ -3,6 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# The app's own UI language is a setting, not something to be guessed at.
+     Without this, switching the interface to Spanish makes the embedded
+     Chromium notice a page whose language no longer matches the browser's
+     and offer to translate it back — an offer that would undo the choice
+     the user just made two clicks ago. #}
+  <meta name="google" content="notranslate">
   <title>{% block title %}ebook · audiobook{% endblock %}</title>
   {# Resolves "system" to a concrete light/dark before the stylesheet paints,
      so a light-mode desktop never flashes the dark palette (or vice versa)

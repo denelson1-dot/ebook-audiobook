@@ -5,17 +5,19 @@
 .DESCRIPTION
   Run this in PowerShell:
 
-    irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install.ps1 | iex
+    irm https://github.com/denelson1-dot/ebook-audiobook/releases/latest/download/install-windows.ps1 | iex
 
   What it does, in order:
-    1. finds a Python 3.11+ interpreter (offers to install one via winget)
+    1. finds a 64-bit Python 3.11+ (offers to install one, via winget or
+       from python.org)
     2. creates a private virtualenv under %LOCALAPPDATA%\ebook-audiobook
     3. installs the app, plus the right PyTorch build for this machine
-    4. checks for Calibre and offers to install it
+    4. checks for Calibre and offers to install it (the one step that asks
+       Windows for permission, because Calibre installs for every user)
     5. adds an `ebook-audiobook` command and a Start Menu shortcut
 
-  Everything is per-user. No administrator rights are needed, nothing is written
-  outside your own profile, and your books and settings are never touched by an
+  Everything else is per-user: nothing of this program is written outside your
+  own profile, and your books and settings are never touched by an
   upgrade or an uninstall.
 
 .PARAMETER Version
@@ -59,6 +61,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 redraws its progress bar for every chunk a download
+# receives, which makes Invoke-WebRequest many times slower than the network.
+$ProgressPreference = "SilentlyContinue"
+# ...and on an older .NET it may not offer TLS 1.2 unless asked, which GitHub
+# and python.org both require.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
 $Repo = "denelson1-dot/ebook-audiobook"
 # The release workflow rewrites this line in the published copy of this script,
 # so the installer always knows exactly which wheel it belongs to. A wheel's
@@ -110,7 +120,7 @@ $French = [ordered]@{
     "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "impossible de demander à l'application quelle version de PyTorch utiliser ; repli sur la version processeur"
     "Download and install the speech engine now?" = "Télécharger et installer le moteur vocal maintenant ?"
     "speech engine ready*" = "moteur vocal prêt*"
-    "The ~1 GB voice model downloads the first time you render." = "Le modèle vocal (~3 Go) se télécharge à la première narration."
+    "The ~3 GB voice model downloads the first time you render." = "Le modèle vocal (~3 Go) se télécharge à la première narration."
     "skipped - re-run this installer to add it later." = "ignoré - relancez cet installateur pour l'ajouter plus tard."
     "Checking for Calibre (needed to read ebook files)" = "Recherche de Calibre (nécessaire pour lire les fichiers de livres)"
     "Calibre found" = "Calibre trouvé"
@@ -136,6 +146,16 @@ $French = [ordered]@{
     "  Check setup:  " = "  Vérifier :     "
     "  Uninstall:    " = "  Désinstaller : "
     "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Note : ouvrez un NOUVEAU terminal pour que la commande « ebook-audiobook » soit trouvée."
+    "ebook-audiobook is running, and has to close first" = "ebook-audiobook est ouvert, et doit d'abord être fermé"
+    "Close it now? A render in progress stops, and picks up where it left off when you start it again." = "Le fermer maintenant ? Une narration en cours s'arrête, et reprend là où elle en était quand vous la relancez."
+    "quit ebook-audiobook from its tray icon, then run this again." = "quittez ebook-audiobook depuis son icône près de l'horloge, puis relancez ceci."
+    "(it must be 64-bit x64 Python - PyTorch has no 32-bit or ARM64 Windows build)" = "(il faut un Python 64 bits x64 - PyTorch n'existe pas pour Windows 32 bits ni ARM64)"
+    "Download Python 3.12 from python.org and install it, just for you?" = "Télécharger Python 3.12 depuis python.org et l'installer, pour vous seul ?"
+    "couldn't download or run the Python installer: *" = "impossible de télécharger ou de lancer l'installateur de Python : *"
+    "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "Télécharger Calibre (environ 220 Mo) depuis calibre-ebook.com et l'installer ?"
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows va demander l'autorisation de l'installer. Si rien n'apparaît, cherchez une icône qui clignote dans la barre des tâches."
+    "couldn't download or run the Calibre installer: *" = "impossible de télécharger ou de lancer l'installateur de Calibre : *"
+    "This can take a few minutes, with nothing to show until it's done." = "Cela peut prendre quelques minutes, sans rien afficher avant la fin."
 }
 
 $Spanish = [ordered]@{
@@ -159,7 +179,7 @@ $Spanish = [ordered]@{
     "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "no se pudo preguntar a la aplicación qué versión de PyTorch usar; se recurre a la de solo procesador"
     "Download and install the speech engine now?" = "¿Descargar e instalar ahora el motor de voz?"
     "speech engine ready*" = "motor de voz listo*"
-    "The ~1 GB voice model downloads the first time you render." = "El modelo de voz (~1 GB) se descarga la primera vez que generes audio."
+    "The ~3 GB voice model downloads the first time you render." = "El modelo de voz (~3 GB) se descarga la primera vez que generes audio."
     "skipped - re-run this installer to add it later." = "omitido - vuelve a ejecutar este instalador para añadirlo más tarde."
     "Checking for Calibre (needed to read ebook files)" = "Buscando Calibre (necesario para leer los archivos de libros)"
     "Calibre found" = "Calibre encontrado"
@@ -185,6 +205,16 @@ $Spanish = [ordered]@{
     "  Check setup:  " = "  Comprobar:  "
     "  Uninstall:    " = "  Desinstalar:    "
     "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "  Nota: abre un terminal NUEVO para que se encuentre el comando 'ebook-audiobook'."
+    "ebook-audiobook is running, and has to close first" = "ebook-audiobook está abierto y tiene que cerrarse primero"
+    "Close it now? A render in progress stops, and picks up where it left off when you start it again." = "¿Cerrarlo ahora? Si está generando audio, se detiene y sigue donde se quedó cuando lo vuelvas a iniciar."
+    "quit ebook-audiobook from its tray icon, then run this again." = "cierra ebook-audiobook desde su icono junto al reloj y vuelve a ejecutar esto."
+    "(it must be 64-bit x64 Python - PyTorch has no 32-bit or ARM64 Windows build)" = "(tiene que ser Python de 64 bits x64 - PyTorch no existe para Windows de 32 bits ni ARM64)"
+    "Download Python 3.12 from python.org and install it, just for you?" = "¿Descargar Python 3.12 de python.org e instalarlo solo para ti?"
+    "couldn't download or run the Python installer: *" = "no se pudo descargar o ejecutar el instalador de Python: *"
+    "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "¿Descargar Calibre (unos 220 MB) de calibre-ebook.com e instalarlo?"
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "Windows pedirá permiso para instalarlo. Si no aparece nada, busca un icono que parpadee en la barra de tareas."
+    "couldn't download or run the Calibre installer: *" = "no se pudo descargar o ejecutar el instalador de Calibre: *"
+    "This can take a few minutes, with nothing to show until it's done." = "Puede tardar unos minutos, sin mostrar nada hasta que termine."
 }
 
 # Japanese, base64-encoded — deliberately, and this is not decoration.
@@ -222,7 +252,7 @@ $JapaneseB64 = [ordered]@{
     "couldn't ask the app which PyTorch build to use; falling back to CPU-only" = "44Gp44GuIFB5VG9yY2gg44KS5L2/44GG44GL44Ki44OX44Oq44Gr5ZWP44GE5ZCI44KP44Gb44KJ44KM44G+44Gb44KT44Gn44GX44Gf44CCQ1BVIOeJiOOBp+e2muihjOOBl+OBvuOBmQ=="
     "Download and install the speech engine now?" = "6Z+z5aOw44Ko44Oz44K444Oz44KS5LuK44GZ44GQ44OA44Km44Oz44Ot44O844OJ44GX44Gm44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
     "speech engine ready*" = "6Z+z5aOw44Ko44Oz44K444Oz44Gu5rqW5YKZ44GM44Gn44GN44G+44GX44GfKg=="
-    "The ~1 GB voice model downloads the first time you render." = "6Z+z5aOw44Oi44OH44Or77yI57SEIDEgR0LvvInjga/jgIHmnIDliJ3jgavnlJ/miJDjgZnjgovjgajjgY3jgavjg4Djgqbjg7Pjg63jg7zjg4njgZXjgozjgb7jgZnjgII="
+    "The ~3 GB voice model downloads the first time you render." = "6Z+z5aOw44Oi44OH44Or77yI57SEIDMgR0LvvInjga/jgIHmnIDliJ3jgavnlJ/miJDjgZnjgovjgajjgY3jgavjg4Djgqbjg7Pjg63jg7zjg4njgZXjgozjgb7jgZnjgII="
     "skipped - re-run this installer to add it later." = "44K544Kt44OD44OX44GX44G+44GX44GfIC0g44GC44Go44Gn6L+95Yqg44GZ44KL44Gr44Gv44GT44Gu44Kk44Oz44K544OI44O844Op44O844KS5YaN5a6f6KGM44GX44Gm44GP44Gg44GV44GE44CC"
     "Checking for Calibre (needed to read ebook files)" = "Q2FsaWJyZSDjgpLnorroqo3jgZfjgabjgYTjgb7jgZnvvIjpm7vlrZDmm7jnsY3jga7oqq3jgb/ovrzjgb/jgavlv4XopoHjgafjgZnvvIk="
     "Calibre found" = "Q2FsaWJyZSDjgYzopovjgaTjgYvjgorjgb7jgZfjgZ8="
@@ -248,6 +278,16 @@ $JapaneseB64 = [ordered]@{
     "  Check setup:  " = "ICDoqK3lrprjga7norroqo06ICA="
     "  Uninstall:    " = "ICDjgqLjg7PjgqTjg7Pjgrnjg4jjg7zjg6s6ICAgIA=="
     "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found." = "ICDms6jmhI86ICdlYm9vay1hdWRpb2Jvb2snIOOCs+ODnuODs+ODieOCkuS9v+OBhuOBq+OBr+OAgeaWsOOBl+OBhOOCv+ODvOODn+ODiuODq+OCkumWi+OBhOOBpuOBj+OBoOOBleOBhOOAgg=="
+    "ebook-audiobook is running, and has to close first" = "ZWJvb2stYXVkaW9ib29rIOOBjOi1t+WLleOBl+OBpuOBhOOBvuOBmeOAguWFiOOBq+e1guS6huOBmeOCi+W/heimgeOBjOOBguOCiuOBvuOBmQ=="
+    "Close it now? A render in progress stops, and picks up where it left off when you start it again." = "5LuK44GZ44GQ57WC5LqG44GX44G+44GZ44GL77yf55Sf5oiQ5Lit44Gu6Z+z5aOw44Gv5Lit5pat44GV44KM44CB5qyh44Gr6ZaL5aeL44GX44Gf44Go44GN44Gr57aa44GN44GL44KJ5YaN6ZaL44GX44G+44GZ44CC"
+    "quit ebook-audiobook from its tray icon, then run this again." = "5pmC6KiI44Gu6L+R44GP44Gr44GC44KL44OI44Os44Kk44Ki44Kk44Kz44Oz44GL44KJIGVib29rLWF1ZGlvYm9vayDjgpLntYLkuobjgZfjgabjgYvjgonjgIHjgoLjgYbkuIDluqblrp/ooYzjgZfjgabjgY/jgaDjgZXjgYTjgII="
+    "(it must be 64-bit x64 Python - PyTorch has no 32-bit or ARM64 Windows build)" = "77yINjQg44OT44OD44OIIHg2NCDniYjjga4gUHl0aG9uIOOBjOW/heimgeOBp+OBmSAtIFB5VG9yY2gg44Gr44GvIDMyIOODk+ODg+ODiOeJiOOChCBBUk02NCDniYjjga4gV2luZG93cyDlkJHjgZHjg5Pjg6vjg4njgYzjgYLjgorjgb7jgZvjgpPvvIk="
+    "Download Python 3.12 from python.org and install it, just for you?" = "cHl0aG9uLm9yZyDjgYvjgokgUHl0aG9uIDMuMTIg44KS44OA44Km44Oz44Ot44O844OJ44GX44Gm44CB44GT44Gu44Om44O844K244O844Gg44GR44Gr44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
+    "couldn't download or run the Python installer: *" = "UHl0aG9uIOOBruOCpOODs+OCueODiOODvOODqeODvOOCkuODgOOCpuODs+ODreODvOODieOBvuOBn+OBr+Wun+ihjOOBp+OBjeOBvuOBm+OCk+OBp+OBl+OBnzogKg=="
+    "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" = "Y2FsaWJyZS1lYm9vay5jb20g44GL44KJIENhbGlicmXvvIjntIQgMjIwIE1C77yJ44KS44OA44Km44Oz44Ot44O844OJ44GX44Gm44Kk44Oz44K544OI44O844Or44GX44G+44GZ44GL77yf"
+    "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar." = "44Kk44Oz44K544OI44O844Or44Gu6Kix5Y+v44KSIFdpbmRvd3Mg44GM5rGC44KB44G+44GZ44CC5L2V44KC6KGo56S644GV44KM44Gq44GE5aC05ZCI44Gv44CB44K/44K544Kv44OQ44O844Gn54K55ruF44GX44Gm44GE44KL44Ki44Kk44Kz44Oz44KS5o6i44GX44Gm44GP44Gg44GV44GE44CC"
+    "couldn't download or run the Calibre installer: *" = "Q2FsaWJyZSDjga7jgqTjg7Pjgrnjg4jjg7zjg6njg7zjgpLjg4Djgqbjg7Pjg63jg7zjg4njgb7jgZ/jga/lrp/ooYzjgafjgY3jgb7jgZvjgpPjgafjgZfjgZ86ICo="
+    "This can take a few minutes, with nothing to show until it's done." = "5pWw5YiG44GL44GL44KL44GT44Go44GM44GC44KK44CB57WC44KP44KL44G+44Gn5L2V44KC6KGo56S644GV44KM44G+44Gb44KT44CC"
 }
 $Japanese = [ordered]@{}
 foreach ($k in $JapaneseB64.Keys) {
@@ -271,7 +311,27 @@ function Write-Step($msg) { Write-Host ""; Write-Host "==> " -ForegroundColor Gr
 function Write-Ok($msg)   { Write-Host "  [ok] " -ForegroundColor Green -NoNewline; Write-Host (Tr $msg) }
 function Write-Warn($msg) { Write-Host "  [!] " -ForegroundColor Yellow -NoNewline; Write-Host (Tr $msg) }
 function Write-Dim($msg)  { Write-Host "  $(Tr $msg)" -ForegroundColor DarkGray }
-function Fail($msg) { Write-Host ""; Write-Host "error: $(Tr $msg)" -ForegroundColor Red; exit 1 }
+# `exit` ends the PowerShell process itself when this script arrives through
+# `irm | iex`, so the window would close on the very message it had just
+# printed. Run as a file, exit as usual (CI relies on the exit code); piped,
+# stop with an error instead and leave the window, and the message, where they
+# are.
+$RunAsFile = [bool]$PSCommandPath
+function Fail($msg) {
+    Write-Host ""; Write-Host "error: $(Tr $msg)" -ForegroundColor Red
+    if ($RunAsFile) { exit 1 }
+    throw "ebook-audiobook: install stopped"
+}
+
+# Runs a native command whose stderr is redirected. Windows PowerShell 5.1
+# turns each line a redirected native command writes to stderr into an error
+# record, and under "Stop" the first one aborts the whole script - so a Python
+# warning, or gh's progress output, would end the install with a
+# NativeCommandError. The exit code is still in $LASTEXITCODE afterwards.
+function Invoke-Native([scriptblock]$Block) {
+    $ErrorActionPreference = "Continue"
+    & $Block
+}
 
 function Ask($question, $default = "y") {
     $question = Tr $question
@@ -290,9 +350,52 @@ $VenvDir = Join-Path $DataDir "venv"
 $BinDir  = Join-Path $DataDir "bin"
 $VenvPy  = Join-Path $VenvDir "Scripts\python.exe"
 
+# A running copy holds its own .exe files open, and Windows will not replace or
+# delete a file that is in use: pip dies halfway through an upgrade with
+# "Access is denied", and an uninstall leaves half a program behind. Find it
+# first. Every process in the chain - the entry-point .exe, the venv's
+# python.exe redirector and the real interpreter it starts - carries the venv
+# path in its executable path or its command line.
+function Stop-RunningApp {
+    if (-not (Test-Path $VenvDir)) { return }
+    $procs = @()
+    try {
+        $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+        $procs = @($all | Where-Object {
+            ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($VenvDir, [StringComparison]::OrdinalIgnoreCase)) -or
+            ($_.CommandLine -and $_.CommandLine.IndexOf($VenvDir, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+        })
+        # The app's own "Install update" runs this script as its child. Then
+        # the app is not in the way, it is the caller, waiting for the result:
+        # leave it be, as it expects.
+        $byId = @{}
+        foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
+        $ancestors = @{}
+        $cur = [int]$PID
+        for ($i = 0; $i -lt 64 -and $byId.ContainsKey($cur); $i++) {
+            $ancestors[$cur] = $true
+            $parent = [int]$byId[$cur].ParentProcessId
+            # Windows reuses process ids: a long-dead parent's id may belong to
+            # something newer now. A real parent is older than its child.
+            if (-not $byId.ContainsKey($parent) -or
+                $byId[$parent].CreationDate -gt $byId[$cur].CreationDate) { break }
+            $cur = $parent
+        }
+        foreach ($p in $procs) { if ($ancestors.ContainsKey([int]$p.ProcessId)) { return } }
+    } catch { return }
+    if ($procs.Count -eq 0) { return }
+    Write-Warn "ebook-audiobook is running, and has to close first"
+    if (-not (Ask "Close it now? A render in progress stops, and picks up where it left off when you start it again." "y")) {
+        Fail "quit ebook-audiobook from its tray icon, then run this again."
+    }
+    foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 2
+}
+
 # --- uninstall ---------------------------------------------------------------
 if ($Uninstall) {
     Write-Step "Uninstalling ebook-audiobook"
+    Stop-RunningApp
     if (Test-Path $VenvDir) { Remove-Item -Recurse -Force $VenvDir }
     if (Test-Path $BinDir)  { Remove-Item -Recurse -Force $BinDir }
     $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\ebook-audiobook.lnk"
@@ -315,7 +418,9 @@ if ($Uninstall) {
     Write-Host (Tr "  Your books, settings, and audiobooks were NOT deleted. They're in:")
     Write-Host "    $DataDir"
     Write-Host (Tr "  Delete that folder yourself if you want them gone.")
-    exit 0
+    # Not `exit`: under `irm | iex` that would close the window. At the top
+    # level of the script, `return` ends the script and nothing more.
+    return
 }
 
 Write-Host ""
@@ -325,52 +430,123 @@ Write-Host (Tr "Turns ebooks you own into narrated audiobooks, entirely offline.
 # --- 1. Python ---------------------------------------------------------------
 Write-Step "Looking for Python 3.11 or newer"
 
-function Test-PythonVersion($exe) {
+# "3.12 win-amd64" for an interpreter that runs, $null for one that doesn't.
+function Get-PythonInfo($exe) {
     try {
-        # 3.11+ or nothing: older versions can't run the app.
-        & $exe -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>$null
-        return ($LASTEXITCODE -eq 0)
-    } catch { return $false }
+        $info = Invoke-Native { & $exe -c "import sys, sysconfig; print('%d.%d %s' % (sys.version_info[0], sys.version_info[1], sysconfig.get_platform()))" 2>$null }
+        if ($LASTEXITCODE -eq 0 -and $info) { return ("$info").Trim() }
+    } catch {}
+    return $null
+}
+
+# Most-tested first: releases are verified on 3.12. Anything newer than 3.13 is
+# accepted, but only when nothing better is installed.
+function Get-PythonRank($ver) {
+    switch ($ver) { "3.12" { 0 } "3.13" { 1 } "3.11" { 2 } default { 3 } }
 }
 
 function Find-Python {
-    # The py launcher is the reliable way to pick a version on Windows; asking
-    # for `python` alone can hit the Microsoft Store stub, which is not a real
-    # interpreter and silently does nothing useful.
-    foreach ($v in @("3.13", "3.12", "3.11")) {
+    $candidates = New-Object System.Collections.Generic.List[string]
+    # The py launcher knows every registered install, and -0p lists their paths.
+    # Asking for `python` alone can hit the Microsoft Store stub, which is not a
+    # real interpreter and silently does nothing useful.
+    if (Get-Command py -ErrorAction SilentlyContinue) {
         try {
-            $p = & py "-$v" -c "import sys; print(sys.executable)" 2>$null
-            if ($LASTEXITCODE -eq 0 -and $p -and (Test-Path $p)) { return $p }
+            $listed = Invoke-Native { & py -0p 2>$null }
+            foreach ($line in @($listed)) {
+                if ("$line" -match '([A-Za-z]:\\.*?pythonw?\.exe)(\s+\*)?\s*$') { $candidates.Add($Matches[1]) }
+            }
         } catch {}
     }
-    foreach ($name in @("python3.13", "python3.12", "python3.11", "python")) {
-        $cmd = Get-Command $name -ErrorAction SilentlyContinue
-        if ($cmd) {
-            # Store stubs live under WindowsApps and are 0 bytes of nothing.
-            if ($cmd.Source -like "*WindowsApps*") { continue }
-            if (Test-PythonVersion $cmd.Source) { return $cmd.Source }
+    foreach ($name in @("python3.12", "python3.13", "python3.11", "python", "python3")) {
+        # Every match, not the first: the Store stub is often first on PATH,
+        # ahead of a real interpreter.
+        foreach ($cmd in @(Get-Command $name -CommandType Application -All -ErrorAction SilentlyContinue)) {
+            if ($cmd.Source) { $candidates.Add($cmd.Source) }
         }
     }
-    return $null
+    # Where python.org's installer puts things, for when PATH hasn't caught up:
+    # a winget install a moment ago, or "Add python.exe to PATH" left unticked.
+    foreach ($root in @((Join-Path $env:LOCALAPPDATA "Programs\Python"), $env:ProgramFiles)) {
+        if ($root -and (Test-Path $root)) {
+            Get-ChildItem -Path $root -Directory -Filter "Python3*" -ErrorAction SilentlyContinue |
+                ForEach-Object { $candidates.Add((Join-Path $_.FullName "python.exe")) }
+        }
+    }
+
+    $best = $null; $bestRank = 99; $seen = @{}
+    foreach ($c in $candidates) {
+        if (-not $c -or $seen.ContainsKey($c.ToLower())) { continue }
+        $seen[$c.ToLower()] = $true
+        # Anything under WindowsApps is either the Store stub or the Store's
+        # own Python, whose writes under AppData can be redirected into its
+        # sandbox - the environment created below could land somewhere this
+        # script, and the Start Menu shortcut, can't see.
+        if ($c -like "*\WindowsApps\*" -or -not (Test-Path $c)) { continue }
+        $info = Get-PythonInfo $c
+        if (-not $info) { continue }
+        $ver, $plat = $info -split ' ', 2
+        # 64-bit x86 only. PyTorch publishes no 32-bit Windows build, and has no
+        # torchaudio for ARM64 Windows: on an ARM64 PC it is an x64 Python,
+        # which Windows runs by emulation, that can render.
+        if ($plat -ne "win-amd64") { continue }
+        $major, $minor = $ver.Split('.')
+        if ([int]$major -ne 3 -or [int]$minor -lt 11) { continue }
+        $rank = Get-PythonRank $ver
+        if ($rank -lt $bestRank) { $best = $c; $bestRank = $rank }
+    }
+    return $best
+}
+
+function Update-SessionPath {
+    # Installers update PATH for new processes only; refresh ours so what was
+    # just installed is findable without opening a new window.
+    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [Environment]::GetEnvironmentVariable("Path", "User")
 }
 
 $Python = Find-Python
 if (-not $Python) {
     Write-Warn "no Python 3.11+ found"
+    Write-Dim "(it must be 64-bit x64 Python - PyTorch has no 32-bit or ARM64 Windows build)"
+    $declined = $false
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         if (Ask "Install Python 3.12 now with winget?" "y") {
-            winget install --id Python.Python.3.12 --source winget `
+            winget install --id Python.Python.3.12 --source winget --scope user --architecture x64 `
                 --accept-package-agreements --accept-source-agreements --silent
-            # winget updates PATH for new processes only; refresh ours so the
-            # freshly installed interpreter is findable without a restart.
-            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                        [Environment]::GetEnvironmentVariable("Path", "User")
+            Update-SessionPath
+            $Python = Find-Python
+        } else { $declined = $true }
+    }
+    # winget is missing on some fresh or managed machines, and on others its
+    # source is broken until it has been updated. python.org's own installer
+    # needs neither, nor administrator rights when it installs just for you.
+    if (-not $Python -and -not $declined) {
+        $pyUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
+        if (Ask "Download Python 3.12 from python.org and install it, just for you?" "y") {
+            $pyDl = Join-Path $DataDir ".download"
+            $pyInstaller = Join-Path $pyDl "python-3.12.10-amd64.exe"
+            try {
+                New-Item -ItemType Directory -Force -Path $pyDl | Out-Null
+                Write-Dim $pyUrl
+                Write-Dim "This can take a few minutes, with nothing to show until it's done."
+                Invoke-WebRequest -Uri $pyUrl -OutFile $pyInstaller -UseBasicParsing
+                # Silent and per-user. PATH, the py launcher and file
+                # associations are left alone; Find-Python looks where this
+                # installs, and this app is all it is here for.
+                Start-Process -FilePath $pyInstaller -Wait -ArgumentList @(
+                    "/quiet", "InstallAllUsers=0", "PrependPath=0", "Include_launcher=0",
+                    "AssociateFiles=0", "Shortcuts=0", "Include_test=0", "Include_doc=0")
+            } catch {
+                Write-Warn "couldn't download or run the Python installer: $_"
+            }
+            Remove-Item -Recurse -Force $pyDl -ErrorAction SilentlyContinue
             $Python = Find-Python
         }
     }
 }
 if (-not $Python) {
-    Fail "Python 3.11+ is required.`n       Install it from https://www.python.org/downloads/`n       (tick 'Add python.exe to PATH'), then re-run this installer."
+    Fail "64-bit Python 3.11+ is required.`n       Install it from https://www.python.org/downloads/`n       (tick 'Add python.exe to PATH'), then re-run this installer."
 }
 $pyVer = & $Python -c "import platform; print(platform.python_version())"
 Write-Ok "Python $pyVer at $Python"
@@ -379,10 +555,18 @@ Write-Ok "Python $pyVer at $Python"
 Write-Step "Creating a private environment"
 Write-Dim $VenvDir
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-if (Test-Path $VenvPy) {
+Stop-RunningApp
+# An environment is only worth reusing if it still runs: one whose Python has
+# since been uninstalled, or that an interrupted install left half-built, is
+# rebuilt instead. Nothing of the user's lives in it.
+$venvWorks = $false
+# ...and only if it is one this installer would pick today: a venv built on a
+# 32-bit or ARM64 Python runs fine and still can never install the engine.
+if (Test-Path $VenvPy) { $venvWorks = "$(Get-PythonInfo $VenvPy)" -match '^3\.(1[1-9]|[2-9]\d) win-amd64$' }
+if ($venvWorks) {
     Write-Ok "reusing the existing environment (upgrading in place)"
 } else {
-    & $Python -m venv $VenvDir
+    & $Python -m venv --clear $VenvDir
     if ($LASTEXITCODE -ne 0) { Fail "couldn't create a virtualenv at $VenvDir" }
     Write-Ok "created"
 }
@@ -453,7 +637,7 @@ if ($isSourceTree) {
     } catch { $got = $false }
 
     if (-not $got -and (Get-Command gh -ErrorAction SilentlyContinue)) {
-        & gh release download "v$resolved" -R $Repo -p $wheelName -O $localWheel --clobber 2>$null
+        Invoke-Native { & gh release download "v$resolved" -R $Repo -p $wheelName -O $localWheel --clobber 2>$null }
         if ($LASTEXITCODE -eq 0 -and (Test-Path $localWheel)) {
             Write-Dim "(downloaded with your GitHub credentials - the repo isn't public yet)"
             $got = $true
@@ -484,14 +668,19 @@ if ($NoTts) {
     $computeCaps = ""
     if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
         try {
-            $gpuName = (& nvidia-smi --query-gpu=name --format=csv,noheader 2>$null | Select-Object -First 1)
-            if ($LASTEXITCODE -eq 0 -and $gpuName) { $hasNvidia = $true }
+            # Captured whole, then trimmed to the first line: through a pipeline
+            # into Select-Object, $LASTEXITCODE would be the previous command's.
+            $smiOut = @(Invoke-Native { & nvidia-smi --query-gpu=name --format=csv,noheader 2>$null })
+            if ($LASTEXITCODE -eq 0 -and $smiOut.Count -gt 0 -and "$($smiOut[0])".Trim()) {
+                $gpuName = "$($smiOut[0])".Trim()
+                $hasNvidia = $true
+            }
         } catch {}
         try {
             # One line per GPU. Decides which CUDA build has kernels for the
             # card. Filtered to well-formed values because a broken NVML prints
             # its error to stdout, which would otherwise land here as garbage.
-            $caps = & nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>$null |
+            $caps = Invoke-Native { & nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>$null } |
                     ForEach-Object { $_.Trim() } |
                     Where-Object { $_ -match '^\d+\.\d+$' }
             if ($caps) { $computeCaps = ($caps -join ",") }
@@ -516,10 +705,10 @@ if ($NoTts) {
     $tbArgs = @("-m", "ebook_audiobook.torchbuild", "--platform", "windows", "--arch", "amd64")
     if ($vendor)  { $tbArgs += @("--vendor", $vendor) }
     if ($forced)  { $tbArgs += @("--forced", $forced) }
-    if ($gpuName) { $tbArgs += @("--gpu-name", $gpuName.Trim()) }
+    if ($gpuName) { $tbArgs += @("--gpu-name", "$gpuName".Trim()) }
     if ($computeCaps) { $tbArgs += @("--compute-caps", $computeCaps) }
     try {
-        $out = & $VenvPy @tbArgs 2>$null
+        $out = Invoke-Native { & $VenvPy @tbArgs 2>$null }
         foreach ($line in $out) {
             $k, $v = $line -split "=", 2
             switch ($k) {
@@ -543,7 +732,8 @@ if ($NoTts) {
     # The module supplies the facts; this supplies the phrasing.
     if ($id -eq "cu128" -or $id -eq "cu126") {
         if ($forced -eq "gpu") { $desc = "CUDA (forced with -Gpu) - a novel takes roughly 2-3 hours" }
-        else { $desc = "$($gpuName.Trim()) via $label - a novel takes roughly 2-3 hours" }
+        elseif ($gpuName) { $desc = "$("$gpuName".Trim()) via $label - a novel takes roughly 2-3 hours" }
+        else { $desc = "CUDA via $label - a novel takes roughly 2-3 hours" }
     } elseif ($forced -eq "cpu") {
         $desc = "CPU only (forced with -Cpu)"
     } else {
@@ -580,20 +770,24 @@ if ($NoTts) {
         #    build back down.
         # 3. Chatterbox's dependencies, curated by us (see torchbuild.py), with
         #    the torch pins repeated so nothing there can replace the build.
-        $cbPin  = (& $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)" 2>$null)
-        $cbDeps = (& $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(' '.join(CHATTERBOX_DEPS))" 2>$null)
+        $cbPin  = Invoke-Native { & $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_PIN; print(CHATTERBOX_PIN)" 2>$null }
+        $cbDeps = Invoke-Native { & $VenvPy -c "from ebook_audiobook.torchbuild import CHATTERBOX_DEPS; print(' '.join(CHATTERBOX_DEPS))" 2>$null }
         if (-not $cbPin) { $cbPin = "chatterbox-tts" }
         $idxArgs = @()
         if ($index) { $idxArgs = @("--index-url", $index, "--extra-index-url", "https://pypi.org/simple") }
         $pins = @("torch==$pin", "torchaudio==$pin")
+        # Gigabytes, often over shared Wi-Fi: pip's defaults give up on a
+        # 15-second stall. A download that completed is kept in pip's cache, so
+        # re-running after a failure doesn't fetch it again.
+        $netArgs = @("--timeout", "60", "--retries", "10")
 
-        & $VenvPy -m pip install --quiet @idxArgs @pins
+        & $VenvPy -m pip install --quiet @netArgs @idxArgs @pins
         if ($LASTEXITCODE -eq 0) {
-            & $VenvPy -m pip install --quiet --no-deps $cbPin
+            & $VenvPy -m pip install --quiet @netArgs --no-deps $cbPin
         }
         if ($LASTEXITCODE -eq 0) {
-            $depList = @($cbDeps -split ' ' | Where-Object { $_ })
-            & $VenvPy -m pip install --quiet @idxArgs @pins @depList
+            $depList = @("$cbDeps" -split ' ' | Where-Object { $_ })
+            & $VenvPy -m pip install --quiet @netArgs @idxArgs @pins @depList
         }
         if ($LASTEXITCODE -ne 0) {
             Fail ("the speech engine failed to install. Re-run with -Cpu, or by hand:`n" +
@@ -601,10 +795,10 @@ if ($NoTts) {
         }
         # Report the build that actually landed. The whole bug above was
         # invisible precisely because nothing said which torch you ended up with.
-        $torchBuild = (& $VenvPy -c "import torch; print(torch.__version__)" 2>$null)
-        if ($torchBuild) { Write-Ok "speech engine ready (torch $($torchBuild.Trim()))" }
+        $torchBuild = Invoke-Native { & $VenvPy -c "import torch; print(torch.__version__)" 2>$null }
+        if ($torchBuild) { Write-Ok "speech engine ready (torch $("$torchBuild".Trim()))" }
         else { Write-Ok "speech engine ready" }
-        Write-Dim "The ~1 GB voice model downloads the first time you render."
+        Write-Dim "The ~3 GB voice model downloads the first time you render."
     } else {
         Write-Warn "skipped - re-run this installer to add it later."
     }
@@ -612,20 +806,45 @@ if ($NoTts) {
 
 # --- 5. Calibre --------------------------------------------------------------
 Write-Step "Checking for Calibre (needed to read ebook files)"
-& $VenvPy -c "from ebook_audiobook import tools; raise SystemExit(0 if tools.ebook_convert_path() else 1)" 2>$null
-if ($LASTEXITCODE -eq 0) {
+# Asks the app, so this finds Calibre wherever the app itself will look.
+function Test-Calibre {
+    Invoke-Native { & $VenvPy -c "from ebook_audiobook import tools; raise SystemExit(0 if tools.ebook_convert_path() else 1)" 2>$null } | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+if (Test-Calibre) {
     Write-Ok "Calibre found"
 } else {
     Write-Warn "Calibre is not installed"
-    $installed = $false
+    $declined = $false
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         if (Ask "Install it now with 'winget install calibre.calibre'?" "y") {
             winget install --id calibre.calibre --source winget `
                 --accept-package-agreements --accept-source-agreements --silent
-            if ($LASTEXITCODE -eq 0) { $installed = $true } else { Write-Warn "winget install failed" }
+            # winget's exit code is no verdict: it is non-zero for "already
+            # installed" and for "installed, restart recommended". Look instead.
+            if (-not (Test-Calibre)) { Write-Warn "winget install failed" }
+        } else { $declined = $true }
+    }
+    # Calibre's own installer, for when winget is missing or broken. It installs
+    # for every user, so Windows asks for permission once.
+    if (-not (Test-Calibre) -and -not $declined) {
+        if (Ask "Download Calibre (about 220 MB) from calibre-ebook.com and install it?" "y") {
+            $calDl = Join-Path $DataDir ".download"
+            $calMsi = Join-Path $calDl "calibre-64bit.msi"
+            try {
+                New-Item -ItemType Directory -Force -Path $calDl | Out-Null
+                Write-Dim "https://calibre-ebook.com/dist/win64"
+                Write-Dim "This can take a few minutes, with nothing to show until it's done."
+                Invoke-WebRequest -Uri "https://calibre-ebook.com/dist/win64" -OutFile $calMsi -UseBasicParsing
+                Write-Dim "Windows will ask for permission to install it. If nothing appears, look for a flashing icon on the taskbar."
+                Start-Process -FilePath "msiexec.exe" -Verb RunAs -Wait -ArgumentList @("/i", "`"$calMsi`"", "/qb", "/norestart")
+            } catch {
+                Write-Warn "couldn't download or run the Calibre installer: $_"
+            }
+            Remove-Item -Recurse -Force $calDl -ErrorAction SilentlyContinue
         }
     }
-    if ($installed) {
+    if (Test-Calibre) {
         Write-Ok "Calibre installed"
     } else {
         Write-Warn "install Calibre before converting a book:"
@@ -639,12 +858,15 @@ Write-Step "Creating the launcher"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 # A .cmd shim rather than a copied .exe, so upgrading the venv can never leave a
-# stale launcher pointing at a deleted interpreter.
+# stale launcher pointing at a deleted interpreter. It finds the venv relative
+# to itself (%~dp0 is the shim's own folder) rather than by absolute path:
+# cmd.exe reads a batch file in the console's code page, so a path with a
+# character outside ASCII - C:\Users\Zoë\... - would arrive mangled.
 $shim = Join-Path $BinDir "ebook-audiobook.cmd"
 @"
 @echo off
 REM Generated by the ebook-audiobook installer.
-"$VenvDir\Scripts\ebook-audiobook.exe" %*
+"%~dp0..\venv\Scripts\ebook-audiobook.exe" %*
 "@ | Set-Content -Path $shim -Encoding ASCII
 Write-Ok "command: ebook-audiobook"
 
@@ -670,8 +892,7 @@ $targetExe = if (Test-Path $guiExe) { $guiExe } else { Join-Path $VenvDir "Scrip
 # entry-point .exe, which is the same icon as every other Python tool installed.
 $iconPath = ""
 try {
-    $assets = & (Join-Path $VenvDir "Scripts\python.exe") -c `
-        "import ebook_audiobook, pathlib; print(pathlib.Path(ebook_audiobook.__file__).parent / 'assets')"
+    $assets = & $VenvPy -c "import ebook_audiobook, pathlib; print(pathlib.Path(ebook_audiobook.__file__).parent / 'assets')"
     $candidate = Join-Path $assets "icon.ico"
     if (Test-Path $candidate) { $iconPath = $candidate }
 } catch {
@@ -706,7 +927,7 @@ try {
 
 # --- done --------------------------------------------------------------------
 Write-Step "Verifying the install"
-& $VenvPy -m ebook_audiobook.cli check --engine fake > $null 2>&1
+Invoke-Native { & $VenvPy -m ebook_audiobook.cli check --engine fake > $null 2>&1 }
 if ($LASTEXITCODE -eq 0) {
     Write-Ok "all required components are working"
 } else {
@@ -719,7 +940,7 @@ Write-Host ""
 Write-Host (Tr "  Start it from the Start Menu, or run: ") -NoNewline; Write-Host "ebook-audiobook" -ForegroundColor White
 Write-Host (Tr "  Your books live in: ") -NoNewline; Write-Host $DataDir -ForegroundColor DarkGray
 Write-Host (Tr "  Check setup:  ") -NoNewline; Write-Host "ebook-audiobook check" -ForegroundColor DarkGray
-Write-Host (Tr "  Uninstall:    ") -NoNewline; Write-Host "iex `"& { `$(irm https://github.com/$Repo/releases/latest/download/install.ps1) } -Uninstall`"" -ForegroundColor DarkGray
+Write-Host (Tr "  Uninstall:    ") -NoNewline; Write-Host "iex `"& { `$(irm https://github.com/$Repo/releases/latest/download/install-windows.ps1) } -Uninstall`"" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host (Tr "  Note: open a NEW terminal for the 'ebook-audiobook' command to be found.") -ForegroundColor DarkGray
 Write-Host ""
